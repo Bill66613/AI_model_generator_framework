@@ -1,0 +1,17 @@
+digraph {
+	graph [rankdir=LR]
+	Sensor [label="IMU Sensor
+(Seeed XIAO nRF52840 Sense)" color=lightblue shape=box style=filled]
+	Preprocess [label="Preprocessing
+(Noise Reduction, Normalization)" color=lightgray shape=ellipse style=filled]
+	Model [label="Trained AI Model
+(Motion Detection)" color=lightgreen shape=box style=filled]
+	BLE [label="BLE Transmission
+(To User's Phone)" color=lightyellow shape=ellipse style=filled]
+	Phone [label="User Phone
+(Display Motion State)" color=lightpink shape=box style=filled]
+	Sensor -> Preprocess
+	Preprocess -> Model
+	Model -> BLE
+	BLE -> Phone
+}
