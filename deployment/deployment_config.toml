@@ -1,0 +1,152 @@
+# Deployment Configuration for HAR Edge Framework
+
+[deployment]
+# Default deployment settings
+default_platform = "arduino"
+default_optimization = "balanced"
+output_directory = "./generated_code"
+
+[platforms.arduino]
+# Arduino platform configuration
+supported_boards = ["uno", "nano", "mega", "leonardo"]
+max_memory_kb = 32
+supported_sensors = ["mpu6050", "lsm6ds3", "bmi160"]
+compile_flags = ["-Os", "-ffunction-sections", "-fdata-sections"]
+
+[platforms.arduino_nano_33]
+# Arduino Nano 33 BLE/IoT configuration
+max_memory_kb = 256
+supported_sensors = ["lsm9ds1", "lsm6ds3", "hts221"]
+ble_support = true
+compile_flags = ["-Os", "-mcpu=cortex-m4"]
+
+[platforms.seeed_xiao_nrf52840]
+# Seeed XIAO nRF52840 configuration
+max_memory_kb = 256
+flash_memory_mb = 2
+supported_sensors = ["lsm6ds3", "lis3dh"]
+ble_support = true
+usb_support = true
+compile_flags = ["-Os", "-mcpu=cortex-m4", "-mfloat-abi=hard"]
+
+[platforms.arm_cortex_m]
+# Generic ARM Cortex-M configuration
+supported_cores = ["cortex-m0", "cortex-m0plus", "cortex-m3", "cortex-m4", "cortex-m7"]
+fixed_point_arithmetic = true
+dsp_support = true
+compile_flags = ["-Os", "-mthumb", "-ffast-math"]
+
+[platforms.esp32]
+# ESP32 configuration
+max_memory_kb = 520
+flash_memory_mb = 4
+wifi_support = true
+bluetooth_support = true
+freertos_support = true
+compile_flags = ["-Os", "-ffunction-sections"]
+
+[optimization.accuracy]
+# Accuracy-optimized settings
+model_precision = "float32"
+feature_selection_threshold = 0.01
+ensemble_models = true
+quantization = false
+
+[optimization.speed]
+# Speed-optimized settings
+model_precision = "int16"
+feature_selection_threshold = 0.05
+lookup_tables = true
+unroll_loops = true
+quantization = true
+
+[optimization.power]
+# Power-optimized settings
+model_precision = "int8"
+feature_selection_threshold = 0.1
+sleep_mode_support = true
+interrupt_based_sampling = true
+quantization = true
+pruning_threshold = 0.01
+
+[optimization.balanced]
+# Balanced optimization settings
+model_precision = "float32"
+feature_selection_threshold = 0.03
+quantization = false
+code_size_optimization = true
+
+[sensors.mpu6050]
+# MPU6050 sensor configuration
+i2c_address = "0x68"
+sampling_rates = [50, 100, 200]
+accelerometer_range = ["2g", "4g", "8g", "16g"]
+gyroscope_range = ["250dps", "500dps", "1000dps", "2000dps"]
+power_modes = ["normal", "low_power", "sleep"]
+
+[sensors.lsm6ds3]
+# LSM6DS3 sensor configuration
+i2c_address = "0x6A"
+sampling_rates = [12.5, 26, 52, 104, 208, 416]
+accelerometer_range = ["2g", "4g", "8g", "16g"]
+gyroscope_range = ["125dps", "250dps", "500dps", "1000dps", "2000dps"]
+fifo_support = true
+
+[features]
+# Feature extraction configuration
+default_features = [
+    "mean", "std", "min", "max", "range", "rms",
+    "zero_crossing_rate", "energy", "entropy"
+]
+time_domain_features = [
+    "mean", "std", "var", "min", "max", "range",
+    "rms", "peak_to_peak", "crest_factor", "skewness", "kurtosis"
+]
+frequency_domain_features = [
+    "dominant_frequency", "spectral_energy", "spectral_entropy",
+    "spectral_centroid", "spectral_rolloff"
+]
+
+[models]
+# Model-specific configurations
+
+[models.random_forest]
+max_trees = 10  # Limited for edge deployment
+max_depth = 8
+min_samples_split = 5
+memory_efficient = true
+
+[models.svm]
+kernel = "rbf"
+max_support_vectors = 100
+gamma = "scale"
+probability = false  # Disable probability estimation to save memory
+
+[models.neural_network]
+max_hidden_layers = 2
+max_neurons_per_layer = 50
+activation = "relu"
+quantization_aware_training = true
+
+[code_generation]
+# Code generation settings
+include_debug = false
+include_profiling = false
+use_fixed_point = false
+optimize_for_size = true
+inline_functions = true
+
+[testing]
+# Testing configuration for generated code
+unit_tests = true
+integration_tests = true
+performance_benchmarks = true
+memory_profiling = true
+power_profiling = false  # Requires special hardware
+
+[validation]
+# Model validation settings
+cross_validation_folds = 5
+test_size = 0.2
+validation_metrics = ["accuracy", "precision", "recall", "f1_score"]
+confusion_matrix = true
