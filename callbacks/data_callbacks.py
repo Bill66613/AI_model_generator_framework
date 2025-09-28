@@ -4,6 +4,7 @@ import pandas as pd
 import base64
 import io
 import plotly.express as px
+import plotly.graph_objects as go
 from dash import dcc, html, Input, Output, State, callback, dash_table, ctx, no_update
 
 from config.config import *
@@ -199,10 +200,23 @@ def filter_and_display_data(dataset_name):
             # Add a time axis based on the sampling rate
             df['Time_seconds'] = pd.Series(range(df.shape[0])) / sampling_rate
 
-            # Generate a line chart as an example
-            fig = px.line(df, x="Time_seconds",
-                          title=f"Filtered Preview of {dataset_name}")
-            return fig
+            # Get sensor columns (exclude Time_seconds)
+            sensor_cols = [col for col in df.columns if col != 'Time_seconds']
+            
+            # Limit to first 6 columns for better visualization
+            sensor_cols = sensor_cols[:6]
+            
+            if sensor_cols:
+                # Generate a line chart
+                fig = px.line(df, x="Time_seconds", y=sensor_cols,
+                              title=f"Filtered Preview of {dataset_name}")
+                fig.update_layout(
+                    xaxis_title="Time (seconds)",
+                    yaxis_title="Sensor Values",
+                    height=400,
+                    showlegend=True
+                )
+                return fig
     return {}
 
 
@@ -237,9 +251,203 @@ def display_dataset(dataset_name):
             df = pd.read_csv(file_path)
             # Add a time axis based on the sampling rate
             df['Time_seconds'] = pd.Series(range(df.shape[0])) / sampling_rate
-            # Generate a line chart as an example
-            fig = px.line(df, x='Time_seconds', y=[df.columns[0], df.columns[1], df.columns[2],
-                          df.columns[3], df.columns[4], df.columns[5]], title=f"Preview of {dataset_name}")
-            return fig
+            
+            # Get sensor columns (exclude Time_seconds)
+            sensor_cols = [col for col in df.columns if col != 'Time_seconds']
+            
+            # Limit to first 6 columns for better visualization
+            sensor_cols = sensor_cols[:6]
+            
+            if sensor_cols:
+                # Generate a line chart
+                fig = px.line(df, x='Time_seconds', y=sensor_cols, 
+                              title=f"Preview of {dataset_name}")
+                fig.update_layout(
+                    xaxis_title="Time (seconds)",
+                    yaxis_title="Sensor Values",
+                    height=400,
+                    showlegend=True
+                )
+                return fig
     # Return an empty figure if no dataset is selected
     return {}
+
+
+@callback(
+    Output('upload-output', 'children', allow_duplicate=True),
+    Output('dataset-selector', 'options', allow_duplicate=True),
+    Input('delete-dataset-btn', 'n_clicks'),
+    State('dataset-selector', 'value'),
+    prevent_initial_call=True
+)
+def delete_specific_dataset(n_clicks, dataset_name):
+    """Delete a specific dataset and update metadata."""
+    if not dataset_name:
+        return "⚠️ Please select a dataset to delete.", no_update
+    
+    try:
+        # Load existing metadata
+        with open(METADATA_FILE, 'r') as f:
+            metadata = json.load(f)
+        
+        if dataset_name not in metadata:
+            return f"⚠️ Dataset '{dataset_name}' not found in metadata.", no_update
+        
+        # Delete the file
+        file_path = metadata[dataset_name].get("path", "")
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        
+        # Delete any cleaned data files
+        cleaned_path = metadata[dataset_name].get("cleaned_data_path", "")
+        if cleaned_path and os.path.exists(cleaned_path):
+            os.remove(cleaned_path)
+        
+        # Delete any split window files
+        import glob
+        split_pattern = os.path.join(PERSISTENT_DIR, f"dragged_window_*_{dataset_name}")
+        split_files = glob.glob(split_pattern)
+        for split_file in split_files:
+            if os.path.exists(split_file):
+                os.remove(split_file)
+        
+        # Remove from metadata
+        del metadata[dataset_name]
+        
+        # Save updated metadata
+        with open(METADATA_FILE, 'w') as f:
+            json.dump(metadata, f)
+        
+        # Update dropdown options
+        options = [{'label': filename, 'value': filename} for filename in metadata.keys()]
+        
+        return f"✅ Successfully deleted dataset '{dataset_name}' and all associated files.", options
+        
+    except Exception as e:
+        return f"❌ Error deleting dataset: {str(e)}", no_update
+
+
+@callback(
+    Output('dataset-info-table', 'children'),
+    Input('dataset-selector', 'value'),
+    prevent_initial_call=False
+)
+def update_dataset_info_table(dataset_name):
+    """Update the dataset information table."""
+    if not dataset_name:
+        return html.Div("Select a dataset to view information", style={'color': '#666', 'font-style': 'italic'})
+    
+    try:
+        # Load metadata
+        with open(METADATA_FILE, 'r') as f:
+            metadata = json.load(f)
+        
+        if dataset_name not in metadata:
+            return html.Div("Dataset not found in metadata", style={'color': '#dc3545'})
+        
+        dataset_info = metadata[dataset_name]
+        file_path = dataset_info.get("path", "")
+        
+        # Get file information
+        file_stats = {}
+        if file_path and os.path.exists(file_path):
+            df = pd.read_csv(file_path)
+            file_size = os.path.getsize(file_path)
+            
+            file_stats = {
+                'File Size': f"{file_size / 1024:.1f} KB",
+                'Rows': f"{len(df):,}",
+                'Columns': f"{len(df.columns)}",
+                'Duration (est.)': f"{len(df) / dataset_info.get('sampling_rate', 100):.1f} seconds",
+                'Memory Usage': f"{df.memory_usage(deep=True).sum() / 1024:.1f} KB"
+            }
+            
+            # Get column names
+            sensor_cols = [col for col in df.columns if col not in ['Time_seconds', 'Window']]
+            file_stats['Sensor Columns'] = ', '.join(sensor_cols[:6]) + ('...' if len(sensor_cols) > 6 else '')
+        
+        # Create info cards
+        info_cards = []
+        
+        # Basic info card
+        basic_info = [
+            {'Property': 'Label', 'Value': dataset_info.get('label', 'Not assigned')},
+            {'Property': 'Sampling Rate', 'Value': f"{dataset_info.get('sampling_rate', 'Not set')} Hz"},
+            {'Property': 'File Path', 'Value': os.path.basename(file_path) if file_path else 'Not found'},
+            {'Property': 'Has Cleaned Data', 'Value': 'Yes' if dataset_info.get('cleaned_data_path') else 'No'}
+        ]
+        
+        # Add file stats
+        for key, value in file_stats.items():
+            basic_info.append({'Property': key, 'Value': value})
+        
+        # Create table
+        table = dash_table.DataTable(
+            data=basic_info,
+            columns=[
+                {"name": "Property", "id": "Property"},
+                {"name": "Value", "id": "Value"}
+            ],
+            style_cell={
+                'textAlign': 'left',
+                'padding': '12px',
+                'fontFamily': 'Arial',
+                'border': '1px solid #dee2e6'
+            },
+            style_header={
+                'backgroundColor': '#2E86AB',
+                'color': 'white',
+                'fontWeight': 'bold',
+                'textAlign': 'center'
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': '#f8f9fa'
+                }
+            ],
+            style_table={'margin-top': '10px'}
+        )
+        
+        return table
+        
+    except Exception as e:
+        return html.Div(f"Error loading dataset info: {str(e)}", style={'color': '#dc3545'})
+
+
+@callback(
+    Output('upload-output', 'children', allow_duplicate=True),
+    Input('export-metadata-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def export_metadata(n_clicks):
+    """Export metadata to a downloadable JSON file."""
+    try:
+        # Load metadata
+        with open(METADATA_FILE, 'r') as f:
+            metadata = json.load(f)
+        
+        # Create export filename
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        export_filename = f"HAR_metadata_export_{timestamp}.json"
+        export_path = os.path.join(PERSISTENT_DIR, export_filename)
+        
+        # Add export timestamp to metadata
+        export_data = {
+            'export_timestamp': timestamp,
+            'total_datasets': len(metadata),
+            'datasets': metadata
+        }
+        
+        # Save export file
+        with open(export_path, 'w') as f:
+            json.dump(export_data, f, indent=2)
+        
+        return html.Div([
+            html.P("✅ Metadata exported successfully!", style={'color': '#28a745', 'font-weight': 'bold'}),
+            html.P(f"📁 File saved as: {export_filename}", style={'color': '#666', 'font-size': '14px'})
+        ])
+        
+    except Exception as e:
+        return f"❌ Error exporting metadata: {str(e)}"

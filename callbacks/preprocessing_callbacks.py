@@ -234,7 +234,8 @@ def apply_time_window(n_clicks, dataset_name, time_window_span):
     # Create the master combined plot
     fig = go.Figure()
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-    line_styles = ['solid', 'solid', 'solid', 'dash', 'dash', 'dash']
+    # Fix: Use solid lines instead of dashed lines for better visibility
+    line_styles = ['solid', 'solid', 'solid', 'solid', 'solid', 'solid']
 
     for i, col in enumerate(available_cols[:6]):
         fig.add_trace(
@@ -276,21 +277,27 @@ def apply_time_window(n_clicks, dataset_name, time_window_span):
             'y_max': rect_y_max
         })
 
-    # Add draggable window rectangles
+    # Add draggable window rectangles with improved styling
     shapes = []
     for window_idx in range(max_windows):
         window_start = window_idx * window_duration
         window_end = window_start + window_duration
 
-        # Create shape dictionary for better control
+        # Create enhanced shape with superior visibility and draggability
         shape = dict(
             type="rect",
             x0=window_start, y0=rect_y_min,
             x1=window_end, y1=rect_y_max,
-            fillcolor="rgba(255, 0, 0, 0.15)",
-            line=dict(color="red", width=3),
+            fillcolor="rgba(255, 80, 80, 0.35)",  # Enhanced opacity for better visibility
+            line=dict(
+                color="rgb(220, 20, 20)", 
+                width=4,  # Thicker border for better grabbing
+                dash="solid"
+            ),
             editable=True,
             name=f"window_{window_idx}",
+            layer="above",  # Ensure rectangles are above data lines
+            # Enhanced label configuration for better visibility
             label=dict(
                 text=f"W{window_idx}",
                 textposition="middle center",
@@ -299,63 +306,126 @@ def apply_time_window(n_clicks, dataset_name, time_window_span):
         )
         shapes.append(shape)
 
-        # Add annotation for window label (backup in case label doesn't work)
-        fig.add_annotation(
-            x=window_start + window_duration/2,
-            y=rect_y_max - 0.02 * y_range,
-            text=f"<b>W{window_idx}</b>",
-            showarrow=False,
-            font=dict(size=12, color="red", family="Arial Black"),
-            bgcolor="rgba(255,255,255,0.8)",
-            bordercolor="red",
-            borderwidth=1
-        )
+        # Add annotation for window label (revert to original style)
+        # fig.add_annotation(
+        #     x=window_start + window_duration/2,
+        #     y=rect_y_max - 0.02 * y_range,
+        #     text=f"<b>W{window_idx}</b>",
+        #     showarrow=False,
+        #     font=dict(size=12, color="red", family="Arial Black"),
+        #     bgcolor="rgba(255,255,255,0.8)",
+        #     bordercolor="red",
+        #     borderwidth=1
+        # )
 
     # Add all shapes to the figure
     fig.update_layout(shapes=shapes)
 
-    # Update layout
+    # Update layout with enhanced configuration for horizontal scrolling and constrained movement
     fig.update_layout(
-        title=f"Interactive Time-Series Data with Draggable Windows - {dataset_name}<br>"
-        f"Window Size: {time_window_span}ms ({rows_per_window} samples), "
-        f"Sampling Rate: {sampling_rate}Hz",
-        xaxis_title="Time (seconds)",
-        yaxis_title="Sensor Values",
-        height=600,
+        title=dict(
+            text=f"Interactive Time-Series Data with Horizontally Draggable Windows - {dataset_name}<br>"
+            f"Window Size: {time_window_span}ms ({rows_per_window} samples), "
+            f"Sampling Rate: {sampling_rate}Hz",
+            font=dict(size=16, color='#2E86AB'),
+            x=0.5
+        ),
+        xaxis=dict(
+            title="Time (seconds)",
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(128,128,128,0.2)',
+            showspikes=True,
+            spikecolor="red",
+            spikethickness=2,
+            spikedash="dot",
+            spikemode="across",
+            # Enable horizontal scrolling by extending the range beyond visible area
+            range=[0, min(total_time, 20)],  # Show first 20 seconds initially
+            rangeslider=dict(
+                visible=True,
+                thickness=0.05,
+                bgcolor="rgba(240,248,255,0.8)",
+                bordercolor="#2E86AB",
+                borderwidth=1
+            ),
+            # Allow zooming and panning
+            fixedrange=False
+        ),
+        yaxis=dict(
+            title="Sensor Values",
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(128,128,128,0.2)',
+            showspikes=True,
+            spikecolor="red",
+            spikethickness=2,
+            spikedash="dot",
+            spikemode="across",
+            # Fix Y-axis range to prevent vertical movement of windows
+            fixedrange=True,
+            range=[rect_y_min - 0.1 * y_range, rect_y_max + 0.1 * y_range]
+        ),
+        height=800,  # Increased height to accommodate range slider
+        width=1400,  # Full width for better horizontal scrolling
         showlegend=True,
         hovermode='x unified',
-        dragmode='pan',  # Changed to pan mode for easier navigation
+        dragmode='pan',  # Pan mode for easier navigation
+        # Enhanced newshape configuration
         newshape=dict(
-            fillcolor="rgba(255, 0, 0, 0.15)",
-            line=dict(color="red", width=3),
-            opacity=0.6
+            fillcolor="rgba(255, 100, 100, 0.3)",
+            line=dict(color="rgb(255, 0, 0)", width=3),
+            opacity=0.9
         ),
-        # Configure the modebar (toolbar)
+        # Enhanced modebar with horizontal navigation tools
         modebar=dict(
-            add=['pan2d', 'zoom2d', 'autoScale2d',
-                 'resetScale2d', 'toggleSpikelines'],
-            remove=['select2d', 'lasso2d', 'zoomIn2d',
-                    'zoomOut2d', 'drawrect', 'eraseshape']
+            bgcolor='rgba(255,255,255,0.8)',
+            color='#2E86AB',
+            activecolor='#ff6b35',
+            orientation='h'
         ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="right",
-            x=1
-        )
+            x=1,
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="rgba(128,128,128,0.5)",
+            borderwidth=1
+        ),
+        # Enhanced margin for range slider
+        margin=dict(l=80, r=80, t=140, b=120),
+        # Configure for horizontal-only window movement
+        selectdirection='h',  # 'h' for horizontal selection only
+        uirevision=True,  # Preserve user interactions
+        # Add plot background styling
+        plot_bgcolor='rgba(248,249,250,0.8)',
+        paper_bgcolor='white'
     )
 
-    # Add instructions
+    # Add comprehensive user instructions for horizontal scrolling interface
     instruction_text = (
-        "🎯 <b>Fixed-Size Draggable Windows:</b><br>"
-        "1️⃣ <b>Move Windows:</b> Click and drag the red rectangles<br>"
-        "2️⃣ <b>Fixed Size:</b> All windows have the same duration<br>"
-        "3️⃣ <b>Add Windows:</b> Use the 'Add Window' button below<br>"
-        "4️⃣ <b>Remove Windows:</b> Use the 'Remove Last Window' button<br>"
-        "5️⃣ <b>Navigate:</b> Pan and zoom using mouse/toolbar<br>"
-        "6️⃣ <b>Extract Data:</b> Click 'Split Selected Windows' button<br>"
-        "💡 <b>Tip:</b> Windows maintain fixed duration for consistency"
+        "🎯 <b>Horizontal Time-Series Navigation - Professional Mode:</b><br><br>"
+        "📏 <b>Horizontal Navigation:</b><br>"
+        "• <b>Time Scroll:</b> Use range slider at bottom to scroll through time<br>"
+        "• <b>Zoom:</b> Mouse wheel or zoom tools for temporal precision<br>"
+        "• <b>Pan:</b> Click and drag background horizontally<br>"
+        "• <b>Reset View:</b> Double-click or use 'Reset axes' button<br><br>"
+        "🎮 <b>Window Movement (Horizontal Only):</b><br>"
+        "• <b>Drag Windows:</b> Click and drag red rectangles left/right only<br>"
+        "• <b>Constrained:</b> Windows move horizontally along time axis<br>"
+        "• <b>Precision:</b> Zoom in for fine temporal positioning<br>"
+        "• <b>Labels:</b> Window IDs (W0, W1...) embedded in rectangles<br><br>"
+        "🛠️ <b>Advanced Time Tools:</b><br>"
+        "• <b>Range Slider:</b> Navigate entire time series at bottom<br>"
+        "• <b>Grid Lines:</b> Temporal grid for precise alignment<br>"
+        "• <b>Crosshairs:</b> Time alignment aids when hovering<br>"
+        "• <b>Add/Remove:</b> Use control buttons for window management<br><br>"
+        "💡 <b>Time-Series Pro Tips:</b><br>"
+        "• Scroll to find interesting temporal patterns • Windows snap to time grid<br>"
+        "• Use range slider for quick navigation • Zoom for microsecond precision<br>"
+        "• Vertical position fixed - focus on temporal placement"
     )
 
     fig.add_annotation(
@@ -363,11 +433,12 @@ def apply_time_window(n_clicks, dataset_name, time_window_span):
         xref="paper", yref="paper",
         x=0.02, y=0.98,
         showarrow=False,
-        font=dict(size=10, color="darkblue"),
-        bgcolor="rgba(220,230,255,0.9)",
-        bordercolor="darkblue",
+        font=dict(size=11, color="#1a365d", family="Arial"),
+        bgcolor="rgba(240,248,255,0.95)",
+        bordercolor="#2E86AB",
         borderwidth=2,
-        align="left"
+        align="left",
+        valign="top"
     )
 
     return fig, initial_windows
@@ -508,45 +579,45 @@ def update_figure_windows(figure, windows, window_duration, y_range):
 
     # Create new shapes for the windows
     shapes = []
-    annotations = []
 
     for window in windows:
-        # Create fixed-size rectangle shape
+        # Create enhanced rectangle shape with superior visibility
         shape = dict(
             type="rect",
             x0=window['start_time'],
             y0=window['y_min'],
             x1=window['end_time'],
             y1=window['y_max'],
-            fillcolor="rgba(255, 0, 0, 0.15)",
-            line=dict(color="red", width=3),
+            fillcolor="rgba(255, 80, 80, 0.35)",  # Enhanced opacity for better visibility
+            line=dict(
+                color="rgb(220, 20, 20)", 
+                width=4,  # Thicker border for better grabbing
+                dash="solid"
+            ),
             editable=True,
-            name=f"window_{window['window_id']}"
+            name=f"window_{window['window_id']}",
+            layer="above",  # Ensure rectangles are above data lines
+            # Enhanced label configuration for better visibility
+            label=dict(
+                text=f"W{window['window_id']}",
+                textposition="middle center",
+                font=dict(size=14, color="red", family="Arial Black")
+            )
         )
         shapes.append(shape)
 
-        # Add window label
-        annotations.append(dict(
-            x=window['start_time'] +
-            (window['end_time'] - window['start_time']) / 2,
-            y=window['y_max'] - 0.02 * y_range,
-            text=f"<b>W{window['window_id']}</b>",
-            showarrow=False,
-            font=dict(size=12, color="red", family="Arial Black"),
-            bgcolor="rgba(255,255,255,0.8)",
-            bordercolor="red",
-            borderwidth=1
-        ))
+        # Add window label (revert to original style)
+        # figure['data'].append(dict(
+        #     x=[window['start_time'] + (window['end_time'] - window['start_time']) / 2],
+        #     y=[window['y_max'] - 0.02 * y_range],
+        #     text=[f"<b>W{window['window_id']}</b>"],
+        #     mode='text',
+        #     textfont=dict(size=12, color="red", family="Arial Black"),
+        #     showlegend=False
+        # ))
 
     # Update figure layout with new shapes
     figure['layout']['shapes'] = shapes
-    if 'annotations' not in figure['layout']:
-        figure['layout']['annotations'] = []
-
-    # Keep existing annotations but update window labels
-    existing_annotations = [ann for ann in figure['layout']
-                            ['annotations'] if not ann.get('text', '').startswith('<b>W')]
-    figure['layout']['annotations'] = existing_annotations + annotations
 
     return figure
 
