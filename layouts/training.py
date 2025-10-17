@@ -276,6 +276,22 @@ layout = html.Div([
                         'color': 'white',
                         'cursor': 'pointer',
                         'font-weight': 'bold',
+                        'width': '100%',
+                        'margin-bottom': '10px'
+                    }
+                ),
+                html.Button(
+                    "🗑️ Remove Model",
+                    id='remove-model-btn',
+                    style={
+                        'background-color': '#dc3545',
+                        'border': 'none',
+                        'padding': '12px 20px',
+                        'font-size': '14px',
+                        'border-radius': '5px',
+                        'color': 'white',
+                        'cursor': 'pointer',
+                        'font-weight': 'bold',
                         'width': '100%'
                     }
                 )
@@ -308,6 +324,15 @@ layout = html.Div([
         'margin-bottom': '25px',
         'border': '1px solid #e9ecef'
     }),
+
+    # Confirmation Modal for Model Removal
+    dcc.ConfirmDialog(
+        id='confirm-remove-model',
+        message='',
+    ),
+
+    # Alert for removal status
+    html.Div(id='remove-model-alert', style={'margin-bottom': '20px', 'display': 'none'}),
     # Edge Deployment Section
     html.Div([
         html.H3("📱 Edge Deployment & Code Generation", style={
@@ -472,7 +497,7 @@ layout = html.Div([
         html.H3("💻 Generated Code & Resources", style={
                 'color': '#2E86AB', 'margin-bottom': '20px'}),
         html.Div(id='deployment-output', style={
-            'min-height': '80px',
+            'min-height': '120px',
             'background-color': '#f8f9fa',
             'padding': '20px',
             'border-radius': '8px',
@@ -481,16 +506,7 @@ layout = html.Div([
         }, children=[
             html.P("No deployment code generated yet. Select a model and target platform to generate optimized code.",
                    style={'text-align': 'center', 'color': '#6c757d', 'font-style': 'italic', 'margin': '0'})
-        ]),
-
-        # Code display area
-        html.Div(id='generated-code-display', style={
-            'min-height': '100px',
-            'background-color': '#f8f9fa',
-            'padding': '20px',
-            'border-radius': '8px',
-            'border': '1px solid #dee2e6'
-        })
+        ])
     ], style={
         'background-color': '#ffffff',
         'padding': '25px',

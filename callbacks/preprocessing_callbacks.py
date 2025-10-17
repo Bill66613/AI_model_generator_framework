@@ -29,29 +29,173 @@ def populate_dataset_selector(tab):
 
 @callback(
     Output('preprocessed-graph', 'figure'),
-    Output('is-preprocessed', 'children'),
+    Output('dataset-status-display', 'children'),
     Input('dataset-selector_', 'value')
 )
-def display_dataset(dataset_name):
-    """Displays selected dataset as a chart."""
+def display_dataset_and_status(dataset_name):
+    """Displays selected dataset as a chart and comprehensive status."""
     if not dataset_name:
-        return {}, ""
+        return {}, html.Div("Select a dataset to view status", style={'color': '#6c757d', 'font-style': 'italic'})
 
     with open(METADATA_FILE, 'r') as f:
         metadata = json.load(f)
-
-    if "cleaned_data_path" in metadata[dataset_name]:
-        file_path = metadata[dataset_name]["cleaned_data_path"]
-        is_preprocessed_message = "Preprocessed"
+    
+    dataset_info = metadata.get(dataset_name, {})
+    
+    # Determine processing stages
+    stages = {
+        'raw': True,  # Always true if dataset exists
+        'preprocessed': 'cleaned_data_path' in dataset_info,
+        'split': 'dragged_samples' in dataset_info and len(dataset_info.get('dragged_samples', [])) > 0,
+        'training_ready': False  # Check for training data files
+    }
+    
+    # Check if training data exists
+    training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
+    train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
+    test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
+    stages['training_ready'] = os.path.exists(train_file) and os.path.exists(test_file)
+    
+    # Create status display
+    status_badges = []
+    
+    # Raw Data Status
+    status_badges.append(
+        html.Span("📁 Raw Data", className="badge", style={
+            'background-color': '#6c757d',
+            'color': 'white',
+            'padding': '6px 12px',
+            'border-radius': '12px',
+            'margin-right': '8px',
+            'margin-bottom': '8px',
+            'font-size': '12px',
+            'display': 'inline-block'
+        })
+    )
+    
+    # Signal Preprocessed Status
+    if stages['preprocessed']:
+        status_badges.append(
+            html.Span("🔧 Signal Processed", className="badge", style={
+                'background-color': '#17a2b8',
+                'color': 'white',
+                'padding': '6px 12px',
+                'border-radius': '12px',
+                'margin-right': '8px',
+                'margin-bottom': '8px',
+                'font-size': '12px',
+                'display': 'inline-block'
+            })
+        )
     else:
-        file_path = metadata[dataset_name]["path"]
-        is_preprocessed_message = "Not Preprocessed"
+        status_badges.append(
+            html.Span("⏳ Signal Processing Pending", className="badge", style={
+                'background-color': '#ffc107',
+                'color': '#212529',
+                'padding': '6px 12px',
+                'border-radius': '12px',
+                'margin-right': '8px',
+                'margin-bottom': '8px',
+                'font-size': '12px',
+                'display': 'inline-block'
+            })
+        )
+    
+    # Split Status
+    if stages['split']:
+        # Count only files that actually exist on disk
+        dragged_samples = dataset_info.get('dragged_samples', [])
+        actual_split_count = sum(1 for file_path in dragged_samples if os.path.exists(file_path))
+        
+        status_badges.append(
+            html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
+                'background-color': '#fd7e14',
+                'color': 'white',
+                'padding': '6px 12px',
+                'border-radius': '12px',
+                'margin-right': '8px',
+                'margin-bottom': '8px',
+                'font-size': '12px',
+                'display': 'inline-block'
+            })
+        )
+    else:
+        status_badges.append(
+            html.Span("⏳ Split Pending", className="badge", style={
+                'background-color': '#6c757d',
+                'color': 'white',
+                'padding': '6px 12px',
+                'border-radius': '12px',
+                'margin-right': '8px',
+                'margin-bottom': '8px',
+                'font-size': '12px',
+                'display': 'inline-block'
+            })
+        )
+    
+    # Training Data Status
+    if stages['training_ready']:
+        status_badges.append(
+            html.Span("🚀 Training Ready", className="badge", style={
+                'background-color': '#28a745',
+                'color': 'white',
+                'padding': '6px 12px',
+                'border-radius': '12px',
+                'margin-right': '8px',
+                'margin-bottom': '8px',
+                'font-size': '12px',
+                'display': 'inline-block'
+            })
+        )
+    else:
+        status_badges.append(
+            html.Span("⏳ Training Prep Pending", className="badge", style={
+                'background-color': '#6c757d',
+                'color': 'white',
+                'padding': '6px 12px',
+                'border-radius': '12px',
+                'margin-right': '8px',
+                'margin-bottom': '8px',
+                'font-size': '12px',
+                'display': 'inline-block'
+            })
+        )
+    
+    # Create comprehensive status display
+    status_display = html.Div([
+        html.H6("📊 Dataset Processing Status", style={
+            'margin-bottom': '10px',
+            'color': '#495057',
+            'font-weight': 'bold'
+        }),
+        html.Div(status_badges, style={'line-height': '2.5'}),
+        html.Hr(style={'margin': '15px 0'}),
+        html.Div([
+            html.Small(f"📁 Dataset: {dataset_name}", style={
+                'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
+            html.Small(f"📡 Sampling Rate: {dataset_info.get('sampling_rate', 'Unknown')} Hz", style={
+                'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
+            html.Small(f"🏷️ Activity: {dataset_info.get('label', 'Unknown')}", style={
+                'display': 'block', 'color': '#6c757d'})
+        ])
+    ], style={
+        'background-color': '#f8f9fa',
+        'padding': '15px',
+        'border-radius': '8px',
+        'border': '1px solid #dee2e6'
+    })
+
+    # Load and display the graph
+    if stages['preprocessed']:
+        file_path = dataset_info["cleaned_data_path"]
+    else:
+        file_path = dataset_info["path"]
 
     if os.path.exists(file_path):
         df = pd.read_csv(file_path)
         
         # Create time axis for proper labeling
-        sampling_rate = metadata.get(dataset_name, {}).get('sampling_rate', 100)
+        sampling_rate = dataset_info.get('sampling_rate', 100)
         df['Time_seconds'] = df.index / sampling_rate
         
         # Get sensor columns for plotting
@@ -73,7 +217,7 @@ def display_dataset(dataset_name):
             )
         
         fig.update_layout(
-            title=f"Preview of {dataset_name}",
+            title=f"Preview of {dataset_name} ({'Signal Processed' if stages['preprocessed'] else 'Raw Data'})",
             xaxis_title="Time (seconds)",
             yaxis_title="Sensor Values",
             height=400,
@@ -81,9 +225,9 @@ def display_dataset(dataset_name):
             hovermode='x unified'
         )
         
-        return fig, is_preprocessed_message
+        return fig, status_display
 
-    return {}, ""
+    return {}, status_display
 
 
 @callback(
@@ -167,7 +311,8 @@ def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, process
     df = pd.DataFrame(cleaned_smoothed)
     cleaned_smoothed_file_path = os.path.join(
         PERSISTENT_DIR, f"cleaned_smoothed_{dataset_name}")
-    df.to_csv(cleaned_smoothed_file_path, index=False)
+    # Use 4 decimal places precision for sensor data readability
+    df.to_csv(cleaned_smoothed_file_path, index=False, float_format='%.4f')
 
     # Update metadata
     metadata_file = os.path.join(PERSISTENT_DIR, "metadata.json")
@@ -623,6 +768,79 @@ def update_figure_windows(figure, windows, window_duration, y_range):
 
 
 @callback(
+    Output('current-windows', 'data', allow_duplicate=True),
+    Input('interactive-sample-graph', 'relayoutData'),
+    State('current-windows', 'data'),
+    prevent_initial_call=True
+)
+def update_window_positions(relayout_data, current_windows):
+    """Update window positions when shapes are dragged by the user."""
+    if not (relayout_data and current_windows):
+        return no_update
+    
+    # Check if shapes were edited/moved
+    shapes_edited = any(key.startswith('shapes[') and ('x0' in key or 'x1' in key) 
+                       for key in relayout_data.keys()) if relayout_data else False
+    
+    if shapes_edited:
+        updated_windows = current_windows.copy()
+        
+        # Update window positions based on relayout data
+        for key, value in relayout_data.items():
+            if key.startswith('shapes[') and ('x0' in key or 'x1' in key):
+                # Extract shape index from key like "shapes[0].x0"
+                import re
+                match = re.search(r'shapes\[(\d+)\]\.([xy][01])', key)
+                if match:
+                    shape_idx = int(match.group(1))
+                    coord_type = match.group(2)
+                    
+                    # Ensure we have this window in our data
+                    if shape_idx < len(updated_windows):
+                        if coord_type == 'x0':
+                            updated_windows[shape_idx]['start_time'] = value
+                        elif coord_type == 'x1':
+                            updated_windows[shape_idx]['end_time'] = value
+        
+        print(f"Updated window positions: {updated_windows}")
+        return updated_windows
+    
+    return no_update
+
+
+@callback(
+    Output('interactive-sample-graph', 'figure', allow_duplicate=True),
+    Input('interactive-sample-graph', 'relayoutData'),
+    State('interactive-sample-graph', 'figure'),
+    State('current-windows', 'data'),
+    prevent_initial_call=True
+)
+def constrain_window_movement(relayout_data, current_figure, current_windows):
+    """Constrain window movement to horizontal only by resetting Y coordinates."""
+    if not (relayout_data and current_figure and current_windows):
+        return no_update
+    
+    # Check if shapes were edited/moved
+    shapes_edited = any(key.startswith('shapes[') for key in relayout_data.keys()) if relayout_data else False
+    
+    if shapes_edited:
+        updated_figure = current_figure.copy()
+        shapes = updated_figure.get('layout', {}).get('shapes', [])
+        
+        # Reset Y coordinates for all shapes to maintain vertical constraint
+        for i, shape in enumerate(shapes):
+            if i < len(current_windows):
+                window = current_windows[i]
+                # Force Y coordinates to stay at original positions
+                shape['y0'] = window['y_min'] 
+                shape['y1'] = window['y_max']
+        
+        return updated_figure
+    
+    return no_update
+
+
+@callback(
     Output('split-samples-graph', 'figure'),
     Input('split-selected-windows-btn', 'n_clicks'),
     State('dataset-selector_', 'value'),
@@ -723,7 +941,8 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
 
             sample_file_path = os.path.join(
                 PERSISTENT_DIR, f"dragged_window_{window_id}_{dataset_name}")
-            window_data[available_cols].to_csv(sample_file_path, index=False)
+            # Use 4 decimal places precision for sensor data readability
+            window_data[available_cols].to_csv(sample_file_path, index=False, float_format='%.4f')
             sample_files.append(sample_file_path)
 
             sample_info.append({
@@ -1246,6 +1465,32 @@ def populate_training_dataset_selector(dataset_name, split_graph, split_options)
 
 
 @callback(
+    Output('training-dataset-selector', 'value'),
+    Input('select-all-training-windows-btn', 'n_clicks'),
+    Input('clear-all-training-windows-btn', 'n_clicks'),
+    State('training-dataset-selector', 'options'),
+    prevent_initial_call=True
+)
+def manage_training_window_selection(select_all_clicks, clear_all_clicks, available_options):
+    """Handle Select All and Clear All buttons for training window selection."""
+    from dash import ctx
+    
+    if not ctx.triggered or not available_options:
+        return no_update
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if button_id == 'select-all-training-windows-btn':
+        # Select all available windows
+        return [option['value'] for option in available_options]
+    elif button_id == 'clear-all-training-windows-btn':
+        # Clear all selections
+        return []
+    
+    return no_update
+
+
+@callback(
     Output('split-ratio-info', 'children'),
     Input('train-test-split', 'value')
 )
@@ -1613,3 +1858,241 @@ def save_preprocessed_training_data(n_clicks, split_data, dataset_name):
     except Exception as e:
         error_msg = f"❌ Error saving preprocessed data: {str(e)}"
         return html.Div(error_msg, style={'color': '#dc3545'})
+
+
+@callback(
+    Output('preprocessed-training-data', 'data', allow_duplicate=True),
+    Output('train-test-data', 'data', allow_duplicate=True),
+    Output('train-test-split-graph', 'figure', allow_duplicate=True),
+    Output('preprocessing-results', 'children', allow_duplicate=True),
+    Input('clear-training-data-btn', 'n_clicks'),
+    State('dataset-selector_', 'value'),
+    prevent_initial_call=True
+)
+def clear_training_data(n_clicks, dataset_name):
+    """Clear all preprocessed training data and associated files."""
+    if not dataset_name:
+        return {}, {}, {}, html.Div("⚠️ No dataset selected.", style={'color': '#FF9800'})
+    
+    try:
+        # Clear training data directory for this dataset
+        training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
+        
+        if os.path.exists(training_dir):
+            # Remove files related to current dataset
+            patterns = [
+                f"{dataset_name}_train.csv",
+                f"{dataset_name}_test.csv", 
+                f"{dataset_name}_metadata.json"
+            ]
+            
+            deleted_files = []
+            for pattern in patterns:
+                file_path = os.path.join(training_dir, pattern)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    deleted_files.append(pattern)
+        
+        # Clear session data
+        empty_data = {}
+        empty_figure = {}
+        
+        # Success message
+        success_content = html.Div([
+            html.H5("🧹 Training Data Cleared Successfully", style={
+                'color': '#28a745', 'margin': '0 0 15px 0'}),
+            html.Div([
+                html.P(f"✅ Cleared feature engineering data for: {dataset_name}", style={
+                    'margin': '5px 0', 'font-weight': 'bold'}),
+                html.P(f"📁 Files removed: {len(deleted_files)}", style={
+                    'margin': '5px 0'}),
+                html.P("🔧 Ready for new feature engineering process", style={
+                    'margin': '5px 0', 'color': '#6c757d', 'font-style': 'italic'})
+            ])
+        ])
+        
+        return empty_data, empty_data, empty_figure, success_content
+        
+    except Exception as e:
+        error_msg = f"❌ Error clearing training data: {str(e)}"
+        return no_update, no_update, no_update, html.Div(error_msg, style={'color': '#dc3545'})
+
+
+@callback(
+    Output('dataset-status-display', 'children', allow_duplicate=True),
+    Input('save-cleaned-smoothed-btn', 'n_clicks'),
+    Input('split-selected-windows-btn', 'n_clicks'),
+    Input('save-preprocessed-training-btn', 'n_clicks'),
+    Input('clear-training-data-btn', 'n_clicks'),
+    State('dataset-selector_', 'value'),
+    prevent_initial_call=True
+)
+def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks, clear_clicks, dataset_name):
+    """Update dataset status when any processing operation completes."""
+    if not dataset_name:
+        return no_update
+    
+    try:
+        with open(METADATA_FILE, 'r') as f:
+            metadata = json.load(f)
+        
+        dataset_info = metadata.get(dataset_name, {})
+        
+        # Clean up metadata by removing non-existent files
+        if 'dragged_samples' in dataset_info:
+            existing_files = [f for f in dataset_info['dragged_samples'] if os.path.exists(f)]
+            if len(existing_files) != len(dataset_info['dragged_samples']):
+                # Update metadata to remove stale references
+                metadata[dataset_name]['dragged_samples'] = existing_files
+                with open(METADATA_FILE, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+                print(f"Cleaned metadata for {dataset_name}: removed {len(dataset_info['dragged_samples']) - len(existing_files)} stale references")
+                dataset_info['dragged_samples'] = existing_files
+        
+        # Determine processing stages
+        stages = {
+            'raw': True,
+            'preprocessed': 'cleaned_data_path' in dataset_info,
+            'split': 'dragged_samples' in dataset_info and len(dataset_info.get('dragged_samples', [])) > 0,
+            'training_ready': False
+        }
+        
+        # Check if training data exists
+        training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
+        train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
+        test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
+        stages['training_ready'] = os.path.exists(train_file) and os.path.exists(test_file)
+        
+        # Create status display (same logic as in display_dataset_and_status)
+        status_badges = []
+        
+        # Raw Data Status
+        status_badges.append(
+            html.Span("📁 Raw Data", className="badge", style={
+                'background-color': '#6c757d',
+                'color': 'white',
+                'padding': '6px 12px',
+                'border-radius': '12px',
+                'margin-right': '8px',
+                'margin-bottom': '8px',
+                'font-size': '12px',
+                'display': 'inline-block'
+            })
+        )
+        
+        # Signal Preprocessed Status
+        if stages['preprocessed']:
+            status_badges.append(
+                html.Span("🔧 Signal Processed", className="badge", style={
+                    'background-color': '#17a2b8',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        else:
+            status_badges.append(
+                html.Span("⏳ Signal Processing Pending", className="badge", style={
+                    'background-color': '#ffc107',
+                    'color': '#212529',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        
+        # Split Status
+        if stages['split']:
+            # Count only files that actually exist on disk
+            dragged_samples = dataset_info.get('dragged_samples', [])
+            actual_split_count = sum(1 for file_path in dragged_samples if os.path.exists(file_path))
+            
+            status_badges.append(
+                html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
+                    'background-color': '#fd7e14',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        else:
+            status_badges.append(
+                html.Span("⏳ Split Pending", className="badge", style={
+                    'background-color': '#6c757d',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        
+        # Training Data Status
+        if stages['training_ready']:
+            status_badges.append(
+                html.Span("🚀 Training Ready", className="badge", style={
+                    'background-color': '#28a745',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        else:
+            status_badges.append(
+                html.Span("⏳ Training Prep Pending", className="badge", style={
+                    'background-color': '#6c757d',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        
+        # Create comprehensive status display
+        status_display = html.Div([
+            html.H6("📊 Dataset Processing Status", style={
+                'margin-bottom': '10px',
+                'color': '#495057',
+                'font-weight': 'bold'
+            }),
+            html.Div(status_badges, style={'line-height': '2.5'}),
+            html.Hr(style={'margin': '15px 0'}),
+            html.Div([
+                html.Small(f"📁 Dataset: {dataset_name}", style={
+                    'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
+                html.Small(f"📡 Sampling Rate: {dataset_info.get('sampling_rate', 'Unknown')} Hz", style={
+                    'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
+                html.Small(f"🏷️ Activity: {dataset_info.get('label', 'Unknown')}", style={
+                    'display': 'block', 'color': '#6c757d'})
+            ])
+        ], style={
+            'background-color': '#f8f9fa',
+            'padding': '15px',
+            'border-radius': '8px',
+            'border': '1px solid #dee2e6'
+        })
+        
+        return status_display
+        
+    except Exception as e:
+        return html.Div(f"Error updating status: {str(e)}", style={'color': '#dc3545'})

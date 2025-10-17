@@ -303,3 +303,5 @@ dist
 .vscode
 data/
 persistent_data/
+generated/
+tmp/

@@ -39,11 +39,9 @@ layout = html.Div([
                 clearable=False,
                 style={'margin-bottom': '15px'}
             ),
-            html.Div(id='is-preprocessed', style={
-                'padding': '10px',
-                'border-radius': '4px',
-                'margin-top': '10px',
-                'font-weight': 'bold'
+            # Enhanced Dataset Status Display
+            html.Div(id='dataset-status-display', style={
+                'margin-top': '15px'
             })
         ])
     ], style={
@@ -57,17 +55,17 @@ layout = html.Div([
 
     # Data Cleaning & Smoothing Section
     html.Div([
-        html.H3("🧹 Data Cleaning & Smoothing", style={
+        html.H3("🧹 Data Preprocessing & Signal Processing", style={
                 'color': '#2E86AB', 'margin-bottom': '20px'}),
-        html.P("Apply noise reduction, outlier removal, and signal smoothing techniques",
+        html.P("Apply noise reduction, outlier removal, and signal conditioning techniques to raw sensor data",
                style={'color': '#666', 'margin-bottom': '20px'}),
 
         html.Div([
             html.Div([
-                html.H5("📋 Cleaning Pipeline", style={
+                html.H5("📋 Signal Processing Pipeline", style={
                         'color': '#495057', 'margin-bottom': '15px'}),
                 html.Ul([
-                    html.Li("🗑️ Remove missing values"),
+                    html.Li("🗑️ Remove missing values and anomalies"),
                     html.Li("📊 Filter statistical outliers"),
                     html.Li("🌊 Apply low-pass filter (5Hz cutoff)"),
                     html.Li("📈 Savitzky-Golay smoothing (window=5)")
@@ -76,7 +74,7 @@ layout = html.Div([
 
             html.Div([
                 html.Button(
-                    "🔧 Clean & Smooth Data",
+                    "🔧 Process Signal Data",
                     id='clean-smooth-btn',
                     n_clicks=0,
                     style={
@@ -384,6 +382,11 @@ layout = html.Div([
 
         # Split results graph
         html.Div([
+            html.H5("🔍 Window Split Results", style={
+                'color': '#495057', 
+                'margin-bottom': '15px',
+                'margin-top': '25px'
+            }),
             dcc.Graph(
                 id='split-samples-graph',
                 style={'height': '500px'},
@@ -399,9 +402,16 @@ layout = html.Div([
                     }
                 }
             )
-        ], style={'margin-top': '20px'})
+        ], style={'margin-top': '30px', 'margin-bottom': '30px'})
 
-    ]),
+    ], style={
+        'background-color': '#ffffff',
+        'padding': '25px',
+        'border-radius': '10px',
+        'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+        'margin-bottom': '25px',
+        'border': '1px solid #e9ecef'
+    }),
 
     # Split Dataset Management Section
     html.Div([
@@ -507,30 +517,85 @@ layout = html.Div([
 
     # ML Model Training Preprocessing Section
     html.Div([
-        html.H3("🤖 ML Model Training Preparation", style={
+        html.H3("🤖 Feature Engineering & Model Preparation", style={
                 'color': '#2E86AB', 'margin-bottom': '20px'}),
-        html.P("Advanced preprocessing pipeline for machine learning model training with feature engineering and data splitting",
-               style={'color': '#666', 'margin-bottom': '20px'}),
+        html.P("Advanced feature engineering pipeline for machine learning model training with normalization and data splitting",
+               style={'color': '#666', 'margin-bottom': '15px'}),
+        
+        # Workflow instructions
+        html.Div([
+            html.H5("🚀 Feature Engineering Workflow", style={
+                'color': '#28a745', 'margin-bottom': '10px'}),
+            html.Ol([
+                html.Li("📋 Select training windows (use 'Select All' for all available windows)"),
+                html.Li("🛠️ Click 'Engineer Features' to prepare your data with normalization"),
+                html.Li("📊 Click 'Perform Train-Test Split' to divide engineered data"),
+                html.Li("💾 Click 'Save Training Data' to store ML-ready datasets")
+            ], style={'margin': '0', 'padding-left': '20px', 'color': '#495057'})
+        ], style={
+            'background-color': '#f8f9fa',
+            'padding': '15px',
+            'border-radius': '6px',
+            'margin-bottom': '25px',
+            'border-left': '4px solid #28a745'
+        }),
 
         # Dataset selection for training
         html.Div([
             html.H5("📁 Training Dataset Selection", style={
                     'color': '#495057', 'margin-bottom': '15px'}),
             html.Div([
-                html.Label("Select Training Windows:", style={
-                           'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
-                dcc.Dropdown(
-                    id='training-dataset-selector',
-                    options=[],
-                    placeholder="Choose split windows to use for training",
-                    multi=True,
-                    style={'margin-bottom': '15px'}
-                ),
+                html.Div([
+                    html.Label("Select Training Windows:", style={
+                               'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                    dcc.Dropdown(
+                        id='training-dataset-selector',
+                        options=[],
+                        placeholder="Choose split windows to use for training",
+                        multi=True,
+                        style={'margin-bottom': '10px'}
+                    )
+                ], style={'width': '75%', 'display': 'inline-block', 'vertical-align': 'top'}),
+                
+                html.Div([
+                    html.Button(
+                        "📋 Select All",
+                        id='select-all-training-windows-btn',
+                        n_clicks=0,
+                        style={
+                            'background-color': '#17a2b8',
+                            'color': 'white',
+                            'border': 'none',
+                            'padding': '10px 15px',
+                            'border-radius': '4px',
+                            'cursor': 'pointer',
+                            'font-weight': 'bold',
+                            'width': '100%',
+                            'margin-bottom': '5px'
+                        }
+                    ),
+                    html.Button(
+                        "🗑️ Clear All",
+                        id='clear-all-training-windows-btn',
+                        n_clicks=0,
+                        style={
+                            'background-color': '#6c757d',
+                            'color': 'white',
+                            'border': 'none',
+                            'padding': '10px 15px',
+                            'border-radius': '4px',
+                            'cursor': 'pointer',
+                            'font-weight': 'bold',
+                            'width': '100%'
+                        }
+                    )
+                ], style={'width': '22%', 'display': 'inline-block', 'margin-left': '3%', 'vertical-align': 'top'}),
+                
                 html.Div(id='training-dataset-info', style={
                     'background-color': '#e3f2fd',
                     'padding': '15px',
                     'border-radius': '6px',
-                    'margin-bottom': '20px',
+                    'margin': '15px 0 20px 0',
                     'border-left': '4px solid #2196f3'
                 })
             ])
@@ -538,7 +603,7 @@ layout = html.Div([
 
         # Feature engineering section
         html.Div([
-            html.H5("🔧 Feature Engineering", style={
+            html.H5("🔧 Feature Engineering Configuration", style={
                     'color': '#495057', 'margin-bottom': '15px'}),
 
             html.Div([
@@ -626,7 +691,7 @@ layout = html.Div([
         # Action buttons
         html.Div([
             html.Button(
-                "🚀 Preprocess for Training",
+                "� Engineer Features",
                 id='preprocess-for-training-btn',
                 n_clicks=0,
                 style={
@@ -658,11 +723,27 @@ layout = html.Div([
                 }
             ),
             html.Button(
-                "💾 Save Preprocessed Data",
+                "💾 Save Training Data",
                 id='save-preprocessed-training-btn',
                 n_clicks=0,
                 style={
                     'background-color': '#FF9800',
+                    'color': 'white',
+                    'border': 'none',
+                    'padding': '15px 25px',
+                    'border-radius': '6px',
+                    'cursor': 'pointer',
+                    'font-weight': 'bold',
+                    'font-size': '16px',
+                    'margin-right': '15px'
+                }
+            ),
+            html.Button(
+                "🧹 Clear Training Data",
+                id='clear-training-data-btn',
+                n_clicks=0,
+                style={
+                    'background-color': '#dc3545',
                     'color': 'white',
                     'border': 'none',
                     'padding': '15px 25px',
