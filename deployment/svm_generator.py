@@ -59,24 +59,24 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
     for (int i = 0; i < NUM_FEATURES; i++) {
         scaled_features[i] = (features[i] - feature_means[i]) / feature_stds[i];
     }
-    
+
     // SVM prediction using support vectors
     float decision_scores[NUM_CLASSES] = {0};
-    
+
     // Calculate decision function for each class
     for (int sv = 0; sv < NUM_SUPPORT_VECTORS; sv++) {
         float kernel_value = rbf_kernel(scaled_features, (float*)support_vectors[sv], svm_gamma);
-        
+
         // For multi-class SVM, distribute vote based on coefficient
         int target_class = sv % NUM_CLASSES; // Simplified class assignment
         decision_scores[target_class] += support_vector_coeffs[sv] * kernel_value;
     }
-    
+
     // Add intercept
     for (int i = 0; i < NUM_CLASSES; i++) {
         decision_scores[i] += svm_intercept;
     }
-    
+
     // Return class with highest decision score
     int predicted_class = 0;
     float max_score = decision_scores[0];
@@ -86,7 +86,7 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
             predicted_class = i;
         }
     }
-    
+
     return predicted_class;
 }"""
 
@@ -94,10 +94,10 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
         """Generate SVM utility functions."""
         return """void print_svm_decision_scores(float features[]) {
     Serial.println("SVM Decision Scores:");
-    
+
     // Calculate and print decision scores for each class
     float decision_scores[NUM_CLASSES] = {0};
-    
+
     for (int sv = 0; sv < NUM_SUPPORT_VECTORS && sv < 10; sv++) {
         float kernel_value = rbf_kernel(features, (float*)support_vectors[sv], svm_gamma);
         Serial.print("SV");

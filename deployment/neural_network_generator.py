@@ -19,7 +19,8 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
         self._extract_real_weights()
 
     def _extract_real_weights(self):
-        """Extract actual weights from trained model object."""
+        """Extract actual weights from trained model object or direct weights."""
+        # First try to extract from model object (scikit-learn MLPClassifier)
         if 'model_object' in self.model_data:
             model_obj = self.model_data['model_object']
             try:
@@ -46,14 +47,34 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
                         self.output_biases = []
 
                     print(
-                        f"Extracted NN weights: {len(self.input_weights)}x{len(self.input_weights[0]) if self.input_weights else 0} input weights")
+                        f"Extracted NN weights from model object: {len(self.input_weights)}x{len(self.input_weights[0]) if self.input_weights else 0} input weights")
                     return
 
             except Exception as e:
                 print(
-                    f"Warning: Could not extract neural network weights: {e}")
+                    f"Warning: Could not extract neural network weights from model object: {e}")
+
+        # Try to extract from direct weights parameter
+        if self.weights:
+            try:
+                self.input_weights = self.weights.get('input_weights', [])
+                # Note: input_bias is hidden layer bias
+                self.hidden_biases = self.weights.get('input_bias', [])
+                # Note: hidden_weights is output weights
+                self.output_weights = self.weights.get('hidden_weights', [])
+                self.output_biases = self.weights.get('output_bias', [])
+
+                if self.input_weights and self.hidden_biases:
+                    print(
+                        f"Extracted NN weights from direct parameters: {len(self.input_weights)}x{len(self.input_weights[0]) if self.input_weights else 0} input weights")
+                    return
+
+            except Exception as e:
+                print(
+                    f"Warning: Could not extract neural network weights from direct parameters: {e}")
 
         # Fallback to placeholder weights
+        print("Using placeholder weights (no real weights available)")
         self.input_weights = []
         self.hidden_biases = []
         self.output_weights = []
@@ -143,20 +164,21 @@ float relu(float x) {{
         if not array:
             return f"const float {name}[] = {{}};"
 
-        formatted_values = []
-        for i, val in enumerate(array):
-            if i % 8 == 0 and i > 0:
-                formatted_values.append(f"\\n    {val:.{precision}f}")
-            else:
-                formatted_values.append(f"{val:.{precision}f}")
+        # Format values with proper line breaks (8 values per line)
+        formatted_lines = []
+        for i in range(0, len(array), 8):
+            chunk = array[i:i+8]
+            values_str = ", ".join(f"{val:.{precision}f}" for val in chunk)
+            formatted_lines.append(f"    {values_str}")
 
-        values_str = ", ".join(formatted_values)
+        # Join lines with actual newlines
+        all_values = ",\n".join(formatted_lines)
         return f"""const float {name}[{len(array)}] = {{
-    {values_str}
+{all_values}
 }};"""
 
     def _format_2d_array(self, array, name):
-        """Format 2D array for C++ code."""
+        """Format 2D array for C++ code with complete values."""
         if not array or not array[0]:
             return f"const float {name}[][] = {{}};"
 
@@ -164,28 +186,22 @@ float relu(float x) {{
         cols = len(array[0]) if array else 0
         precision = self.feature_precision
 
-        # For large arrays, use condensed format
-        if rows * cols > 100:
-            return f"""// Large {name} array ({rows}x{cols}) - condensed for readability
-const float {name}[{rows}][{cols}] = {{
-    // Actual weights extracted from trained model
-    // Too large to display in full - contains {rows * cols} values
-    // Precision: {precision} decimal places
-}};"""
-
-        # For smaller arrays, show actual values
+        # Generate all values regardless of size (critical for compilation)
         formatted_rows = []
-        for i, row in enumerate(array[:5]):  # Show first 5 rows
-            # Show first 10 values
-            row_vals = [f"{val:.{precision}f}" for val in row[:10]]
-            if len(row) > 10:
-                row_vals.append("/* ... */")
-            formatted_rows.append("    {" + ", ".join(row_vals) + "}")
+        for i, row in enumerate(array):
+            # Format each row with proper values (8 values per line for readability)
+            row_chunks = []
+            for j in range(0, len(row), 8):
+                chunk = row[j:j+8]
+                chunk_str = ", ".join(f"{val:.{precision}f}" for val in chunk)
+                row_chunks.append(f"        {chunk_str}")
 
-        if len(array) > 5:
-            formatted_rows.append("    // ... more rows ...")
+            # Join chunks with line breaks
+            row_content = ",\n".join(row_chunks)
+            formatted_rows.append(f"    {{\n{row_content}\n    }}")
 
-        rows_str = ",\\n".join(formatted_rows)
+        # Join all rows
+        rows_str = ",\n".join(formatted_rows)
         return f"""const float {name}[{rows}][{cols}] = {{
 {rows_str}
 }};"""
@@ -203,7 +219,7 @@ int har_predict_internal(float features[NUM_FEATURES]) {
         }
         scaled_features[i] = (features[i] - feature_means[i]) / std_val;
     }
-    
+
     // Forward pass through hidden layer
     float hidden_outputs[HIDDEN_LAYER_SIZE];
     for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {
@@ -213,7 +229,7 @@ int har_predict_internal(float features[NUM_FEATURES]) {
         }
         hidden_outputs[h] = relu(sum);  // ReLU activation
     }
-    
+
     // Forward pass through output layer
     float output_scores[OUTPUT_SIZE];
     for (int o = 0; o < OUTPUT_SIZE; o++) {
@@ -223,7 +239,7 @@ int har_predict_internal(float features[NUM_FEATURES]) {
         }
         output_scores[o] = sum;
     }
-    
+
     // Find class with highest score
     int predicted_class = 0;
     float max_score = output_scores[0];
@@ -233,7 +249,7 @@ int har_predict_internal(float features[NUM_FEATURES]) {
             predicted_class = i;
         }
     }
-    
+
     return predicted_class;
 }"""
 
@@ -241,7 +257,7 @@ int har_predict_internal(float features[NUM_FEATURES]) {
         """Generate Neural Network utility functions."""
         return """void print_network_outputs(float features[]) {
     Serial.println("Neural Network Layer Outputs:");
-    
+
     // Show first few hidden layer outputs
     float hidden_outputs[HIDDEN_LAYER_SIZE];
     for (int h = 0; h < 5 && h < HIDDEN_LAYER_SIZE; h++) {

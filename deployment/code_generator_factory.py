@@ -142,27 +142,40 @@ def create_organized_filename(model_type: str, platform: str, file_type: str,
     elif file_type == 'cortex_source':
         return f"{base_name}.c"
     elif file_type == 'sketch':
-        return f"{base_name}_example.ino"
+        # Arduino .ino file must match folder name - no _example suffix
+        return f"{base_name}.ino"
     else:
         return f"{base_name}.{file_type}"
 
 
 def create_output_folder_structure(base_output_dir: str, model_type: str,
-                                   platform: str) -> str:
+                                   platform: str, model_data: Dict[str, Any] = None,
+                                   optimization: str = 'balanced') -> str:
     """
     Create organized folder structure for generated code.
+    For Arduino-based platforms, creates folder matching the .ino filename.
 
     Args:
         base_output_dir: Base directory for all generated code
         model_type: Type of model
         platform: Target platform
+        model_data: Model data containing features and classes info
+        optimization: Optimization strategy
 
     Returns:
         Full path to the specific model/platform folder
     """
-    # Create folder structure: base_dir/model_type/platform/
-    folder_path = os.path.join(
-        base_output_dir, f"{model_type}_models", platform)
+    # For Arduino-based platforms, folder must match .ino filename
+    if platform in ['arduino', 'seeed_xiao', 'esp32', 'teensy']:
+        # Create the same base name as the .ino file (without _example.ino)
+        num_features = len(model_data.get('feature_names', [])) if model_data else 0
+        num_classes = len(model_data.get('classes', [])) if model_data else 0
+
+        folder_name = f"har_{model_type}_{platform}_f{num_features}_c{num_classes}_{optimization}"
+        folder_path = os.path.join(base_output_dir, f"{model_type}_models", folder_name)
+    else:
+        # For non-Arduino platforms, use generic platform folder
+        folder_path = os.path.join(base_output_dir, f"{model_type}_models", platform)
 
     # Create directories if they don't exist
     os.makedirs(folder_path, exist_ok=True)
@@ -363,7 +376,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
 
     # Create organized folder structure
     folder_path = create_output_folder_structure(
-        output_dir, model_type, platform)
+        output_dir, model_type, platform, model_data, optimization)
 
     # Generate code with organized naming and optimization
     generated_code = generate_deployment_code(

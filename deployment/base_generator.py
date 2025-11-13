@@ -119,6 +119,9 @@ const char* get_activity_name(int class_id);
 #include "{header_include}"
 #include <math.h>
 
+// Forward declaration of internal prediction function
+int har_predict_internal(float features[NUM_FEATURES]);
+
 // Activity class names
 const char* activity_names[NUM_CLASSES] = {{
     {', '.join([f'"{cls}"' for cls in self.classes])}
@@ -129,13 +132,9 @@ const char* activity_names[NUM_CLASSES] = {{
 {self._generate_model_specific_implementation()}
 
 void har_init() {{
-    Serial.println("HAR Model initialized");
-    Serial.print("Model Type: {self.model_type}");
-    Serial.print("Features: ");
-    Serial.println(NUM_FEATURES);
-    Serial.print("Classes: ");
-    Serial.println(NUM_CLASSES);
-    Serial.println("Model ready for predictions");
+    // Lightweight initialization function
+    // Model is ready to use after this call
+    // No Serial output here to avoid dependency issues
 }}
 
 // Safe prediction wrapper with input validation
@@ -144,26 +143,26 @@ int har_predict(float features[NUM_FEATURES]) {{
     if (features == NULL) {{
         return -1; // Error: null pointer
     }}
-    
+
     // Check for valid feature values
     for (int i = 0; i < NUM_FEATURES; i++) {{
         if (isnan(features[i]) || isinf(features[i])) {{
             features[i] = 0.0f; // Replace invalid values with zero
         }}
-        
+
         // Clamp extreme values
         if (features[i] < -1000.0f) features[i] = -1000.0f;
         if (features[i] > 1000.0f) features[i] = 1000.0f;
     }}
-    
+
     // Call model-specific prediction function
     int result = har_predict_internal(features);
-    
+
     // Validate prediction result
     if (result < 0 || result >= NUM_CLASSES) {{
         return 0; // Return first class if invalid result
     }}
-    
+
     return result;
 }}
 
@@ -223,7 +222,7 @@ const float feature_stds[NUM_FEATURES] = {{
             return """void extract_features(float sensor_data[][6], int samples, float features[]) {
     // Simplified feature extraction for SPEED optimization with bounds checking
     // Extracts only essential statistical features
-    
+
     // Input validation and bounds checking
     if (samples <= 0 || samples > WINDOW_SIZE) {
         // Handle error - fill with zeros
@@ -232,45 +231,45 @@ const float feature_stds[NUM_FEATURES] = {{
         }
         return;
     }
-    
+
     if (sensor_data == NULL || features == NULL) {
         return; // Safety check for null pointers
     }
-    
+
     int feature_idx = 0;
-    
+
     // For each sensor axis (aX, aY, aZ, gX, gY, gZ)
     for (int axis = 0; axis < 6; axis++) {
         float sum = 0, sum_sq = 0;
         float min_val = sensor_data[0][axis];
         float max_val = sensor_data[0][axis];
-        
+
         // Fast statistical calculation with overflow protection
         for (int i = 0; i < samples; i++) {
             float val = sensor_data[i][axis];
-            
+
             // Sanity check for sensor values
             if (val < -1000.0f || val > 1000.0f) {
                 val = 0.0f; // Clamp extreme values
             }
-            
+
             sum += val;
             sum_sq += val * val;
             if (val < min_val) min_val = val;
             if (val > max_val) max_val = val;
         }
-        
+
         float mean = sum / samples;
         float variance = (sum_sq / samples) - (mean * mean);
         float std_dev = sqrt(variance > 0 ? variance : 0.001f);
-        
+
         // Store only essential features (4 per axis = 24 total) with bounds checking
         if (feature_idx < NUM_FEATURES) features[feature_idx++] = mean;
         if (feature_idx < NUM_FEATURES) features[feature_idx++] = std_dev;
         if (feature_idx < NUM_FEATURES) features[feature_idx++] = max_val - min_val; // Range
         if (feature_idx < NUM_FEATURES) features[feature_idx++] = sqrt(sum_sq / samples); // RMS
     }
-    
+
     // Fill remaining features with zeros
     while (feature_idx < NUM_FEATURES) {
         features[feature_idx++] = 0.0f;
@@ -282,7 +281,7 @@ const float feature_stds[NUM_FEATURES] = {{
             return """void extract_features(float sensor_data[][6], int samples, float features[]) {
     // Minimal feature extraction for POWER optimization with safety checks
     // Reduces computational complexity to save battery
-    
+
     // Input validation and bounds checking
     if (samples <= 0 || samples > WINDOW_SIZE) {
         // Handle error - fill with zeros
@@ -291,35 +290,35 @@ const float feature_stds[NUM_FEATURES] = {{
         }
         return;
     }
-    
+
     if (sensor_data == NULL || features == NULL) {
         return; // Safety check for null pointers
     }
-    
+
     int feature_idx = 0;
-    
+
     // Sample every other data point to reduce computation
     int step = (samples > 50) ? 2 : 1;
-    
+
     for (int axis = 0; axis < 6; axis++) {
         float sum = 0;
         int count = 0;
-        
+
         // Simple mean calculation with reduced samples and bounds checking
         for (int i = 0; i < samples; i += step) {
             float val = sensor_data[i][axis];
-            
+
             // Sanity check for sensor values (more lenient for power mode)
             if (val < -500.0f || val > 500.0f) {
                 val = 0.0f; // Clamp extreme values
             }
-            
+
             sum += val;
             count++;
         }
-        
+
         float mean = (count > 0) ? (sum / count) : 0.0f;
-        
+
         // Store minimal features (2 per axis = 12 total) with bounds checking
         if (feature_idx < NUM_FEATURES) {
             features[feature_idx++] = mean;
@@ -328,7 +327,7 @@ const float feature_stds[NUM_FEATURES] = {{
             features[feature_idx++] = fabs(mean); // Absolute mean
         }
     }
-    
+
     // Fill remaining features with zeros
     while (feature_idx < NUM_FEATURES) {
         features[feature_idx++] = 0.0f;
@@ -340,16 +339,16 @@ const float feature_stds[NUM_FEATURES] = {{
             return """void extract_features(float sensor_data[][6], int samples, float features[]) {
     // Comprehensive feature extraction for ACCURACY optimization
     // Extracts maximum number of features for best classification
-    
+
     int feature_idx = 0;
-    
+
     // For each sensor axis (aX, aY, aZ, gX, gY, gZ)
     for (int axis = 0; axis < 6; axis++) {
         // High-precision statistical calculations
         double sum = 0, sum_sq = 0, sum_cube = 0, sum_quad = 0;
         float min_val = sensor_data[0][axis];
         float max_val = sensor_data[0][axis];
-        
+
         for (int i = 0; i < samples; i++) {
             double val = sensor_data[i][axis];
             sum += val;
@@ -359,15 +358,15 @@ const float feature_stds[NUM_FEATURES] = {{
             if (val < min_val) min_val = val;
             if (val > max_val) max_val = val;
         }
-        
+
         double mean = sum / samples;
         double variance = (sum_sq / samples) - (mean * mean);
         double std_dev = sqrt(variance > 0 ? variance : 0.000001);
-        
+
         // Advanced statistical features
         double skewness = (sum_cube / samples - 3 * mean * variance - mean * mean * mean) / (std_dev * std_dev * std_dev + 0.000001);
         double kurtosis = (sum_quad / samples) / (variance * variance + 0.000001) - 3.0;
-        
+
         // Store comprehensive features (20+ per axis)
         features[feature_idx++] = mean;
         features[feature_idx++] = std_dev;
@@ -378,7 +377,7 @@ const float feature_stds[NUM_FEATURES] = {{
         features[feature_idx++] = skewness;
         features[feature_idx++] = kurtosis;
         features[feature_idx++] = sum_sq; // Energy
-        
+
         // Zero-crossing and additional metrics
         int zero_crossings = 0;
         for (int i = 1; i < samples; i++) {
@@ -387,7 +386,7 @@ const float feature_stds[NUM_FEATURES] = {{
             }
         }
         features[feature_idx++] = (float)zero_crossings;
-        
+
         // Spectral features (simplified FFT approximation)
         float freq_energy_low = 0, freq_energy_high = 0;
         for (int i = 0; i < samples/2; i++) {
@@ -402,7 +401,7 @@ const float feature_stds[NUM_FEATURES] = {{
         features[feature_idx++] = freq_energy_high;
         features[feature_idx++] = freq_energy_low / (freq_energy_high + 0.001f);
     }
-    
+
     // Ensure we have exactly NUM_FEATURES
     while (feature_idx < NUM_FEATURES) {
         features[feature_idx++] = 0.0f;
@@ -414,16 +413,16 @@ const float feature_stds[NUM_FEATURES] = {{
             return """void extract_features(float sensor_data[][6], int samples, float features[]) {
     // Balanced feature extraction for BALANCED optimization
     // Good trade-off between accuracy and computational efficiency
-    
+
     int feature_idx = 0;
-    
+
     // For each sensor axis (aX, aY, aZ, gX, gY, gZ)
     for (int axis = 0; axis < 6; axis++) {
         // Standard statistical calculations
         float sum = 0, sum_sq = 0;
         float min_val = sensor_data[0][axis];
         float max_val = sensor_data[0][axis];
-        
+
         for (int i = 0; i < samples; i++) {
             float val = sensor_data[i][axis];
             sum += val;
@@ -431,11 +430,11 @@ const float feature_stds[NUM_FEATURES] = {{
             if (val < min_val) min_val = val;
             if (val > max_val) max_val = val;
         }
-        
+
         float mean = sum / samples;
         float variance = (sum_sq / samples) - (mean * mean);
         float std_dev = sqrt(variance > 0 ? variance : 0.001f);
-        
+
         // Balanced set of features (10 per axis)
         features[feature_idx++] = mean;
         features[feature_idx++] = std_dev;
@@ -443,7 +442,7 @@ const float feature_stds[NUM_FEATURES] = {{
         features[feature_idx++] = max_val;
         features[feature_idx++] = max_val - min_val;
         features[feature_idx++] = sqrt(sum_sq / samples);
-        
+
         // Simple skewness and kurtosis
         float skewness = 0, kurtosis = 0;
         for (int i = 0; i < samples; i++) {
@@ -453,7 +452,7 @@ const float feature_stds[NUM_FEATURES] = {{
         }
         features[feature_idx++] = skewness / samples;
         features[feature_idx++] = (kurtosis / samples) - 3.0f;
-        
+
         // Energy and zero-crossing
         features[feature_idx++] = sum_sq;
         int zero_crossings = 0;
@@ -464,7 +463,7 @@ const float feature_stds[NUM_FEATURES] = {{
         }
         features[feature_idx++] = (float)zero_crossings;
     }
-    
+
     // Fill remaining features
     while (feature_idx < NUM_FEATURES) {
         features[feature_idx++] = 0.0f;
@@ -545,7 +544,8 @@ const unsigned long READING_INTERVAL = {reading_interval}; // ms between reading
 
 void setup() {{
     Serial.begin(115200);
-    
+    delay(1000); // Simple delay for Serial initialization
+
     // Print optimization info
     Serial.println("HAR Model - {self.optimization.title()} Optimization");
     Serial.println("========================================");
@@ -554,33 +554,33 @@ void setup() {{
     Serial.print("  Window Size: "); Serial.print(WINDOW_SIZE); Serial.println(" samples");
     Serial.print("  Features: "); Serial.println(NUM_FEATURES);
     Serial.print("  Optimization: "); Serial.println("{self.optimization.title()}");
-    
+
     // Initialize HAR model
     har_init();
-    
+
     // Initialize IMU (example - adapt for your sensor)
     Serial.println("Initializing IMU sensor...");
     // Your IMU initialization code here
-    
+
     Serial.println("HAR Model Ready!");
     Serial.println("Collecting sensor data...");
 }}
 
 void loop() {{
     unsigned long current_time = millis();
-    
+
     // Check if it's time for a new reading
     if (current_time - last_reading >= READING_INTERVAL) {{
         last_reading = current_time;
-        
+
         // Read sensor data (example - replace with your IMU reading code)
         float aX = random(-20, 20) / 10.0f;  // Replace with actual accelerometer X
-        float aY = random(-20, 20) / 10.0f;  // Replace with actual accelerometer Y  
+        float aY = random(-20, 20) / 10.0f;  // Replace with actual accelerometer Y
         float aZ = random(-20, 20) / 10.0f;  // Replace with actual accelerometer Z
         float gX = random(-500, 500) / 100.0f;  // Replace with actual gyroscope X
         float gY = random(-500, 500) / 100.0f;  // Replace with actual gyroscope Y
         float gZ = random(-500, 500) / 100.0f;  // Replace with actual gyroscope Z
-        
+
         // Store in buffer
         sensor_buffer[buffer_index][0] = aX;
         sensor_buffer[buffer_index][1] = aY;
@@ -588,20 +588,20 @@ void loop() {{
         sensor_buffer[buffer_index][3] = gX;
         sensor_buffer[buffer_index][4] = gY;
         sensor_buffer[buffer_index][5] = gZ;
-        
+
         buffer_index++;
-        
+
         // When buffer is full, extract features and predict
         if (buffer_index >= WINDOW_SIZE) {{
             buffer_index = 0;
-            
+
             // Extract features
             extract_features(sensor_buffer, WINDOW_SIZE, features);
-            
+
             // Make prediction
             int predicted_class = har_predict(features);
             const char* activity_name = get_activity_name(predicted_class);
-            
+
             // Print result
             Serial.print("Predicted Activity: ");
             Serial.print(activity_name);
@@ -610,7 +610,7 @@ void loop() {{
             Serial.println(")");{debug_code}
         }}
     }}
-    
+
     delay({delay_ms});  // Optimization-specific delay
 }}"""
 

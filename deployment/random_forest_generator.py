@@ -54,18 +54,18 @@ const int tree_starts[] = {0}; // Start indices for each tree"""
 
 int predict_tree(const TreeNode* nodes, int tree_start, float* features) {{
     int current_node = tree_start;
-    
+
     while (nodes[current_node].feature_idx >= 0) {{
         int feature_idx = nodes[current_node].feature_idx;
         float threshold = nodes[current_node].threshold;
-        
+
         if (features[feature_idx] <= threshold) {{
             current_node = nodes[current_node].left_child;
         }} else {{
             current_node = nodes[current_node].right_child;
         }}
     }}
-    
+
     return (int)nodes[current_node].value;
 }}"""
 
@@ -77,10 +77,10 @@ int predict_tree(const TreeNode* nodes, int tree_start, float* features) {{
     for (int i = 0; i < NUM_FEATURES; i++) {{
         scaled_features[i] = (features[i] - feature_means[i]) / feature_stds[i];
     }}
-    
+
     // Random Forest prediction using all trees
     int votes[NUM_CLASSES] = {{0}};
-    
+
     // Predict with each tree and accumulate votes
     for (int tree = 0; tree < NUM_TREES && tree < {min(self.num_trees, 100)}; tree++) {{
         int tree_prediction = predict_tree(tree_nodes, tree_starts[tree], scaled_features);
@@ -88,7 +88,7 @@ int predict_tree(const TreeNode* nodes, int tree_start, float* features) {{
             votes[tree_prediction]++;
         }}
     }}
-    
+
     // Return class with most votes
     int max_votes = 0;
     int predicted_class = 0;
@@ -98,7 +98,7 @@ int predict_tree(const TreeNode* nodes, int tree_start, float* features) {{
             predicted_class = i;
         }}
     }}
-    
+
     return predicted_class;
 }}"""
 

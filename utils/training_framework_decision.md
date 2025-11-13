@@ -81,4 +81,16 @@ Your decision is academically sound and strategically correct:
 Mention in Thesis Discussion
 Include a brief discussion of this design decision:
 
+## ML Framework Selection
+
+We chose scikit-learn for model training based on several factors:
+
+- **Edge Optimization**: Simpler models better suited for microcontroller deployment
+- **Research Focus**: Emphasis on interactive preprocessing rather than ML architectures
+- **Deployment Simplicity**: Direct parameter extraction enables efficient C++ generation
+- **Extensibility**: Modular design supports future TensorFlow integration
+
+This choice aligns with edge computing best practices while maintaining focus
+on our primary research contributions in interactive HAR preprocessing.
+
 Your current approach demonstrates excellent engineering judgment and appropriate scope management for a Master's thesis! 🎯

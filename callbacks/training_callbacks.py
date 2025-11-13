@@ -38,22 +38,8 @@ from deployment import generate_deployment_code, analyze_resource_requirements, 
 )
 def enable_training_components(tab):
     """Enable training components when training tab is active and load trained models."""
-    # Load available trained models
-    model_options = []
-    try:
-        model_metadata_file = os.path.join(
-            PERSISTENT_DIR, "trained_models.json")
-        if os.path.exists(model_metadata_file):
-            with open(model_metadata_file, 'r') as f:
-                models_metadata = json.load(f)
-
-            for model_filename, model_info in models_metadata.items():
-                model_options.append({
-                    'label': f"{model_info['model_type'].replace('_', ' ').title()} - {model_info.get('test_accuracy', 0):.3f} acc",
-                    'value': model_filename
-                })
-    except Exception as e:
-        print(f"Error loading trained models: {e}")
+    # Load available trained models using helper function
+    model_options = load_trained_model_options()
 
     if tab == 'tab-3':
         return False, False, False, False, model_options
@@ -75,6 +61,25 @@ def save_model_metadata(model_filename, model_info):
 
     with open(model_metadata_file, 'w') as f:
         json.dump(models_metadata, f, indent=2)
+
+
+def load_trained_model_options():
+    """Load available trained model options for dropdown."""
+    model_options = []
+    try:
+        model_metadata_file = os.path.join(PERSISTENT_DIR, "trained_models.json")
+        if os.path.exists(model_metadata_file):
+            with open(model_metadata_file, 'r') as f:
+                models_metadata = json.load(f)
+
+            for model_filename, model_info in models_metadata.items():
+                model_options.append({
+                    'label': f"📊 {model_info['model_type'].replace('_', ' ').title()} - {model_info['timestamp']} (Acc: {model_info['test_accuracy']:.3f})",
+                    'value': model_filename
+                })
+    except Exception as e:
+        print(f"Error loading trained models: {e}")
+    return model_options
 
 
 def create_training_results_display(model_info, evaluation_results, y_test, model_type, training_time):
@@ -114,7 +119,8 @@ def create_training_results_display(model_info, evaluation_results, y_test, mode
 
 
 @callback(
-    Output('training-output', 'children'),
+    [Output('training-output', 'children'),
+     Output('trained-model-selector', 'options', allow_duplicate=True)],
     [Input('start-training-btn', 'n_clicks'),
      Input('optimize-hyperparams-btn', 'n_clicks'),
      Input('cross-validate-btn', 'n_clicks')],
@@ -124,23 +130,23 @@ def create_training_results_display(model_info, evaluation_results, y_test, mode
 def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type):
     """Handle different training actions based on which button was clicked."""
     if not ctx.triggered:
-        return no_update
+        return no_update, no_update
 
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
     if not model_type:
-        return html.Div([
+        return (html.Div([
             html.H4("⚠ Please select a model type first.",
                     style={'color': 'orange'})
-        ])
+        ]), no_update)
 
     try:
         # Load metadata to find processed windows
         if not os.path.exists(METADATA_FILE):
-            return html.Div([
+            return (html.Div([
                 html.H4("❌ No datasets found.", style={'color': 'red'}),
                 html.P("Please upload and preprocess data first.")
-            ])
+            ]), no_update)
 
         with open(METADATA_FILE, 'r') as f:
             metadata = json.load(f)
@@ -159,21 +165,21 @@ def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type
                         labels.append(dataset_label)
 
         if not window_files:
-            return html.Div([
+            return (html.Div([
                 html.H4("❌ No processed windows found.",
                         style={'color': 'red'}),
                 html.P("Please preprocess your data and create time windows first.")
-            ])
+            ]), no_update)
 
         # Prepare training data
         X, y = prepare_training_data(window_files, labels)
 
         if X.empty:
-            return html.Div([
+            return (html.Div([
                 html.H4("❌ Failed to prepare training data.",
                         style={'color': 'red'}),
                 html.P("Check your window files.")
-            ])
+            ]), no_update)
 
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(
@@ -191,10 +197,10 @@ def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type
             return perform_cross_validation(model, X_train, y_train, model_type)
 
     except Exception as e:
-        return html.Div([
+        return (html.Div([
             html.H4("❌ Training failed", style={'color': 'red'}),
             html.P(f"Error: {str(e)}")
-        ])
+        ]), no_update)
 
 
 def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type):
@@ -234,7 +240,9 @@ def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type):
     save_model_metadata(model_filename, model_info)
 
     # Create results summary
-    return create_training_results_display(model_info, evaluation_results, y_test, model_type, training_time)
+    training_output = create_training_results_display(model_info, evaluation_results, y_test, model_type, training_time)
+    updated_options = load_trained_model_options()
+    return training_output, updated_options
 
 
 def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type):
@@ -273,7 +281,7 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
 
     save_model_metadata(model_filename, model_info)
 
-    return html.Div([
+    optimization_output = html.Div([
         html.H4("✅ Hyperparameter Optimization Completed!",
                 style={'color': 'green'}),
         html.Hr(),
@@ -301,6 +309,8 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
                 evaluation_results, y_test, model_type)
         )
     ])
+    updated_options = load_trained_model_options()
+    return optimization_output, updated_options
 
 
 def perform_cross_validation(model, X_train, y_train, model_type):
@@ -315,7 +325,7 @@ def perform_cross_validation(model, X_train, y_train, model_type):
     # Create cross-validation visualization
     cv_results = training_results
 
-    return html.Div([
+    cv_output = html.Div([
         html.H4("✅ Cross-Validation Analysis Completed!",
                 style={'color': 'green'}),
         html.Hr(),
@@ -334,6 +344,8 @@ def perform_cross_validation(model, X_train, y_train, model_type):
             )
         ])
     ])
+    # Cross-validation doesn't save a model, so return no_update for model options
+    return cv_output, no_update
 
 
 def create_cv_visualization(cv_results, model_type):
