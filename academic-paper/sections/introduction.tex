@@ -1,0 +1,84 @@
+\subsection{Background and Motivation}
+
+Motion tracking is a dynamic and rapidly evolving field that involves the capture, processing, and analysis of movement, whether of objects, individuals, or environments. The technology plays a pivotal role in various domains including healthcare (physical rehabilitation, fall detection, patient monitoring), sports (performance tracking, injury prevention), gaming and virtual/augmented reality (immersive user experiences), and robotics (navigation systems, precise control mechanisms) \cite{article:human_motion_tracking_survey}.
+
+Advances in sensor technology and artificial intelligence (AI) have been transformative, dramatically increasing the accuracy, efficiency, and flexibility of motion tracking systems. In particular, AI models are indispensable for interpreting motion data, enabling applications such as gesture recognition, activity classification, and predictive motion modeling. However, the process of developing these AI models is inherently complex, involving data collection, preprocessing and filtering to remove noise, extracting meaningful features, and training machine learning or deep learning models. This complexity poses significant challenges, especially for developers and researchers who may lack expertise in AI or motion tracking technology \cite{article:motion_tracking_using_AI}.
+
+The rise of edge computing has further complicated this landscape while simultaneously presenting new opportunities. Edge devices—resource-constrained microcontrollers with limited memory, processing power, and energy budgets—enable real-time, privacy-preserving, and energy-efficient motion tracking applications. However, deploying AI models on such devices requires specialized knowledge in model optimization, code generation, and platform-specific implementation details.
+
+\subsection{Problem Statement}
+
+Despite advancements in motion tracking technologies, generating AI models for motion analysis remains a challenging task that presents several critical barriers:
+
+\begin{enumerate}
+\item \textbf{Technical Complexity}: Current approaches require extensive technical knowledge spanning multiple domains—signal processing for data preprocessing, machine learning for model development, and embedded systems for edge deployment.
+
+\item \textbf{Preprocessing Challenges}: Motion sensor data is inherently noisy and requires careful preprocessing. Existing tools either provide limited control over preprocessing (automated black-box approaches) or require extensive programming to implement custom preprocessing pipelines.
+
+\item \textbf{Limited Flexibility}: Many available frameworks have steep learning curves or provide limited functionality for customizing models to specific motion tracking requirements. Commercial platforms like Edge Impulse and SensiML offer simplified workflows but at significant cost (\$20-100/month) and with restricted customization options.
+
+\item \textbf{Deployment Complexity}: Translating trained models into optimized code for specific edge platforms requires deep understanding of target hardware architectures, memory constraints, and optimization techniques.
+
+\item \textbf{Accessibility Barriers}: The combination of these factors restricts innovation and hinders widespread adoption of AI-powered motion tracking solutions, particularly in research and educational contexts.
+
+\end{enumerate}
+
+There is therefore an urgent need for a flexible, intuitive, and user-friendly framework that simplifies the creation of AI models suitable for motion tracking applications while providing complete control over the development pipeline.
+
+\subsection{Research Objectives}
+
+The primary objective of this research is to design, implement, and evaluate a comprehensive framework that addresses the aforementioned challenges. Specifically, this research aims to:
+
+\begin{enumerate}
+\item \textbf{Develop an Interactive Preprocessing System}: Create a novel GUI-based preprocessing interface featuring draggable time window selection, enabling efficient data annotation and segmentation without programming requirements.
+
+\item \textbf{Implement Multi-Algorithm Support}: Integrate multiple machine learning algorithms (Random Forest, SVM, Neural Networks) with consistent APIs and automated hyperparameter optimization.
+
+\item \textbf{Design Platform-Agnostic Code Generation}: Build a modular code generation system capable of producing optimized C++ implementations for various edge platforms (Arduino, ARM Cortex-M, Seeed XIAO) with consideration for different optimization strategies (accuracy, speed, power, balanced).
+
+\item \textbf{Validate Framework Effectiveness}: Conduct comprehensive experiments using real-world Human Activity Recognition data to evaluate model performance, deployment efficiency, and usability compared to existing commercial solutions.
+
+\item \textbf{Ensure Accessibility}: Design the system with a user-friendly interface accessible to both experts and non-experts, promoting democratization of edge AI development.
+
+\end{enumerate}
+
+\subsection{Research Contributions}
+
+This research makes the following key contributions to the field of edge-based motion tracking:
+
+\begin{itemize}
+\item \textbf{Novel Interactive Preprocessing}: First-of-its-kind draggable time window selection interface for motion data annotation, significantly reducing preprocessing time and annotation errors compared to manual approaches.
+
+\item \textbf{Comprehensive Open-Source Framework}: Complete end-to-end pipeline from data upload to edge deployment, provided as an open-source alternative to expensive commercial platforms.
+
+\item \textbf{Optimization-Aware Code Generation}: Intelligent code generation system that adapts output based on deployment priorities (accuracy vs. speed vs. power consumption), with platform-specific optimizations.
+
+\item \textbf{Empirical Validation}: Comprehensive benchmarking on real edge hardware (Seeed XIAO nRF52840) demonstrating practical feasibility and performance characteristics.
+
+\item \textbf{Extensible Architecture}: Modular design enabling future integration of additional algorithms, platforms, and preprocessing techniques.
+
+\end{itemize}
+
+\subsection{Scope and Limitations}
+
+This research focuses on IMU-based (accelerometer and gyroscope) motion tracking applications. The scope includes:
+
+\begin{itemize}
+\item 6-axis IMU sensor data (3-axis accelerometer + 3-axis gyroscope)
+\item Supervised learning approaches using scikit-learn algorithms
+\item Code generation for microcontroller-based edge platforms
+\item Human Activity Recognition as the primary validation domain
+\end{itemize}
+
+The research does not address:
+
+\begin{itemize}
+\item Multi-modal sensor fusion (combining IMU with camera, audio, etc.)
+\item Deep learning frameworks (TensorFlow, PyTorch) integration
+\item Real-time model updates or federated learning scenarios
+\item Specialized domains requiring medical certification
+\end{itemize}
+
+\subsection{Thesis Organization}
+
+The remainder of this paper is organized as follows: Section 2 reviews related work in motion tracking systems, AI model generation frameworks, and edge deployment tools. Section 3 presents the detailed methodology including system architecture, preprocessing pipeline, model training approach, and code generation strategy. Section 4 reports experimental results including model performance metrics, deployment characteristics, and comparative analysis. Section 5 discusses findings, limitations, and implications. Section 6 concludes with a summary of contributions and directions for future work.

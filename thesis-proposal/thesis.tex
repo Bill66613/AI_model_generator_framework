@@ -1,0 +1,109 @@
+% 'draft' mode can be used to speed up compilation
+\documentclass[final,oneside]{hcmut-thesis}
+
+%\usepackage{pdfpages}
+%\usepackage[draft,pageno]{listofsymbols}
+
+% Draft watermark
+% https://github.com/callegar/LaTeX-draftwatermark
+
+\usepackage{lmodern}  % for bold teletype font
+\usepackage{amsmath}  % for \hookrightarrow
+\usepackage{xcolor}   % for \textcolor
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily,
+  columns=fullflexible,
+  frame=single,
+  breaklines=true,
+  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+}
+
+% References
+% Use \Cref{} instead of \ref{}
+\usepackage[nameinlink]{cleveref}
+
+% FOR DEMONSTRATION PURPOSES, REMOVE IN PRODUCTION
+\usepackage{blindtext}
+
+% Sub-preambles
+% https://tex.stackexchange.com/a/395416
+
+% Configurations
+\reporttype{Graduation Thesis}
+\title{Building a framework to generate AI models
+for human motion tracking applications}
+\defcouncil{Council H}
+\supervisor{
+  Dr.~Le Trong Nhan
+}
+%\secretary{Assoc.~Prof.~Dr.~H}
+\reviewer{Dr.~Le Trong Nhan}
+\stuname{
+  STUDENT: Nguyen Truong Minh Hoang
+}
+\stuid{
+  STUDENT'S ID: 2270757
+}
+
+% Allow page breaks inside align* environment
+%\allowdisplaybreaks{}
+
+% Makes a lot of things blue, avoid at all costs
+%\everymath{\color{blue}}
+
+% Custom commands
+%\newcommand*\mean[1]{\bar{#1}}
+
+\begin{document}
+\coverpage%
+
+\frontmatter%
+\begin{center}
+\textbf{\large VERIFICATION OF INSTRUCTOR}
+\end{center}
+
+\vspace{15 cm}
+\hspace{9 cm} \textbf{\large Signature confirmation}\\
+\vspace{3 cm}
+
+%\includepdf[pages=-]{details.pdf}
+\include{chapters/front/declaration.tex}
+\include{chapters/front/acknowledge.tex}
+\include{chapters/front/abstract.tex}
+
+\tableofcontents
+%\clearpage
+%\listofsymbols%
+\clearpage
+\listoftables
+\clearpage
+\listoffigures
+
+\mainmatter%
+
+% Set depth of numbering depth for counters
+\counterwithin{equation}{section}
+\counterwithin{table}{section}
+\counterwithin{figure}{section}
+
+\include{chapters/main/overview.tex}
+\include{chapters/main/literature-review}
+\include{chapters/main/experiment_results}
+\include{chapters/main/problem-analysis}
+\include{chapters/main/methodology.tex}
+% \include{chapters/main/sys-design.tex}
+% \include{chapters/main/eval.tex}
+
+\bibliographystyle{plain}
+\bibliography{refs/references.bib}
+\nocite{*}
+
+% \appendix%
+
+% \include{chapters/back/design-docs.tex}
+% \include{chapters/back/test-suite.tex}
+
+% \backmatter%
+
+\end{document}
