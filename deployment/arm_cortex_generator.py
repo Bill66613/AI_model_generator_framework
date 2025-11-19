@@ -29,6 +29,11 @@ class ARMCortexMCodeGenerator(BaseCodeGenerator):
 
 // ARM Cortex-M specific optimizations
 typedef int32_t fixed_point_t;
+
+// ARM Cortex-M utility functions
+fixed_point_t float_to_fixed(float f);
+float fixed_to_float(fixed_point_t f);
+void print_system_info();
 """
 
     def _generate_model_specific_implementation(self) -> str:
@@ -89,7 +94,7 @@ void arm_optimized_matrix_mult(const float* matrix, const float* vector,
 
     def _generate_prediction_function(self) -> str:
         """Generate ARM Cortex-M optimized prediction function."""
-        return """int har_predict(float features[NUM_FEATURES]) {
+        return """int har_predict_internal(float features[NUM_FEATURES]) {
     float scaled_features[NUM_FEATURES];
     
 #ifdef USE_ARM_DSP

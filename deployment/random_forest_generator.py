@@ -31,8 +31,10 @@ typedef struct {{
     float value;
 }} TreeNode;
 
-// Tree prediction functions
+// Random Forest utility functions
 int predict_tree(const TreeNode* nodes, int tree_start, float* features);
+void print_tree_prediction_debug(float features[]);
+void print_feature_vector(float features[]);
 """
 
     def _generate_model_specific_implementation(self) -> str:
@@ -71,7 +73,7 @@ int predict_tree(const TreeNode* nodes, int tree_start, float* features) {{
 
     def _generate_prediction_function(self) -> str:
         """Generate Random Forest prediction function."""
-        return f"""int har_predict(float features[NUM_FEATURES]) {{
+        return f"""int har_predict_internal(float features[NUM_FEATURES]) {{
     // Scale features using training parameters
     float scaled_features[NUM_FEATURES];
     for (int i = 0; i < NUM_FEATURES; i++) {{

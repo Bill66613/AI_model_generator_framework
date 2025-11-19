@@ -74,6 +74,8 @@ class BaseCodeGenerator(ABC):
 #define SAMPLING_RATE {self.sampling_rate}
 #define WINDOW_SIZE {self.window_size}
 
+{self._get_model_specific_declarations()}
+
 // Optimization settings
 #define FEATURE_PRECISION {self.feature_precision}
 #define DEBUG_ENABLED {1 if self.debug_enabled else 0}
@@ -89,8 +91,6 @@ void har_init();
 int har_predict(float features[NUM_FEATURES]);
 void extract_features(float sensor_data[][6], int samples, float features[]);
 const char* get_activity_name(int class_id);
-
-{self._get_model_specific_declarations()}
 
 #endif // HAR_MODEL_H
 """

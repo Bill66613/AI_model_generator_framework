@@ -88,9 +88,10 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
 #define INPUT_SIZE NUM_FEATURES
 #define OUTPUT_SIZE NUM_CLASSES
 
-// Activation functions
+// Neural Network utility functions
 float sigmoid(float x);
 float relu(float x);
+void print_network_outputs(float features[]);
 """
 
     def _generate_model_specific_implementation(self) -> str:

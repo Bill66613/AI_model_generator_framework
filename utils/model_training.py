@@ -43,6 +43,8 @@ class EdgeMLModel:
                 min_samples_split=self.model_params.get(
                     'min_samples_split', 5),
                 min_samples_leaf=self.model_params.get('min_samples_leaf', 2),
+                class_weight=self.model_params.get(
+                    'class_weight', 'balanced'),  # Balance classes automatically
                 random_state=42
             )
         elif self.model_type == 'svm':
@@ -50,6 +52,8 @@ class EdgeMLModel:
                 C=self.model_params.get('C', 1.0),
                 kernel=self.model_params.get('kernel', 'rbf'),
                 gamma=self.model_params.get('gamma', 'scale'),
+                class_weight=self.model_params.get(
+                    'class_weight', 'balanced'),  # Balance classes automatically
                 random_state=42,
                 probability=True  # Enable probability estimates
             )
@@ -67,6 +71,8 @@ class EdgeMLModel:
                 random_state=42,
                 early_stopping=True,
                 validation_fraction=0.1
+                # Note: MLPClassifier doesn't support class_weight directly
+                # Use balanced training data or manual sample weighting if needed
             )
         else:
             raise ValueError(f"Unsupported model type: {self.model_type}")
@@ -248,19 +254,24 @@ class EdgeMLModel:
                 'n_estimators': [25, 50, 100],
                 'max_depth': [5, 10, 15, None],
                 'min_samples_split': [2, 5, 10],
-                'min_samples_leaf': [1, 2, 4]
+                'min_samples_leaf': [1, 2, 4],
+                # Include class balancing options
+                'class_weight': ['balanced', 'balanced_subsample']
             }
         elif self.model_type == 'svm':
             return {
                 'C': [0.1, 1, 10, 100],
                 'kernel': ['rbf', 'linear'],
-                'gamma': ['scale', 'auto', 0.001, 0.01, 0.1]
+                'gamma': ['scale', 'auto', 0.001, 0.01, 0.1],
+                # Include class balancing option
+                'class_weight': ['balanced', None]
             }
         elif self.model_type == 'neural_network':
             return {
                 'hidden_layer_sizes': [(50,), (100,), (50, 25), (100, 50)],
                 'alpha': [0.0001, 0.001, 0.01],
                 'learning_rate_init': [0.001, 0.01, 0.1]
+                # Note: MLPClassifier doesn't support class_weight parameter
             }
         else:
             return {}

@@ -21,8 +21,9 @@ class SVMCodeGenerator(BaseCodeGenerator):
 // SVM specific definitions
 #define NUM_SUPPORT_VECTORS {self.num_support_vectors if self.num_support_vectors > 0 else 100}
 
-// Kernel functions
+// SVM utility functions
 float rbf_kernel(float* x1, float* x2, float gamma);
+void print_svm_decision_scores(float features[]);
 """
 
     def _generate_model_specific_implementation(self) -> str:
@@ -53,7 +54,7 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
 
     def _generate_prediction_function(self) -> str:
         """Generate SVM prediction function."""
-        return """int har_predict(float features[NUM_FEATURES]) {
+        return """int har_predict_internal(float features[NUM_FEATURES]) {
     // Scale features using training parameters
     float scaled_features[NUM_FEATURES];
     for (int i = 0; i < NUM_FEATURES; i++) {
