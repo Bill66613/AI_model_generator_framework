@@ -657,15 +657,11 @@ void loop() {{
             self.debug_enabled = False  # No debugging to save power
             self.buffer_optimization = True
         else:  # balanced
-            # Balanced approach with slight adjustments for complexity
-            if complexity_factor > 1.5:
-                self.sampling_rate = 75  # Slightly lower for complex models
-                self.window_size = 75
-                self.feature_precision = 3
-            else:
-                self.sampling_rate = 100  # Standard sampling
-                self.window_size = 100    # Standard window
-                self.feature_precision = 4  # Balanced precision
+            # Balanced approach - use 100 Hz for consistency with training data
+            # Window size of 75 samples = 0.75 seconds at 100 Hz
+            self.sampling_rate = 100  # Standard sampling rate for HAR
+            self.window_size = 75     # 0.75 second windows
+            self.feature_precision = 3  # Balanced precision
             self.debug_enabled = False  # No debugging by default
             self.buffer_optimization = False
 
