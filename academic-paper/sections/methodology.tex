@@ -1,10 +1,261 @@
-In this section, we describe the methodology employed in our research. The study was designed to investigate [insert research question or hypothesis]. 
+\subsection{Framework Architecture Overview}
+The proposed framework implements an end-to-end pipeline for generating AI models tailored to motion tracking on edge devices. The system architecture consists of five primary components: (1) data upload and management, (2) interactive preprocessing with visual segmentation, (3) feature extraction, (4) model training with hyperparameter optimization, and (5) platform-specific code generation. The framework is implemented using Python with a Dash web interface, scikit-learn for machine learning, and custom code generators for embedded C++ deployment. Figure \ref{fig:architecture} illustrates the overall workflow.
+
+\subsection{Data Collection and Hardware Platform}
+
+\subsubsection{Sensor Hardware}
+Data collection utilizes the Seeed XIAO nRF52840 Sense microcontroller \cite{web:XIAO}, featuring an ARM Cortex-M4F processor (64MHz, 256KB RAM, 1MB Flash) and an integrated LSM6DS3 6-axis IMU sensor communicating via I2C at address 0x6A. The LSM6DS3 provides 3-axis accelerometer data (configured at ±2g range) and 3-axis gyroscope data, sampled at 100Hz to ensure sufficient temporal resolution for capturing human motion dynamics while balancing memory constraints.
+
+\subsubsection{Data Acquisition Protocol}
+The data collection firmware implements the following procedure:
+\begin{enumerate}
+    \item Initialize I2C communication and verify IMU connection
+    \item Configure accelerometer (±2g range) and gyroscope sensors
+    \item Acquire raw sensor readings at 100Hz (10ms intervals)
+    \item Convert accelerometer values to m/s² using conversion factor 9.80665
+    \item Maintain gyroscope readings in degrees/second (deg/s)
+    \item Output CSV format: Time\_seconds, AccX, AccY, AccZ, GyrX, GyrY, GyrZ
+\end{enumerate}
+
+The standardized 100Hz sampling rate ensures consistency between training data collection and real-time inference deployment, eliminating frequency mismatch issues that could degrade model performance.
+
+\subsection{Interactive Preprocessing Pipeline}
+
+\subsubsection{Data Upload and Visualization}
+Users upload multi-class CSV datasets containing timestamped IMU measurements. The system supports per-activity file organization (e.g., \texttt{walking.csv}, \texttt{running.csv}) where each file corresponds to one activity class. Upon upload, the framework displays synchronized plots of raw accelerometer and gyroscope signals across all six axes, enabling visual inspection of data quality.
+
+\subsubsection{Signal Cleaning and Smoothing}
+The preprocessing module offers configurable cleaning operations:
+\begin{itemize}
+    \item \textbf{Outlier Removal}: Identifies and removes samples exceeding specified standard deviation thresholds (default: 3σ), addressing sensor anomalies and electromagnetic interference artifacts.
+    \item \textbf{Smoothing}: Applies moving average filters with user-defined window sizes (default: 5 samples) to reduce high-frequency noise while preserving motion characteristics.
+\end{itemize}
+Cleaned data is visualized alongside original signals, allowing users to verify preprocessing effectiveness before segmentation.
+
+\subsubsection{Draggable Time Window Segmentation}
+A novel contribution of this framework is the \textit{interactive draggable window interface} for activity segmentation. Key features include:
+\begin{itemize}
+    \item \textbf{Visual Window Placement}: Users click-and-drag directly on signal plots to define temporal boundaries of activity instances, providing intuitive control over segmentation without coding.
+    \item \textbf{Multi-Window Support}: Multiple non-overlapping windows can be defined per activity file, accommodating datasets with multiple instances of the same activity.
+    \item \textbf{Real-Time Feedback}: Selected windows are highlighted on the plot with distinct colors, and extracted segments are immediately available for inspection.
+    \item \textbf{Per-Window Labeling}: Each window is automatically assigned the activity label from the parent file, but can be manually re-labeled if needed (e.g., extracting \textit{standing} segments from \textit{walking} files during transition periods).
+\end{itemize}
+This approach significantly reduces annotation time compared to manual timestamp entry or programmatic segmentation, and eliminates common errors in boundary specification.
+
+\subsection{Feature Extraction}
+
+\subsubsection{Sliding Window Approach}
+Preprocessed signals are segmented into fixed-size overlapping windows for feature extraction. Default configuration:
+\begin{itemize}
+    \item \textbf{Window Size}: 75 samples (0.75 seconds at 100Hz)
+    \item \textbf{Overlap}: 50\% (37-sample stride)
+\end{itemize}
+This balances temporal context (capturing full motion cycles) with responsiveness (enabling sub-second inference updates).
+
+\subsubsection{Feature Set}
+For each window and each sensor axis (6 axes total), the framework computes 23 statistical features spanning time and frequency domains:
+
+\textbf{Time-Domain Features:}
+\begin{itemize}
+    \item Mean, Standard Deviation, Minimum, Maximum, Range
+    \item Root Mean Square (RMS): $\text{RMS} = \sqrt{\frac{1}{N}\sum_{i=1}^{N} x_i^2}$
+    \item Median Absolute Deviation: $\text{MAD} = \text{median}(|x_i - \text{median}(x)|)$
+    \item Skewness: $\gamma = \frac{E[(X-\mu)^3]}{\sigma^3}$
+    \item Kurtosis: $\kappa = \frac{E[(X-\mu)^4]}{\sigma^4} - 3$
+    \item Zero-Crossing Rate: count of signal sign changes
+    \item Energy: $E = \sum_{i=1}^{N} x_i^2$
+\end{itemize}
+
+\textbf{Frequency-Domain Features:}
+\begin{itemize}
+    \item Dominant Frequency: frequency bin with maximum FFT magnitude
+    \item Spectral Energy: sum of squared FFT coefficients
+    \item Spectral Entropy: Shannon entropy of normalized power spectrum
+\end{itemize}
+
+Total feature vector dimensionality: $23 \times 6 = 138$ features per window. This comprehensive representation captures both motion amplitude/dynamics (time-domain) and periodicity/frequency characteristics (frequency-domain), enabling discrimination of activities with similar amplitude profiles but different motion patterns.
+
+\subsection{Machine Learning Model Training}
+
+\subsubsection{Supported Algorithms}
+The framework integrates three classical machine learning algorithms from scikit-learn, selected for their proven effectiveness in activity recognition and feasibility for embedded deployment:
+
+\paragraph{Random Forest (RF)}
+Ensemble method combining multiple decision trees with bagging and feature randomization. Configuration:
+\begin{itemize}
+    \item Default: 100 trees, max depth 20
+    \item Class balancing: \texttt{class\_weight='balanced'} automatically weights samples inversely proportional to class frequency
+    \item Criterion: Gini impurity
+\end{itemize}
+
+\paragraph{Support Vector Machine (SVM)}
+Discriminative classifier finding optimal hyperplanes via kernel methods. Configuration:
+\begin{itemize}
+    \item Kernel: Radial Basis Function (RBF) with automatic gamma scaling
+    \item Multi-class strategy: One-vs-One (OvO)
+    \item Class balancing: \texttt{class\_weight='balanced'}
+    \item Regularization: C=1.0 (default)
+\end{itemize}
+
+\paragraph{Neural Network (NN)}
+Multi-layer perceptron with backpropagation. Configuration:
+\begin{itemize}
+    \item Architecture: 138 input → 100 hidden → num\_classes output
+    \item Activation: ReLU (hidden), Softmax (output)
+    \item Optimizer: Adam with learning rate 0.001
+    \item Max iterations: 500 epochs
+\end{itemize}
+
+\subsubsection{Class Imbalance Handling}
+Motion datasets often exhibit severe class imbalance (e.g., more \textit{standing} samples than \textit{walking\_downstairs}). Imbalanced training biases models toward majority classes, degrading minority class recognition. The framework addresses this via:
+\begin{itemize}
+    \item \textbf{Class Weight Balancing}: For RF and SVM, the \texttt{class\_weight='balanced'} parameter assigns weights $w_c = \frac{n\_samples}{n\_classes \times n\_samples_c}$ where $n\_samples_c$ is the count of class $c$. This increases the loss contribution of minority class misclassifications during training.
+    \item \textbf{Stratified Splitting}: Train-test splits preserve class proportions using stratified sampling (80\% train, 20\% test).
+\end{itemize}
+Class balancing is crucial for real-world deployment where all activity classes must be reliably detected, not just the most frequent ones.
+
+\subsubsection{Hyperparameter Optimization}
+The framework supports automated hyperparameter tuning via scikit-learn's GridSearchCV with 5-fold cross-validation. Searchable hyperparameters:
+
+\textbf{Random Forest:}
+\begin{itemize}
+    \item \texttt{n\_estimators}: [50, 100, 200]
+    \item \texttt{max\_depth}: [10, 20, 30, None]
+    \item \texttt{min\_samples\_split}: [2, 5, 10]
+    \item \texttt{class\_weight}: ['balanced', 'balanced\_subsample']
+\end{itemize}
+
+\textbf{SVM:}
+\begin{itemize}
+    \item \texttt{C}: [0.1, 1, 10, 100]
+    \item \texttt{gamma}: ['scale', 'auto', 0.001, 0.01, 0.1]
+    \item \texttt{class\_weight}: ['balanced']
+\end{itemize}
+
+\textbf{Neural Network:}
+\begin{itemize}
+    \item \texttt{hidden\_layer\_sizes}: [(50,), (100,), (100, 50)]
+    \item \texttt{alpha}: [0.0001, 0.001, 0.01]
+    \item \texttt{learning\_rate\_init}: [0.001, 0.01]
+\end{itemize}
+
+Optimization identifies configurations maximizing cross-validation accuracy, typically improving baseline performance by 2-5\%.
+
+\subsection{Code Generation for Edge Deployment}
+
+\subsubsection{Architecture}
+The code generation subsystem translates trained scikit-learn models into standalone C++ implementations executable on microcontrollers without external dependencies. Architecture follows the Factory design pattern with inheritance:
+\begin{itemize}
+    \item \textbf{BaseCodeGenerator}: Abstract base class providing common functionality (header/source file structure, feature extraction code, optimization settings, input validation)
+    \item \textbf{Model-Specific Generators}: Subclasses implementing algorithm-specific prediction logic:
+    \begin{itemize}
+        \item \texttt{SVMGenerator}: RBF kernel computation, support vector storage, multi-class decision scoring
+        \item \texttt{NeuralNetworkGenerator}: Forward propagation through hidden/output layers, activation functions (ReLU, sigmoid)
+        \item \texttt{RandomForestGenerator}: Binary decision tree traversal, majority voting across trees
+        \item \texttt{ARMCortexGenerator}: Fixed-point arithmetic, ARM CMSIS-DSP optimizations (optional)
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Generated Code Structure}
+For each trained model, the generator produces three files:
+\begin{enumerate}
+    \item \textbf{Header File (.h)}: Contains model parameters (e.g., support vectors, tree structures, weight matrices), function declarations, feature count/class count macros
+    \item \textbf{Implementation File (.cpp)}: Implements feature extraction, prediction logic (algorithm-specific), and utility functions
+    \item \textbf{Arduino Sketch (.ino)}: Provides sensor initialization, sliding window buffer management, real-time inference loop, and serial output of predictions
+\end{enumerate}
+
+\subsubsection{Optimization Strategies}
+The framework supports four deployment optimization modes, selectable during code generation:
+
+\paragraph{Accuracy Mode}
+Prioritizes prediction correctness:
+\begin{itemize}
+    \item Full-precision floating-point arithmetic
+    \item No model simplification (all trees/support vectors retained)
+    \item Comprehensive feature set (138 features)
+\end{itemize}
+
+\paragraph{Speed Mode}
+Minimizes inference latency:
+\begin{itemize}
+    \item Reduced model complexity (fewer trees, reduced SVM support vectors via pruning)
+    \item Optimized feature computation order (cache-friendly access patterns)
+    \item Loop unrolling and inlined functions
+\end{itemize}
+
+\paragraph{Power Mode}
+Reduces energy consumption:
+\begin{itemize}
+    \item Fixed-point integer arithmetic where feasible
+    \item Reduced sampling frequency (configurable down to 50Hz)
+    \item Sleep modes between inference cycles (not implemented in current version)
+\end{itemize}
+
+\paragraph{Balanced Mode}
+Compromises between accuracy, speed, and power:
+\begin{itemize}
+    \item Moderate model complexity
+    \item Selective feature set (top 80-100 features by importance)
+    \item Mixed precision (critical computations in float, intermediate in fixed-point)
+\end{itemize}
+
+\subsubsection{Platform-Specific Adaptations}
+While the framework currently targets Arduino-compatible platforms (Seeed XIAO, ESP32, Arduino Nano 33 BLE), the modular architecture supports platform-specific adaptations:
+\begin{itemize}
+    \item \textbf{Memory Layout}: Adjusts array storage (PROGMEM for AVR, const for ARM) based on flash/RAM availability
+    \item \textbf{Hardware Acceleration}: ARM Cortex-M platforms can leverage CMSIS-DSP library for SIMD operations on feature computation
+    \item \textbf{Sensor Drivers}: Abstracts sensor initialization to support different IMU models (LSM6DS3, MPU6050, BNO055)
+\end{itemize}
 
 \subsection{Experimental Design}
-The experimental design involved [describe the design, e.g., randomized control trial, observational study, etc.]. Participants were [describe how participants were selected and any relevant criteria].
 
-\subsection{Data Collection}
-Data was collected using [describe the methods of data collection, e.g., surveys, interviews, experiments]. The instruments used for data collection included [list any tools or instruments].
+\subsubsection{Dataset}
+Validation experiments use a Human Activity Recognition (HAR) dataset collected from a single subject performing six activities:
+\begin{itemize}
+    \item \textit{Standing}, \textit{Still} (sitting), \textit{Walking}, \textit{Walking Upstairs}, \textit{Walking Downstairs}, \textit{Running}
+\end{itemize}
+Data was collected using the Seeed XIAO nRF52840 Sense platform at 100Hz over multiple recording sessions. Total dataset size: approximately 2770 samples (27.7 seconds) per activity, yielding $\sim$16,620 samples across all classes. Initial analysis revealed class imbalance with \textit{standing} comprising 35\% of samples and \textit{walking\_downstairs} only 9\%, an imbalance ratio of 3.8:1 necessitating class balancing techniques.
 
-\subsection{Data Analysis}
-The collected data was analyzed using [describe the statistical methods or software used for analysis]. The analysis aimed to [explain the purpose of the analysis, e.g., test hypotheses, identify trends].
+\subsubsection{Evaluation Metrics}
+Model performance is assessed using:
+\begin{itemize}
+    \item \textbf{Overall Accuracy}: Percentage of correctly classified windows
+    \item \textbf{Per-Class Precision}: $P_c = \frac{TP_c}{TP_c + FP_c}$
+    \item \textbf{Per-Class Recall}: $R_c = \frac{TP_c}{TP_c + FN_c}$
+    \item \textbf{F1-Score}: Harmonic mean of precision and recall
+    \item \textbf{Confusion Matrix}: Visualizes misclassification patterns
+\end{itemize}
+
+Edge deployment performance is measured via:
+\begin{itemize}
+    \item \textbf{Inference Time}: Average time to classify one window (ms)
+    \item \textbf{Memory Usage}: Flash (program storage) and RAM (runtime) consumption (KB)
+    \item \textbf{Power Consumption}: Average current draw during inference (mA)
+\end{itemize}
+
+\subsubsection{Baseline Comparisons}
+To contextualize framework performance, we compare against:
+\begin{enumerate}
+    \item \textbf{Edge Impulse}: Commercial platform with automated pipeline (free tier limitations apply)
+    \item \textbf{Manual TensorFlow Lite Deployment}: Represents expert-level custom implementation
+    \item \textbf{Unbalanced Training}: Same framework but without class weight balancing (ablation study)
+\end{enumerate}
+
+\subsection{Implementation Details}
+\textbf{Software Stack:}
+\begin{itemize}
+    \item Python 3.10 with Dash 2.14 (web interface)
+    \item scikit-learn 1.3 (machine learning)
+    \item NumPy, Pandas (data processing)
+    \item Plotly (visualization)
+\end{itemize}
+
+\textbf{Hardware:}
+\begin{itemize}
+    \item Development: Windows 11 workstation (Intel i7, 16GB RAM)
+    \item Deployment: Seeed XIAO nRF52840 Sense (ARM Cortex-M4F @ 64MHz, 256KB RAM, 1MB Flash)
+    \item Sensor: LSM6DS3 6-axis IMU (I2C, 100Hz sampling)
+\end{itemize}
+
+\textbf{Code Availability:}
+The framework source code, example datasets, and deployment examples are available in the project repository.

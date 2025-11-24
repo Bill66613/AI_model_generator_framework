@@ -691,7 +691,7 @@ layout = html.Div([
         # Action buttons
         html.Div([
             html.Button(
-                "� Engineer Features",
+                "⚙️ Engineer Features",
                 id='preprocess-for-training-btn',
                 n_clicks=0,
                 style={
