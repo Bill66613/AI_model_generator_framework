@@ -210,23 +210,15 @@ float relu(float x) {{
     def _generate_prediction_function(self) -> str:
         """Generate Neural Network prediction function."""
         return """// Internal neural network prediction function
+// NOTE: This function expects ALREADY SCALED features from har_predict()
 int har_predict_internal(float features[NUM_FEATURES]) {
-    // Scale features using training parameters with safety checks
-    float scaled_features[NUM_FEATURES];
-    for (int i = 0; i < NUM_FEATURES; i++) {
-        float std_val = feature_stds[i];
-        if (std_val == 0.0f || isnan(std_val)) {
-            std_val = 1.0f; // Prevent division by zero
-        }
-        scaled_features[i] = (features[i] - feature_means[i]) / std_val;
-    }
-
     // Forward pass through hidden layer
+    // Features are already scaled by har_predict() wrapper
     float hidden_outputs[HIDDEN_LAYER_SIZE];
     for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {
         float sum = hidden_biases[h];
         for (int i = 0; i < INPUT_SIZE; i++) {
-            sum += scaled_features[i] * input_weights[i][h];
+            sum += features[i] * input_weights[i][h];
         }
         hidden_outputs[h] = relu(sum);  // ReLU activation
     }

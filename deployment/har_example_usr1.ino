@@ -1,23 +1,10 @@
-/*
- * HAR Model Example Sketch
- * Demonstrates usage of the generated HAR model
- * Model Type: neural_network
- * Optimization: BALANCED
- * Balanced optimization - good trade-off between accuracy, speed, and power
- */
-
-#include "har_neural_network_seeed_xiao_f138_c4_balanced.h"
+#include "har_neural_network_seeed_xiao_f138_c5_balanced.h"
 
 #include <LSM6DS3.h>
-// #include <ArduinoBLE.h>
 #include <Wire.h>
 
-// IMU sensor pins (adjust for your hardware)
-#define IMU_SDA_PIN A4
-#define IMU_SCL_PIN A5
-
-// Create a instance of class LSM6DS3
-LSM6DS3 myIMU(I2C_MODE, 0x6A);  // I2C device address 0x6A
+//Create a instance of class LSM6DS3
+LSM6DS3 myIMU(I2C_MODE, 0x6A);  //I2C device address 0x6A
 
 /* Constant defines -------------------------------------------------------- */
 #define CONVERT_G_TO_MS2 9.80665f
@@ -29,7 +16,7 @@ float sensor_buffer[WINDOW_SIZE][6];  // aX, aY, aZ, gX, gY, gZ
 int buffer_index = 0;
 float features[NUM_FEATURES];
 unsigned long last_reading = 0;
-const unsigned long READING_INTERVAL = 13;  // ms between readings
+const unsigned long READING_INTERVAL = 10;  // ms between readings
 
 void setup() {
   Serial.begin(115200);
@@ -54,14 +41,38 @@ void setup() {
   // Initialize HAR model
   har_init();
 
-  // Initialize IMU (example - adapt for your sensor)
+  // Initialize I2C bus first
+  Wire.begin();
+  delay(100);  // Give I2C time to stabilize
+
+  // Initialize IMU sensor
   Serial.println("Initializing IMU sensor...");
-  // Your IMU initialization code here
-  if (!myIMU.begin()) {
-    Serial.println("Failed to initialize IMU!\r\n");
+
+  // LSM6DS3 begin() returns 0 on SUCCESS, non-zero on failure
+  if (myIMU.begin() != 0) {
+    Serial.println("❌ Failed to initialize IMU!");
+    Serial.println("Trying alternate I2C address 0x6B...");
+
+    // Try alternate address
+    LSM6DS3 myIMU_alt(I2C_MODE, 0x6B);
+    if (myIMU_alt.begin() != 0) {
+      Serial.println("❌ IMU not found at 0x6A or 0x6B");
+      Serial.println("Check I2C connections and power");
+      while (1) {
+        delay(100);  // Halt - cannot continue without IMU
+      }
+    } else {
+      Serial.println("✅ IMU found at address 0x6B!");
+      // Note: You'll need to update the global myIMU object address
+    }
   } else {
-    Serial.println("IMU initialized\r\n");
+    Serial.println("✅ IMU initialized successfully at 0x6A!");
   }
+
+  // Print IMU settings
+  Serial.print("Accelerometer range: ±");
+  Serial.print(MAX_ACCEPTED_RANGE);
+  Serial.println("g");
 
   Serial.println("HAR Model Ready!");
   Serial.println("Collecting sensor data...");
@@ -70,68 +81,31 @@ void setup() {
 void loop() {
   unsigned long current_time = millis();
 
-  // Serial.print("Last time = ");
-  // Serial.println(last_reading);
-  // Serial.print("Current time = ");
-  // Serial.println(current_time);
-
   // Check if it's time for a new reading
   if (current_time - last_reading >= READING_INTERVAL) {
     last_reading = current_time;
 
-    // Read sensor data (example - replace with your IMU reading code)
-    float aX = myIMU.readFloatAccelX();
-    float aY = myIMU.readFloatAccelY();
-    float aZ = myIMU.readFloatAccelZ();
+    // Read sensor data from IMU
+    float aX = myIMU.readFloatAccelX() * CONVERT_G_TO_MS2;
+    float aY = myIMU.readFloatAccelY() * CONVERT_G_TO_MS2;
+    float aZ = myIMU.readFloatAccelZ() * CONVERT_G_TO_MS2;
     float gX = myIMU.readFloatGyroX();
     float gY = myIMU.readFloatGyroY();
     float gZ = myIMU.readFloatGyroZ();
 
-    // Serial.print("aX: ");
-    // Serial.println(aX);
-    // Serial.print("aY: ");
-    // Serial.println(aY);
-    // Serial.print("aZ: ");
-    // Serial.println(aZ);
-    // Serial.print("gX: ");
-    // Serial.println(gX);
-    // Serial.print("gY: ");
-    // Serial.println(gY);
-    // Serial.print("gZ: ");
-    // Serial.println(gZ);
-
-    // Store in buffer
-    sensor_buffer[buffer_index][0] = aX * CONVERT_G_TO_MS2;
-    sensor_buffer[buffer_index][1] = aY * CONVERT_G_TO_MS2;
-    sensor_buffer[buffer_index][2] = aZ * CONVERT_G_TO_MS2;
+    // Store in buffer (convert accelerometer from g to m/s²)
+    sensor_buffer[buffer_index][0] = aX;
+    sensor_buffer[buffer_index][1] = aY;
+    sensor_buffer[buffer_index][2] = aZ;
     sensor_buffer[buffer_index][3] = gX;
     sensor_buffer[buffer_index][4] = gY;
     sensor_buffer[buffer_index][5] = gZ;
-
-    Serial.println("Sensor Data:");
-    Serial.print("aX: ");
-    Serial.println(sensor_buffer[buffer_index][0]);
-    Serial.print("aY: ");
-    Serial.println(sensor_buffer[buffer_index][1]);
-    Serial.print("aZ: ");
-    Serial.println(sensor_buffer[buffer_index][2]);
-    Serial.print("gX: ");
-    Serial.println(sensor_buffer[buffer_index][3]);
-    Serial.print("gY: ");
-    Serial.println(sensor_buffer[buffer_index][4]);
-    Serial.print("gZ: ");
-    Serial.println(sensor_buffer[buffer_index][5]);
-
-    // Serial.print("Buffer Index: ");
-    // Serial.println(buffer_index);
 
     buffer_index++;
 
     // When buffer is full, extract features and predict
     if (buffer_index >= WINDOW_SIZE) {
       buffer_index = 0;
-
-      // Serial.println("Buffer full. Extracting features and predicting...");
 
       // Extract features
       extract_features(sensor_buffer, WINDOW_SIZE, features);
@@ -146,11 +120,7 @@ void loop() {
       Serial.print(" (Class ");
       Serial.print(predicted_class);
       Serial.println(")");
-    } else {
-      // Serial.println("Collecting still ...");
     }
-  } else {
-    // Serial.println("Dead");
   }
 
   delay(10);  // Optimization-specific delay

@@ -452,7 +452,8 @@ def create_feature_vector(df: pd.DataFrame, sensor_cols: List[str] = None,
 
 
 def prepare_training_data(window_files: List[str], labels: List[str],
-                          sensor_cols: List[str] = None, sampling_rate: float = 100) -> Tuple[pd.DataFrame, pd.Series]:
+                          sensor_cols: List[str] = None, sampling_rate: float = 100,
+                          include_frequency: bool = True) -> Tuple[pd.DataFrame, pd.Series]:
     """Prepare training data from window files."""
     if len(window_files) != len(labels):
         raise ValueError("Number of window files must match number of labels")
@@ -472,7 +473,8 @@ def prepare_training_data(window_files: List[str], labels: List[str],
         window_df = pd.read_csv(file_path)
 
         # Extract features
-        features = create_feature_vector(window_df, sensor_cols, sampling_rate)
+        features = create_feature_vector(
+            window_df, sensor_cols, sampling_rate, include_frequency)
 
         # Add to collections
         all_features.append(features)

@@ -137,26 +137,35 @@ void har_init() {{
     // No Serial output here to avoid dependency issues
 }}
 
-// Safe prediction wrapper with input validation
+// Safe prediction wrapper with input validation and feature scaling
 int har_predict(float features[NUM_FEATURES]) {{
     // Input validation
     if (features == NULL) {{
         return -1; // Error: null pointer
     }}
 
-    // Check for valid feature values
+    // Allocate array for scaled features
+    float scaled_features[NUM_FEATURES];
+
+    // Apply feature scaling: (x - mean) / std
     for (int i = 0; i < NUM_FEATURES; i++) {{
+        // Check for valid feature values
         if (isnan(features[i]) || isinf(features[i])) {{
             features[i] = 0.0f; // Replace invalid values with zero
         }}
 
-        // Clamp extreme values
-        if (features[i] < -1000.0f) features[i] = -1000.0f;
-        if (features[i] > 1000.0f) features[i] = 1000.0f;
+        // Apply StandardScaler transformation: (x - mean) / std
+        float std = feature_stds[i];
+        if (std < 0.0001f) std = 1.0f; // Prevent division by zero
+        scaled_features[i] = (features[i] - feature_means[i]) / std;
+        
+        // Clamp scaled features to reasonable range (after scaling)
+        if (scaled_features[i] < -10.0f) scaled_features[i] = -10.0f;
+        if (scaled_features[i] > 10.0f) scaled_features[i] = 10.0f;
     }}
 
-    // Call model-specific prediction function
-    int result = har_predict_internal(features);
+    // Call model-specific prediction function with SCALED features
+    int result = har_predict_internal(scaled_features);
 
     // Validate prediction result
     if (result < 0 || result >= NUM_CLASSES) {{
@@ -409,15 +418,32 @@ const float feature_stds[NUM_FEATURES] = {{
 }"""
 
         else:  # balanced
-            # Standard balanced feature extraction
+            # Standard balanced feature extraction - MUST MATCH TRAINING FEATURES EXACTLY
             return """void extract_features(float sensor_data[][6], int samples, float features[]) {
     // Balanced feature extraction for BALANCED optimization
-    // Good trade-off between accuracy and computational efficiency
+    // MUST match training feature extraction exactly (23 features per axis)
 
     int feature_idx = 0;
 
     // For each sensor axis (aX, aY, aZ, gX, gY, gZ)
     for (int axis = 0; axis < 6; axis++) {
+        // Collect data for sorting (for median and quartiles)
+        float sorted_data[WINDOW_SIZE];
+        for (int i = 0; i < samples; i++) {
+            sorted_data[i] = sensor_data[i][axis];
+        }
+        
+        // Simple bubble sort for median/quartile calculation
+        for (int i = 0; i < samples - 1; i++) {
+            for (int j = 0; j < samples - i - 1; j++) {
+                if (sorted_data[j] > sorted_data[j + 1]) {
+                    float temp = sorted_data[j];
+                    sorted_data[j] = sorted_data[j + 1];
+                    sorted_data[j + 1] = temp;
+                }
+            }
+        }
+        
         // Standard statistical calculations
         float sum = 0, sum_sq = 0;
         float min_val = sensor_data[0][axis];
@@ -434,37 +460,84 @@ const float feature_stds[NUM_FEATURES] = {{
         float mean = sum / samples;
         float variance = (sum_sq / samples) - (mean * mean);
         float std_dev = sqrt(variance > 0 ? variance : 0.001f);
+        
+        // Calculate median and quartiles from sorted data
+        int mid = samples / 2;
+        float median = (samples % 2 == 0) ? (sorted_data[mid-1] + sorted_data[mid]) / 2.0f : sorted_data[mid];
+        int q1_idx = samples / 4;
+        int q3_idx = (3 * samples) / 4;
+        float q25 = sorted_data[q1_idx];
+        float q75 = sorted_data[q3_idx];
+        float iqr = q75 - q25;
 
-        // Balanced set of features (10 per axis)
-        features[feature_idx++] = mean;
-        features[feature_idx++] = std_dev;
-        features[feature_idx++] = min_val;
-        features[feature_idx++] = max_val;
-        features[feature_idx++] = max_val - min_val;
-        features[feature_idx++] = sqrt(sum_sq / samples);
+        // Features matching training order: mean, std, min, max, range, median, q25, q75, iqr
+        features[feature_idx++] = mean;                      // 0: mean
+        features[feature_idx++] = std_dev;                   // 1: std
+        features[feature_idx++] = min_val;                   // 2: min
+        features[feature_idx++] = max_val;                   // 3: max
+        features[feature_idx++] = max_val - min_val;         // 4: range
+        features[feature_idx++] = median;                    // 5: median
+        features[feature_idx++] = q25;                       // 6: q25
+        features[feature_idx++] = q75;                       // 7: q75
+        features[feature_idx++] = iqr;                       // 8: iqr
 
-        // Simple skewness and kurtosis
-        float skewness = 0, kurtosis = 0;
+        // Skewness and kurtosis - simplified to match sklearn/pandas behavior
+        // Using sample formulas (n-1 denominator for std)
+        float sample_std = sqrt(variance * samples / (samples - 1 + 0.001f));
+        
+        float m3_sum = 0, m4_sum = 0;
         for (int i = 0; i < samples; i++) {
-            float norm_val = (sensor_data[i][axis] - mean) / (std_dev + 0.001f);
-            skewness += norm_val * norm_val * norm_val;
-            kurtosis += norm_val * norm_val * norm_val * norm_val;
+            float z = (sensor_data[i][axis] - mean) / (sample_std + 0.001f);
+            float z2 = z * z;
+            m3_sum += z * z2;
+            m4_sum += z2 * z2;
         }
-        features[feature_idx++] = skewness / samples;
-        features[feature_idx++] = (kurtosis / samples) - 3.0f;
+        
+        // Skewness with bias correction (pandas/scipy formula)
+        float g1 = m3_sum / samples;
+        float skewness = 0;
+        if (samples >= 3) {
+            skewness = sqrt((float)(samples * (samples - 1))) / (samples - 2) * g1;
+        }
+        
+        // Excess kurtosis with bias correction (pandas/scipy formula) 
+        float g2 = m4_sum / samples - 3.0f;
+        float kurtosis = -3.0f;
+        if (samples >= 4) {
+            float n = (float)samples;
+            kurtosis = (n - 1) / ((n - 2) * (n - 3)) * ((n + 1) * g2 + 6.0f);
+        }
+        
+        features[feature_idx++] = skewness;                  // 9: skewness
+        features[feature_idx++] = kurtosis;                  // 10: kurtosis
 
-        // Energy and zero-crossing
-        features[feature_idx++] = sum_sq;
+        // RMS and energy
+        features[feature_idx++] = sqrt(sum_sq / samples);    // 11: rms
+        features[feature_idx++] = sum_sq;                    // 12: energy
+
+        // Zero-crossings (signal crosses zero)
         int zero_crossings = 0;
         for (int i = 1; i < samples; i++) {
             if ((sensor_data[i-1][axis] > 0) != (sensor_data[i][axis] > 0)) {
                 zero_crossings++;
             }
         }
-        features[feature_idx++] = (float)zero_crossings;
+        features[feature_idx++] = (float)zero_crossings;     // 13: zero_crossings
+        
+        // Mean-crossing rate (signal crosses mean)
+        int mean_crossings = 0;
+        for (int i = 1; i < samples; i++) {
+            if ((sensor_data[i-1][axis] > mean) != (sensor_data[i][axis] > mean)) {
+                mean_crossings++;
+            }
+        }
+        features[feature_idx++] = (float)mean_crossings;     // 14: mean_crossing_rate
     }
 
-    // Fill remaining features
+    // Total features: 15 per axis * 6 axes = 90 time-domain features
+    // No frequency-domain features (model retrained without FFT features)
+
+    // Fill any remaining features (should be none if calculation is correct)
     while (feature_idx < NUM_FEATURES) {
         features[feature_idx++] = 0.0f;
     }
