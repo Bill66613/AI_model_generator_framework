@@ -1,20 +1,27 @@
 \subsection{Framework Architecture Overview}
 The proposed framework implements an end-to-end pipeline for generating AI models tailored to motion tracking on edge devices. The system architecture consists of five primary components: (1) data upload and management, (2) interactive preprocessing with visual segmentation, (3) feature extraction, (4) model training with hyperparameter optimization, and (5) platform-specific code generation. The framework is implemented using Python with a Dash web interface, scikit-learn for machine learning, and custom code generators for embedded C++ deployment. Figure \ref{fig:architecture} illustrates the overall workflow.
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/system_architecture.png}
+    \caption{Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}
+    \label{fig:architecture}
+\end{figure}
+
 \subsection{Data Collection and Hardware Platform}
 
 \subsubsection{Sensor Hardware}
-Data collection utilizes the Seeed XIAO nRF52840 Sense microcontroller \cite{web:XIAO}, featuring an ARM Cortex-M4F processor (64MHz, 256KB RAM, 1MB Flash) and an integrated LSM6DS3 6-axis IMU sensor communicating via I2C at address 0x6A. The LSM6DS3 provides 3-axis accelerometer data (configured at ±2g range) and 3-axis gyroscope data, sampled at 100Hz to ensure sufficient temporal resolution for capturing human motion dynamics while balancing memory constraints.
+Data collection utilizes the Seeed XIAO nRF52840 Sense microcontroller \cite{web:XIAO}, featuring an ARM Cortex-M4F processor (64MHz, 256KB RAM, 1MB Flash) and an integrated LSM6DS3 6-axis IMU sensor communicating via I2C at address 0x6A. The LSM6DS3 provides 3-axis accelerometer data (configured at $\pm$2g range) and 3-axis gyroscope data, sampled at 100Hz to ensure sufficient temporal resolution for capturing human motion dynamics while balancing memory constraints.
 
 \subsubsection{Data Acquisition Protocol}
 The data collection firmware implements the following procedure:
 \begin{enumerate}
     \item Initialize I2C communication and verify IMU connection
-    \item Configure accelerometer (±2g range) and gyroscope sensors
+    \item Configure accelerometer ($\pm$2g range) and gyroscope sensors
     \item Acquire raw sensor readings at 100Hz (10ms intervals)
     \item Convert accelerometer values to m/s² using conversion factor 9.80665
     \item Maintain gyroscope readings in degrees/second (deg/s)
-    \item Output CSV format: Time\_seconds, AccX, AccY, AccZ, GyrX, GyrY, GyrZ
+    \item Output CSV format: aX, aY, aZ, gX, gY, gZ, Time\_seconds
 \end{enumerate}
 
 The standardized 100Hz sampling rate ensures consistency between training data collection and real-time inference deployment, eliminating frequency mismatch issues that could degrade model performance.
@@ -27,7 +34,7 @@ Users upload multi-class CSV datasets containing timestamped IMU measurements. T
 \subsubsection{Signal Cleaning and Smoothing}
 The preprocessing module offers configurable cleaning operations:
 \begin{itemize}
-    \item \textbf{Outlier Removal}: Identifies and removes samples exceeding specified standard deviation thresholds (default: 3σ), addressing sensor anomalies and electromagnetic interference artifacts.
+    \item \textbf{Outlier Removal}: Identifies and removes samples exceeding specified standard deviation thresholds (default: $3\sigma$), addressing sensor anomalies and electromagnetic interference artifacts.
     \item \textbf{Smoothing}: Applies moving average filters with user-defined window sizes (default: 5 samples) to reduce high-frequency noise while preserving motion characteristics.
 \end{itemize}
 Cleaned data is visualized alongside original signals, allowing users to verify preprocessing effectiveness before segmentation.
@@ -45,35 +52,27 @@ This approach significantly reduces annotation time compared to manual timestamp
 \subsection{Feature Extraction}
 
 \subsubsection{Sliding Window Approach}
-Preprocessed signals are segmented into fixed-size overlapping windows for feature extraction. Default configuration:
+Preprocessed signals are segmented into fixed-size overlapping windows for feature extraction. After empirical validation and comparison with literature recommendations \cite{banos2014wisdm}, the configuration was optimized as:
 \begin{itemize}
-    \item \textbf{Window Size}: 75 samples (0.75 seconds at 100Hz)
-    \item \textbf{Overlap}: 50\% (37-sample stride)
+    \item \textbf{Window Size}: 150 samples (1.5 seconds at 100Hz)
+    \item \textbf{Overlap}: 50\% (75-sample stride)
 \end{itemize}
-This balances temporal context (capturing full motion cycles) with responsiveness (enabling sub-second inference updates).
+The 1.5-second window provides sufficient temporal context to capture complete motion cycles for most activities (walking step duration $\approx$ 1.0-1.2 seconds \cite{whittle2014gait}), while 50\% overlap ensures temporal continuity and reduces edge effects at window boundaries. This yields predictions every 0.75 seconds, balancing responsiveness with computational efficiency.
 
 \subsubsection{Feature Set}
-For each window and each sensor axis (6 axes total), the framework computes 23 statistical features spanning time and frequency domains:
+For each window and each sensor axis (6 axes total), the framework extracts 15 time-domain statistical features. Frequency-domain features were intentionally excluded after identifying training-deployment parity issues: FFT implementations differ substantially between Python (NumPy) and embedded C++ (approximations or ARM CMSIS-DSP), leading to feature value discrepancies that degrade deployed model accuracy.
 
-\textbf{Time-Domain Features:}
+\textbf{Time-Domain Features (15 per axis):}
 \begin{itemize}
-    \item Mean, Standard Deviation, Minimum, Maximum, Range
-    \item Root Mean Square (RMS): $\text{RMS} = \sqrt{\frac{1}{N}\sum_{i=1}^{N} x_i^2}$
-    \item Median Absolute Deviation: $\text{MAD} = \text{median}(|x_i - \text{median}(x)|)$
-    \item Skewness: $\gamma = \frac{E[(X-\mu)^3]}{\sigma^3}$
-    \item Kurtosis: $\kappa = \frac{E[(X-\mu)^4]}{\sigma^4} - 3$
-    \item Zero-Crossing Rate: count of signal sign changes
-    \item Energy: $E = \sum_{i=1}^{N} x_i^2$
+    \item \textbf{Central Tendency}: Mean, Median
+    \item \textbf{Dispersion}: Standard Deviation, Variance, Range (Max - Min), Interquartile Range (IQR)
+    \item \textbf{Extrema}: Minimum, Maximum, 25th Percentile (Q1), 75th Percentile (Q3)
+    \item \textbf{Shape}: Skewness $\gamma = \frac{E[(X-\mu)^3]}{\sigma^3}$, Kurtosis $\kappa = \frac{E[(X-\mu)^4]}{\sigma^4} - 3$ (bias-corrected)
+    \item \textbf{Energy}: Root Mean Square (RMS) $= \sqrt{\frac{1}{N}\sum_{i=1}^{N} x_i^2}$, Signal Energy $E = \sum_{i=1}^{N} x_i^2$
+    \item \textbf{Frequency Proxy}: Zero-Crossing Rate, Mean-Crossing Rate (signal crossings over mean)
 \end{itemize}
 
-\textbf{Frequency-Domain Features:}
-\begin{itemize}
-    \item Dominant Frequency: frequency bin with maximum FFT magnitude
-    \item Spectral Energy: sum of squared FFT coefficients
-    \item Spectral Entropy: Shannon entropy of normalized power spectrum
-\end{itemize}
-
-Total feature vector dimensionality: $23 \times 6 = 138$ features per window. This comprehensive representation captures both motion amplitude/dynamics (time-domain) and periodicity/frequency characteristics (frequency-domain), enabling discrimination of activities with similar amplitude profiles but different motion patterns.
+Total feature vector dimensionality: $15 \times 6 = 90$ features per window. This time-domain-only approach ensures perfect parity between training (Python pandas/NumPy) and deployment (C++ direct computation), critical for achieving consistent model performance on edge devices. The comprehensive statistical representation captures motion amplitude, dynamics, distribution characteristics, and pseudo-frequency information sufficient for discriminating activities with distinct biomechanical signatures.
 
 \subsection{Machine Learning Model Training}
 
@@ -100,11 +99,14 @@ Discriminative classifier finding optimal hyperplanes via kernel methods. Config
 \paragraph{Neural Network (NN)}
 Multi-layer perceptron with backpropagation. Configuration:
 \begin{itemize}
-    \item Architecture: 138 input → 100 hidden → num\_classes output
-    \item Activation: ReLU (hidden), Softmax (output)
-    \item Optimizer: Adam with learning rate 0.001
-    \item Max iterations: 500 epochs
+    \item Architecture: 90 input $\rightarrow$ 100 hidden $\rightarrow$ 50 hidden $\rightarrow$ num\_classes output
+    \item Activation: ReLU (hidden layers), Softmax (output layer)
+    \item Optimizer: Adam with learning rate 0.001, $\beta_1=0.9$, $\beta_2=0.999$
+    \item Regularization: L2 penalty $\alpha=0.0001$
+    \item Training: Early stopping with patience=10, max 500 epochs
+    \item Batch size: Full batch (entire training set)
 \end{itemize}
+The two-hidden-layer architecture provides sufficient capacity for learning non-linear activity patterns while remaining small enough for efficient C++ deployment (fixed-weight matrices, no dynamic memory allocation).
 
 \subsubsection{Class Imbalance Handling}
 Motion datasets often exhibit severe class imbalance (e.g., more \textit{standing} samples than \textit{walking\_downstairs}). Imbalanced training biases models toward majority classes, degrading minority class recognition. The framework addresses this via:
@@ -172,7 +174,7 @@ Prioritizes prediction correctness:
 \begin{itemize}
     \item Full-precision floating-point arithmetic
     \item No model simplification (all trees/support vectors retained)
-    \item Comprehensive feature set (138 features)
+    \item Complete feature set (90 time-domain features)
 \end{itemize}
 
 \paragraph{Speed Mode}
@@ -195,7 +197,7 @@ Reduces energy consumption:
 Compromises between accuracy, speed, and power:
 \begin{itemize}
     \item Moderate model complexity
-    \item Selective feature set (top 80-100 features by importance)
+    \item Selective feature set (top 60-75 features by importance)
     \item Mixed precision (critical computations in float, intermediate in fixed-point)
 \end{itemize}
 
@@ -210,11 +212,19 @@ While the framework currently targets Arduino-compatible platforms (Seeed XIAO, 
 \subsection{Experimental Design}
 
 \subsubsection{Dataset}
-Validation experiments use a Human Activity Recognition (HAR) dataset collected from a single subject performing six activities:
+Validation experiments use a Human Activity Recognition (HAR) dataset collected from a single subject performing five activities:
 \begin{itemize}
-    \item \textit{Standing}, \textit{Still} (sitting), \textit{Walking}, \textit{Walking Upstairs}, \textit{Walking Downstairs}, \textit{Running}
+    \item \textit{Still}, \textit{Walking}, \textit{Walking Upstairs}, \textit{Walking Downstairs}, \textit{Running}
 \end{itemize}
-Data was collected using the Seeed XIAO nRF52840 Sense platform at 100Hz over multiple recording sessions. Total dataset size: approximately 2770 samples (27.7 seconds) per activity, yielding $\sim$16,620 samples across all classes. Initial analysis revealed class imbalance with \textit{standing} comprising 35\% of samples and \textit{walking\_downstairs} only 9\%, an imbalance ratio of 3.8:1 necessitating class balancing techniques.
+Data was collected using the Seeed XIAO nRF52840 Sense platform at 100Hz over multiple recording sessions. Each activity was recorded for 30-60 seconds across multiple sessions, with careful attention to transitional periods. The draggable window interface was used to segment continuous recordings into labeled windows, extracting 51 representative windows per activity. After applying 50\% overlapping sliding windows during feature extraction, this yielded 5,390 total training samples with the following distribution:
+\begin{itemize}
+    \item Walking Downstairs: 1,050 samples (19.5\%)
+    \item Running: 1,100 samples (20.4\%)
+    \item Still: 1,000 samples (18.6\%)
+    \item Walking Upstairs: 1,020 samples (18.9\%)
+    \item Walking: 1,220 samples (22.6\%)
+\end{itemize}
+Class imbalance ratio: 1.22:1 (walking vs. still), representing a relatively balanced dataset suitable for demonstrating class weight effectiveness without extreme imbalance.
 
 \subsubsection{Evaluation Metrics}
 Model performance is assessed using:
@@ -228,10 +238,12 @@ Model performance is assessed using:
 
 Edge deployment performance is measured via:
 \begin{itemize}
-    \item \textbf{Inference Time}: Average time to classify one window (ms)
-    \item \textbf{Memory Usage}: Flash (program storage) and RAM (runtime) consumption (KB)
-    \item \textbf{Power Consumption}: Average current draw during inference (mA)
+    \item \textbf{Inference Time}: Average time to classify one 150-sample window (ms), measured using Arduino \texttt{micros()} timing over 100 consecutive predictions
+    \item \textbf{Memory Usage}: Flash (program storage) and SRAM (runtime variables/buffers) consumption (KB), extracted from compiler map files and Arduino IDE build output
+    \item \textbf{Power Consumption}: Average current draw during different operational phases (idle, sensor sampling, feature extraction, prediction) measured at VCC pin or estimated from phase-specific processor utilization (mA @ 3.3V)
+    \item \textbf{Prediction Frequency}: Sustainable inference rate accounting for sensor sampling overhead (predictions per second)
 \end{itemize}
+Target performance thresholds based on application requirements: inference $<$ 100ms per window (enabling real-time 10Hz updates), flash $<$ 500KB (leaving headroom for application code), SRAM $<$ 128KB (50\% of available 256KB), power $<$ 50mW average (supporting multi-hour battery operation).
 
 \subsubsection{Baseline Comparisons}
 To contextualize framework performance, we compare against:

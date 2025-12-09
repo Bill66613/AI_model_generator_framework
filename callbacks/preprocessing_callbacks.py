@@ -39,9 +39,9 @@ def display_dataset_and_status(dataset_name):
 
     with open(METADATA_FILE, 'r') as f:
         metadata = json.load(f)
-    
+
     dataset_info = metadata.get(dataset_name, {})
-    
+
     # Determine processing stages
     stages = {
         'raw': True,  # Always true if dataset exists
@@ -49,16 +49,17 @@ def display_dataset_and_status(dataset_name):
         'split': 'dragged_samples' in dataset_info and len(dataset_info.get('dragged_samples', [])) > 0,
         'training_ready': False  # Check for training data files
     }
-    
+
     # Check if training data exists
     training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
     train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
     test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
-    stages['training_ready'] = os.path.exists(train_file) and os.path.exists(test_file)
-    
+    stages['training_ready'] = os.path.exists(
+        train_file) and os.path.exists(test_file)
+
     # Create status display
     status_badges = []
-    
+
     # Raw Data Status
     status_badges.append(
         html.Span("📁 Raw Data", className="badge", style={
@@ -72,7 +73,7 @@ def display_dataset_and_status(dataset_name):
             'display': 'inline-block'
         })
     )
-    
+
     # Signal Preprocessed Status
     if stages['preprocessed']:
         status_badges.append(
@@ -100,13 +101,14 @@ def display_dataset_and_status(dataset_name):
                 'display': 'inline-block'
             })
         )
-    
+
     # Split Status
     if stages['split']:
         # Count only files that actually exist on disk
         dragged_samples = dataset_info.get('dragged_samples', [])
-        actual_split_count = sum(1 for file_path in dragged_samples if os.path.exists(file_path))
-        
+        actual_split_count = sum(
+            1 for file_path in dragged_samples if os.path.exists(file_path))
+
         status_badges.append(
             html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
                 'background-color': '#fd7e14',
@@ -132,7 +134,7 @@ def display_dataset_and_status(dataset_name):
                 'display': 'inline-block'
             })
         )
-    
+
     # Training Data Status
     if stages['training_ready']:
         status_badges.append(
@@ -160,7 +162,7 @@ def display_dataset_and_status(dataset_name):
                 'display': 'inline-block'
             })
         )
-    
+
     # Create comprehensive status display
     status_display = html.Div([
         html.H6("📊 Dataset Processing Status", style={
@@ -193,19 +195,22 @@ def display_dataset_and_status(dataset_name):
 
     if os.path.exists(file_path):
         df = pd.read_csv(file_path)
-        
+
         # Create time axis for proper labeling
         sampling_rate = dataset_info.get('sampling_rate', 100)
         df['Time_seconds'] = df.index / sampling_rate
-        
+
         # Get sensor columns for plotting
-        sensor_cols = [col for col in df.columns if col not in ['Time_seconds']]
-        
+        sensor_cols = [
+            col for col in df.columns if col not in ['Time_seconds']]
+
         # Create figure with proper time axis
         fig = go.Figure()
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-        
-        for i, col in enumerate(sensor_cols[:6]):  # Limit to 6 sensors for clarity
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
+                  '#d62728', '#9467bd', '#8c564b']
+
+        # Limit to 6 sensors for clarity
+        for i, col in enumerate(sensor_cols[:6]):
             fig.add_trace(
                 go.Scatter(
                     x=df['Time_seconds'],
@@ -215,7 +220,7 @@ def display_dataset_and_status(dataset_name):
                     hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
                 )
             )
-        
+
         fig.update_layout(
             title=f"Preview of {dataset_name} ({'Signal Processed' if stages['preprocessed'] else 'Raw Data'})",
             xaxis_title="Time (seconds)",
@@ -224,7 +229,7 @@ def display_dataset_and_status(dataset_name):
             showlegend=True,
             hovermode='x unified'
         )
-        
+
         return fig, status_display
 
     return {}, status_display
@@ -262,14 +267,14 @@ def clean_and_smooth_data(n_clicks, dataset_name):
     # Create time axis for proper labeling
     sampling_rate = 100  # Default sampling rate
     df['Time_seconds'] = df.index / sampling_rate
-    
+
     # Get sensor columns for plotting
     sensor_cols = [col for col in df.columns if col not in ['Time_seconds']]
-    
+
     # Create figure with proper time axis
     fig = go.Figure()
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-    
+
     for i, col in enumerate(sensor_cols[:6]):  # Limit to 6 sensors for clarity
         fig.add_trace(
             go.Scatter(
@@ -280,7 +285,7 @@ def clean_and_smooth_data(n_clicks, dataset_name):
                 hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
             )
         )
-    
+
     fig.update_layout(
         title=f"Cleaned & Smoothed Data: {dataset_name}",
         xaxis_title="Time (seconds)",
@@ -433,9 +438,10 @@ def apply_time_window(n_clicks, dataset_name, time_window_span):
             type="rect",
             x0=window_start, y0=rect_y_min,
             x1=window_end, y1=rect_y_max,
-            fillcolor="rgba(255, 80, 80, 0.35)",  # Enhanced opacity for better visibility
+            # Enhanced opacity for better visibility
+            fillcolor="rgba(255, 80, 80, 0.35)",
             line=dict(
-                color="rgb(220, 20, 20)", 
+                color="rgb(220, 20, 20)",
                 width=4,  # Thicker border for better grabbing
                 dash="solid"
             ),
@@ -669,7 +675,7 @@ def manage_windows(add_clicks, remove_clicks, reset_clicks, current_windows, dat
                         'y_min': rect_y_min,
                         'y_max': rect_y_max
                     })
-        
+
         # Add a new window at the end or at a good position
         if current_windows:
             # Place new window after the last one
@@ -733,9 +739,10 @@ def update_figure_windows(figure, windows, window_duration, y_range):
             y0=window['y_min'],
             x1=window['end_time'],
             y1=window['y_max'],
-            fillcolor="rgba(255, 80, 80, 0.35)",  # Enhanced opacity for better visibility
+            # Enhanced opacity for better visibility
+            fillcolor="rgba(255, 80, 80, 0.35)",
             line=dict(
-                color="rgb(220, 20, 20)", 
+                color="rgb(220, 20, 20)",
                 width=4,  # Thicker border for better grabbing
                 dash="solid"
             ),
@@ -777,14 +784,14 @@ def update_window_positions(relayout_data, current_windows):
     """Update window positions when shapes are dragged by the user."""
     if not (relayout_data and current_windows):
         return no_update
-    
+
     # Check if shapes were edited/moved
-    shapes_edited = any(key.startswith('shapes[') and ('x0' in key or 'x1' in key) 
-                       for key in relayout_data.keys()) if relayout_data else False
-    
+    shapes_edited = any(key.startswith('shapes[') and ('x0' in key or 'x1' in key)
+                        for key in relayout_data.keys()) if relayout_data else False
+
     if shapes_edited:
         updated_windows = current_windows.copy()
-        
+
         # Update window positions based on relayout data
         for key, value in relayout_data.items():
             if key.startswith('shapes[') and ('x0' in key or 'x1' in key):
@@ -794,17 +801,17 @@ def update_window_positions(relayout_data, current_windows):
                 if match:
                     shape_idx = int(match.group(1))
                     coord_type = match.group(2)
-                    
+
                     # Ensure we have this window in our data
                     if shape_idx < len(updated_windows):
                         if coord_type == 'x0':
                             updated_windows[shape_idx]['start_time'] = value
                         elif coord_type == 'x1':
                             updated_windows[shape_idx]['end_time'] = value
-        
+
         print(f"Updated window positions: {updated_windows}")
         return updated_windows
-    
+
     return no_update
 
 
@@ -819,24 +826,25 @@ def constrain_window_movement(relayout_data, current_figure, current_windows):
     """Constrain window movement to horizontal only by resetting Y coordinates."""
     if not (relayout_data and current_figure and current_windows):
         return no_update
-    
+
     # Check if shapes were edited/moved
-    shapes_edited = any(key.startswith('shapes[') for key in relayout_data.keys()) if relayout_data else False
-    
+    shapes_edited = any(key.startswith(
+        'shapes[') for key in relayout_data.keys()) if relayout_data else False
+
     if shapes_edited:
         updated_figure = current_figure.copy()
         shapes = updated_figure.get('layout', {}).get('shapes', [])
-        
+
         # Reset Y coordinates for all shapes to maintain vertical constraint
         for i, shape in enumerate(shapes):
             if i < len(current_windows):
                 window = current_windows[i]
                 # Force Y coordinates to stay at original positions
-                shape['y0'] = window['y_min'] 
+                shape['y0'] = window['y_min']
                 shape['y1'] = window['y_max']
-        
+
         return updated_figure
-    
+
     return no_update
 
 
@@ -942,7 +950,8 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
             sample_file_path = os.path.join(
                 PERSISTENT_DIR, f"dragged_window_{window_id}_{dataset_name}")
             # Use 4 decimal places precision for sensor data readability
-            window_data[available_cols].to_csv(sample_file_path, index=False, float_format='%.4f')
+            window_data[available_cols].to_csv(
+                sample_file_path, index=False, float_format='%.4f')
             sample_files.append(sample_file_path)
 
             sample_info.append({
@@ -1066,7 +1075,8 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
     Output('split-dataset-selector', 'value'),
     Input('split-selected-windows-btn', 'n_clicks'),
     Input('dataset-selector_', 'value'),
-    Input('split-samples-graph', 'figure'),  # Add this to trigger update when split completes
+    # Add this to trigger update when split completes
+    Input('split-samples-graph', 'figure'),
     State('split-dataset-selector', 'value'),
     prevent_initial_call=False
 )
@@ -1401,8 +1411,10 @@ def clean_all_generated_data(n_clicks, dataset_name):
     Output('training-dataset-selector', 'options'),
     Output('training-dataset-info', 'children'),
     Input('dataset-selector_', 'value'),
-    Input('split-samples-graph', 'figure'),  # Add this to trigger update when split completes
-    Input('split-dataset-selector', 'options'),  # Add this to trigger when split options change
+    # Add this to trigger update when split completes
+    Input('split-samples-graph', 'figure'),
+    # Add this to trigger when split options change
+    Input('split-dataset-selector', 'options'),
     prevent_initial_call=False
 )
 def populate_training_dataset_selector(dataset_name, split_graph, split_options):
@@ -1474,19 +1486,19 @@ def populate_training_dataset_selector(dataset_name, split_graph, split_options)
 def manage_training_window_selection(select_all_clicks, clear_all_clicks, available_options):
     """Handle Select All and Clear All buttons for training window selection."""
     from dash import ctx
-    
+
     if not ctx.triggered or not available_options:
         return no_update
-    
+
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
+
     if button_id == 'select-all-training-windows-btn':
         # Select all available windows
         return [option['value'] for option in available_options]
     elif button_id == 'clear-all-training-windows-btn':
         # Clear all selections
         return []
-    
+
     return no_update
 
 
@@ -1873,30 +1885,30 @@ def clear_training_data(n_clicks, dataset_name):
     """Clear all preprocessed training data and associated files."""
     if not dataset_name:
         return {}, {}, {}, html.Div("⚠️ No dataset selected.", style={'color': '#FF9800'})
-    
+
     try:
         # Clear training data directory for this dataset
         training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
-        
+
         if os.path.exists(training_dir):
             # Remove files related to current dataset
             patterns = [
                 f"{dataset_name}_train.csv",
-                f"{dataset_name}_test.csv", 
+                f"{dataset_name}_test.csv",
                 f"{dataset_name}_metadata.json"
             ]
-            
+
             deleted_files = []
             for pattern in patterns:
                 file_path = os.path.join(training_dir, pattern)
                 if os.path.exists(file_path):
                     os.remove(file_path)
                     deleted_files.append(pattern)
-        
+
         # Clear session data
         empty_data = {}
         empty_figure = {}
-        
+
         # Success message
         success_content = html.Div([
             html.H5("🧹 Training Data Cleared Successfully", style={
@@ -1910,9 +1922,9 @@ def clear_training_data(n_clicks, dataset_name):
                     'margin': '5px 0', 'color': '#6c757d', 'font-style': 'italic'})
             ])
         ])
-        
+
         return empty_data, empty_data, empty_figure, success_content
-        
+
     except Exception as e:
         error_msg = f"❌ Error clearing training data: {str(e)}"
         return no_update, no_update, no_update, html.Div(error_msg, style={'color': '#dc3545'})
@@ -1931,24 +1943,26 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
     """Update dataset status when any processing operation completes."""
     if not dataset_name:
         return no_update
-    
+
     try:
         with open(METADATA_FILE, 'r') as f:
             metadata = json.load(f)
-        
+
         dataset_info = metadata.get(dataset_name, {})
-        
+
         # Clean up metadata by removing non-existent files
         if 'dragged_samples' in dataset_info:
-            existing_files = [f for f in dataset_info['dragged_samples'] if os.path.exists(f)]
+            existing_files = [
+                f for f in dataset_info['dragged_samples'] if os.path.exists(f)]
             if len(existing_files) != len(dataset_info['dragged_samples']):
                 # Update metadata to remove stale references
                 metadata[dataset_name]['dragged_samples'] = existing_files
                 with open(METADATA_FILE, 'w') as f:
                     json.dump(metadata, f, indent=2)
-                print(f"Cleaned metadata for {dataset_name}: removed {len(dataset_info['dragged_samples']) - len(existing_files)} stale references")
+                print(
+                    f"Cleaned metadata for {dataset_name}: removed {len(dataset_info['dragged_samples']) - len(existing_files)} stale references")
                 dataset_info['dragged_samples'] = existing_files
-        
+
         # Determine processing stages
         stages = {
             'raw': True,
@@ -1956,16 +1970,17 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
             'split': 'dragged_samples' in dataset_info and len(dataset_info.get('dragged_samples', [])) > 0,
             'training_ready': False
         }
-        
+
         # Check if training data exists
         training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
         train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
         test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
-        stages['training_ready'] = os.path.exists(train_file) and os.path.exists(test_file)
-        
+        stages['training_ready'] = os.path.exists(
+            train_file) and os.path.exists(test_file)
+
         # Create status display (same logic as in display_dataset_and_status)
         status_badges = []
-        
+
         # Raw Data Status
         status_badges.append(
             html.Span("📁 Raw Data", className="badge", style={
@@ -1979,7 +1994,7 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
                 'display': 'inline-block'
             })
         )
-        
+
         # Signal Preprocessed Status
         if stages['preprocessed']:
             status_badges.append(
@@ -2007,13 +2022,14 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
                     'display': 'inline-block'
                 })
             )
-        
+
         # Split Status
         if stages['split']:
             # Count only files that actually exist on disk
             dragged_samples = dataset_info.get('dragged_samples', [])
-            actual_split_count = sum(1 for file_path in dragged_samples if os.path.exists(file_path))
-            
+            actual_split_count = sum(
+                1 for file_path in dragged_samples if os.path.exists(file_path))
+
             status_badges.append(
                 html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
                     'background-color': '#fd7e14',
@@ -2039,7 +2055,7 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
                     'display': 'inline-block'
                 })
             )
-        
+
         # Training Data Status
         if stages['training_ready']:
             status_badges.append(
@@ -2067,7 +2083,7 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
                     'display': 'inline-block'
                 })
             )
-        
+
         # Create comprehensive status display
         status_display = html.Div([
             html.H6("📊 Dataset Processing Status", style={
@@ -2091,8 +2107,8 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
             'border-radius': '8px',
             'border': '1px solid #dee2e6'
         })
-        
+
         return status_display
-        
+
     except Exception as e:
         return html.Div(f"Error updating status: {str(e)}", style={'color': '#dc3545'})

@@ -666,7 +666,14 @@ void loop() {{
 
         // When buffer is full, extract features and predict
         if (buffer_index >= WINDOW_SIZE) {{
-            buffer_index = 0;
+            // Use 50% overlap for smoother predictions
+            // Shift buffer: move second half to first half
+            for (int i = 0; i < WINDOW_SIZE / 2; i++) {{
+                for (int axis = 0; axis < 6; axis++) {{
+                    sensor_buffer[i][axis] = sensor_buffer[i + WINDOW_SIZE / 2][axis];
+                }}
+            }}
+            buffer_index = WINDOW_SIZE / 2;  // Continue from halfway point
 
             // Extract features
             extract_features(sensor_buffer, WINDOW_SIZE, features);
@@ -731,9 +738,9 @@ void loop() {{
             self.buffer_optimization = True
         else:  # balanced
             # Balanced approach - use 100 Hz for consistency with training data
-            # Window size of 75 samples = 0.75 seconds at 100 Hz
+            # Window size of 150 samples = 1.5 seconds at 100 Hz
             self.sampling_rate = 100  # Standard sampling rate for HAR
-            self.window_size = 75     # 0.75 second windows
+            self.window_size = 150    # 1.5 second windows (increased from 75 for better accuracy)
             self.feature_precision = 3  # Balanced precision
             self.debug_enabled = False  # No debugging by default
             self.buffer_optimization = False

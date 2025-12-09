@@ -1,0 +1,123 @@
+\contentsline {section}{Abstract}{i}{section*.1}%
+\contentsline {section}{\numberline {1}Introduction}{1}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Background and Motivation}{1}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Theoretical Foundation}{2}{subsection.1.2}%
+\contentsline {subsubsection}{\numberline {1.2.1}Signal Processing Principles}{2}{subsubsection.1.2.1}%
+\contentsline {subsubsection}{\numberline {1.2.2}Feature Extraction Rationale}{2}{subsubsection.1.2.2}%
+\contentsline {subsubsection}{\numberline {1.2.3}Biomechanical Basis for Activity Recognition}{3}{subsubsection.1.2.3}%
+\contentsline {subsection}{\numberline {1.3}Problem Statement}{3}{subsection.1.3}%
+\contentsline {subsection}{\numberline {1.4}Comparison with Existing Platforms}{4}{subsection.1.4}%
+\contentsline {subsection}{\numberline {1.5}Rationale for Key Design Decisions}{6}{subsection.1.5}%
+\contentsline {subsubsection}{\numberline {1.5.1}Interactive Preprocessing Approach}{6}{subsubsection.1.5.1}%
+\contentsline {subsubsection}{\numberline {1.5.2}Machine Learning Algorithm Selection}{6}{subsubsection.1.5.2}%
+\contentsline {subsection}{\numberline {1.6}Research Objectives}{7}{subsection.1.6}%
+\contentsline {subsection}{\numberline {1.7}Research Contributions}{8}{subsection.1.7}%
+\contentsline {subsection}{\numberline {1.8}Scope and Limitations}{8}{subsection.1.8}%
+\contentsline {subsection}{\numberline {1.9}Thesis Organization}{9}{subsection.1.9}%
+\contentsline {section}{\numberline {2}Related Work}{10}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Overview}{10}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Application Domains of Motion Tracking}{10}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Sensor-Based Motion Tracking}{10}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Vision-Based Motion Tracking}{11}{subsection.2.4}%
+\contentsline {subsection}{\numberline {2.5}AI in Motion Tracking}{11}{subsection.2.5}%
+\contentsline {subsection}{\numberline {2.6}Model Generation Frameworks}{12}{subsection.2.6}%
+\contentsline {subsection}{\numberline {2.7}Data Preprocessing and Windowing}{13}{subsection.2.7}%
+\contentsline {subsection}{\numberline {2.8}Feature Extraction and Representation}{13}{subsection.2.8}%
+\contentsline {subsection}{\numberline {2.9}Edge Deployment and Optimization}{14}{subsection.2.9}%
+\contentsline {subsection}{\numberline {2.10}Gaps in Existing Work}{15}{subsection.2.10}%
+\contentsline {subsection}{\numberline {2.11}Summary}{15}{subsection.2.11}%
+\contentsline {section}{\numberline {3}Methodology}{17}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Framework Architecture Overview}{17}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Data Collection and Hardware Platform}{17}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}Sensor Hardware}{17}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}Data Acquisition Protocol}{18}{subsubsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.3}Interactive Preprocessing Pipeline}{18}{subsection.3.3}%
+\contentsline {subsubsection}{\numberline {3.3.1}Data Upload and Visualization}{18}{subsubsection.3.3.1}%
+\contentsline {subsubsection}{\numberline {3.3.2}Signal Cleaning and Smoothing}{18}{subsubsection.3.3.2}%
+\contentsline {subsubsection}{\numberline {3.3.3}Draggable Time Window Segmentation}{19}{subsubsection.3.3.3}%
+\contentsline {subsection}{\numberline {3.4}Feature Extraction}{19}{subsection.3.4}%
+\contentsline {subsubsection}{\numberline {3.4.1}Sliding Window Approach}{19}{subsubsection.3.4.1}%
+\contentsline {subsubsection}{\numberline {3.4.2}Feature Set}{19}{subsubsection.3.4.2}%
+\contentsline {subsection}{\numberline {3.5}Machine Learning Model Training}{20}{subsection.3.5}%
+\contentsline {subsubsection}{\numberline {3.5.1}Supported Algorithms}{20}{subsubsection.3.5.1}%
+\contentsline {paragraph}{Random Forest (RF)}{20}{section*.7}%
+\contentsline {paragraph}{Support Vector Machine (SVM)}{21}{section*.8}%
+\contentsline {paragraph}{Neural Network (NN)}{21}{section*.9}%
+\contentsline {subsubsection}{\numberline {3.5.2}Class Imbalance Handling}{21}{subsubsection.3.5.2}%
+\contentsline {subsubsection}{\numberline {3.5.3}Hyperparameter Optimization}{22}{subsubsection.3.5.3}%
+\contentsline {subsection}{\numberline {3.6}Code Generation for Edge Deployment}{22}{subsection.3.6}%
+\contentsline {subsubsection}{\numberline {3.6.1}Architecture}{22}{subsubsection.3.6.1}%
+\contentsline {subsubsection}{\numberline {3.6.2}Generated Code Structure}{23}{subsubsection.3.6.2}%
+\contentsline {subsubsection}{\numberline {3.6.3}Optimization Strategies}{23}{subsubsection.3.6.3}%
+\contentsline {paragraph}{Accuracy Mode}{23}{section*.10}%
+\contentsline {paragraph}{Speed Mode}{23}{section*.11}%
+\contentsline {paragraph}{Power Mode}{24}{section*.12}%
+\contentsline {paragraph}{Balanced Mode}{24}{section*.13}%
+\contentsline {subsubsection}{\numberline {3.6.4}Platform-Specific Adaptations}{24}{subsubsection.3.6.4}%
+\contentsline {subsection}{\numberline {3.7}Experimental Design}{24}{subsection.3.7}%
+\contentsline {subsubsection}{\numberline {3.7.1}Dataset}{24}{subsubsection.3.7.1}%
+\contentsline {subsubsection}{\numberline {3.7.2}Evaluation Metrics}{25}{subsubsection.3.7.2}%
+\contentsline {subsubsection}{\numberline {3.7.3}Baseline Comparisons}{26}{subsubsection.3.7.3}%
+\contentsline {subsection}{\numberline {3.8}Implementation Details}{26}{subsection.3.8}%
+\contentsline {section}{\numberline {4}Results}{27}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Overview}{27}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Model Training Performance}{27}{subsection.4.2}%
+\contentsline {subsubsection}{\numberline {4.2.1}Overall Accuracy}{27}{subsubsection.4.2.1}%
+\contentsline {subsubsection}{\numberline {4.2.2}Per-Class Performance}{27}{subsubsection.4.2.2}%
+\contentsline {subsubsection}{\numberline {4.2.3}Confusion Matrix Analysis}{28}{subsubsection.4.2.3}%
+\contentsline {subsection}{\numberline {4.3}Impact of Class Balancing}{30}{subsection.4.3}%
+\contentsline {subsubsection}{\numberline {4.3.1}Ablation Study}{30}{subsubsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.4}Edge Deployment Characteristics}{30}{subsection.4.4}%
+\contentsline {subsubsection}{\numberline {4.4.1}Inference Time and Latency}{30}{subsubsection.4.4.1}%
+\contentsline {subsubsection}{\numberline {4.4.2}Memory Footprint}{31}{subsubsection.4.4.2}%
+\contentsline {subsubsection}{\numberline {4.4.3}Power Consumption}{32}{subsubsection.4.4.3}%
+\contentsline {subsection}{\numberline {4.5}Comparative Analysis}{33}{subsection.4.5}%
+\contentsline {subsubsection}{\numberline {4.5.1}Comparison with Commercial Platforms}{33}{subsubsection.4.5.1}%
+\contentsline {subsubsection}{\numberline {4.5.2}Hyperparameter Optimization Impact}{33}{subsubsection.4.5.2}%
+\contentsline {subsection}{\numberline {4.6}Summary of Results}{34}{subsection.4.6}%
+\contentsline {section}{\numberline {5}Discussion}{35}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Interpretation of Key Findings}{35}{subsection.5.1}%
+\contentsline {subsubsection}{\numberline {5.1.1}Model Performance and Algorithm Selection}{35}{subsubsection.5.1.1}%
+\contentsline {subsubsection}{\numberline {5.1.2}Class Imbalance: A Critical but Overlooked Challenge}{35}{subsubsection.5.1.2}%
+\contentsline {subsubsection}{\numberline {5.1.3}Edge Deployment Feasibility}{36}{subsubsection.5.1.3}%
+\contentsline {subsubsection}{\numberline {5.1.4}Interactive Preprocessing: A Paradigm Shift}{36}{subsubsection.5.1.4}%
+\contentsline {subsection}{\numberline {5.2}Comparison with Related Work}{37}{subsection.5.2}%
+\contentsline {subsubsection}{\numberline {5.2.1}Commercial Platforms}{37}{subsubsection.5.2.1}%
+\contentsline {subsubsection}{\numberline {5.2.2}Academic HAR Systems}{37}{subsubsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.3}Limitations and Threats to Validity}{38}{subsection.5.3}%
+\contentsline {subsubsection}{\numberline {5.3.1}Dataset Limitations}{38}{subsubsection.5.3.1}%
+\contentsline {subsubsection}{\numberline {5.3.2}Window Size Selection}{38}{subsubsection.5.3.2}%
+\contentsline {subsubsection}{\numberline {5.3.3}Sensor Placement and Orientation}{38}{subsubsection.5.3.3}%
+\contentsline {subsubsection}{\numberline {5.3.4}Computational Platform Diversity}{39}{subsubsection.5.3.4}%
+\contentsline {subsubsection}{\numberline {5.3.5}External Validity}{39}{subsubsection.5.3.5}%
+\contentsline {subsection}{\numberline {5.4}Design Trade-offs and Alternatives}{39}{subsection.5.4}%
+\contentsline {subsubsection}{\numberline {5.4.1}Classical ML vs Deep Learning}{39}{subsubsection.5.4.1}%
+\contentsline {subsubsection}{\numberline {5.4.2}Handcrafted vs Learned Features}{39}{subsubsection.5.4.2}%
+\contentsline {subsubsection}{\numberline {5.4.3}Optimization Modes}{40}{subsubsection.5.4.3}%
+\contentsline {subsection}{\numberline {5.5}Implications for Practice}{40}{subsection.5.5}%
+\contentsline {subsubsection}{\numberline {5.5.1}Research and Education}{40}{subsubsection.5.5.1}%
+\contentsline {subsubsection}{\numberline {5.5.2}Healthcare Applications}{41}{subsubsection.5.5.2}%
+\contentsline {subsubsection}{\numberline {5.5.3}Sports and Fitness}{41}{subsubsection.5.5.3}%
+\contentsline {subsection}{\numberline {5.6}Future Research Directions}{41}{subsection.5.6}%
+\contentsline {subsubsection}{\numberline {5.6.1}Short-Term Extensions}{41}{subsubsection.5.6.1}%
+\contentsline {subsubsection}{\numberline {5.6.2}Long-Term Vision}{42}{subsubsection.5.6.2}%
+\contentsline {subsection}{\numberline {5.7}Summary}{42}{subsection.5.7}%
+\contentsline {section}{\numberline {6}Conclusion}{43}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Summary of Contributions}{43}{subsection.6.1}%
+\contentsline {subsubsection}{\numberline {6.1.1}Technical Contributions}{43}{subsubsection.6.1.1}%
+\contentsline {subsubsection}{\numberline {6.1.2}Empirical Validation}{44}{subsubsection.6.1.2}%
+\contentsline {subsubsection}{\numberline {6.1.3}Broader Impact}{44}{subsubsection.6.1.3}%
+\contentsline {subsection}{\numberline {6.2}Revisiting Research Objectives}{44}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Practical Applications}{45}{subsection.6.3}%
+\contentsline {paragraph}{Healthcare and Rehabilitation}{45}{section*.23}%
+\contentsline {paragraph}{Sports and Fitness}{45}{section*.24}%
+\contentsline {paragraph}{Research and Education}{45}{section*.25}%
+\contentsline {paragraph}{Smart Home and Ambient Assisted Living}{46}{section*.26}%
+\contentsline {subsection}{\numberline {6.4}Limitations and Future Work}{46}{subsection.6.4}%
+\contentsline {subsubsection}{\numberline {6.4.1}Dataset Diversity}{46}{subsubsection.6.4.1}%
+\contentsline {subsubsection}{\numberline {6.4.2}Algorithmic Extensions}{46}{subsubsection.6.4.2}%
+\contentsline {subsubsection}{\numberline {6.4.3}Platform Expansion}{46}{subsubsection.6.4.3}%
+\contentsline {subsubsection}{\numberline {6.4.4}Advanced Features}{47}{subsubsection.6.4.4}%
+\contentsline {subsubsection}{\numberline {6.4.5}Usability Enhancements}{47}{subsubsection.6.4.5}%
+\contentsline {subsection}{\numberline {6.5}Closing Remarks}{47}{subsection.6.5}%
+\contentsline {subsection}{\numberline {6.6}Final Thoughts}{48}{subsection.6.6}%

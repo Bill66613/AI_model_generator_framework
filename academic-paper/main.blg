@@ -5,46 +5,44 @@ Reallocating 'name_of_file' (item size: 1) to 6 items.
 The style file: plain.bst
 Reallocating 'name_of_file' (item size: 1) to 11 items.
 Database file #1: references.bib
-Warning--empty journal in warden2019tinyml
-You've used 14 entries,
+You've used 37 entries,
             2118 wiz_defined-function locations,
-            577 strings with 6600 characters,
-and the built_in function-call counts, 4309 in all, are:
-= -- 402
-> -- 267
+            712 strings with 10280 characters,
+and the built_in function-call counts, 12012 in all, are:
+= -- 1159
+> -- 653
 < -- 0
-+ -- 106
-- -- 92
-* -- 294
-:= -- 775
-add.period$ -- 46
-call.type$ -- 14
-change.case$ -- 87
++ -- 262
+- -- 222
+* -- 870
+:= -- 2084
+add.period$ -- 118
+call.type$ -- 37
+change.case$ -- 219
 chr.to.int$ -- 0
-cite$ -- 15
-duplicate$ -- 134
-empty$ -- 299
-format.name$ -- 92
-if$ -- 858
+cite$ -- 37
+duplicate$ -- 381
+empty$ -- 894
+format.name$ -- 222
+if$ -- 2422
 int.to.chr$ -- 0
-int.to.str$ -- 14
-missing$ -- 11
-newline$ -- 77
-num.names$ -- 28
-pop$ -- 100
+int.to.str$ -- 37
+missing$ -- 36
+newline$ -- 195
+num.names$ -- 74
+pop$ -- 229
 preamble$ -- 1
-purify$ -- 73
+purify$ -- 184
 quote$ -- 0
-skip$ -- 97
+skip$ -- 254
 stack$ -- 0
-substring$ -- 154
-swap$ -- 13
+substring$ -- 690
+swap$ -- 37
 text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 54
-warning$ -- 1
-while$ -- 35
-width$ -- 16
-write$ -- 154
-(There was 1 warning)
+type$ -- 136
+warning$ -- 0
+while$ -- 110
+width$ -- 39
+write$ -- 410

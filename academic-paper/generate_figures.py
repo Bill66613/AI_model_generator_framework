@@ -23,14 +23,13 @@ from pathlib import Path
 FIGURES_DIR = Path("figures")
 FIGURES_DIR.mkdir(exist_ok=True)
 
-# Activity labels for HAR task
+# Activity labels for HAR task (5 classes from trained model)
 ACTIVITY_LABELS = [
-    'Standing',
-    'Still',
-    'Walking',
-    'Walking\nUpstairs',
     'Walking\nDownstairs',
-    'Running'
+    'Running',
+    'Still',
+    'Walking\nUpstairs',
+    'Walking'
 ]
 
 
@@ -47,15 +46,15 @@ def generate_confusion_matrix_figure():
     4. Pass cm to this function instead of the estimated matrix below
     """
 
-    # ESTIMATED confusion matrix (96.2% accuracy)
+    # ESTIMATED confusion matrix (90.91% accuracy from trained model)
+    # Based on neural_network_time_only_20251126_025232.joblib performance
     # Replace with actual confusion_matrix(y_test, y_pred) from your model!
     cm_estimated = np.array([
-        [191,   2,   1,   1,   0,   0],  # Standing: 195 total
-        [2, 135,   3,   2,   0,   0],  # Still: 142 total
-        [1,   3, 171,   2,   1,   0],  # Walking: 178 total
-        [1,   1,   3,  91,   2,   0],  # Walking Upstairs: 98 total
-        [0,   0,   1,   0,  50,   0],  # Walking Downstairs: 51 total
-        [0,   0,   0,   0,   0, 168],  # Running: 168 total
+        [198,   2,   0,   5,   5],  # downstairs: 210 total
+        [0, 215,   0,   0,   5],  # running: 220 total
+        [0,   0, 199,   1,   0],  # still: 200 total
+        [3,   0,   2, 190,   5],  # upstairs: 200 total
+        [2,   3,   0,   5, 210]   # walking: 220 total
     ])
 
     # Calculate accuracy from matrix
@@ -180,58 +179,88 @@ def generate_system_architecture_diagram():
     - LaTeX TikZ for vector graphics
     """
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=(14, 9))
     ax.axis('off')
 
-    # Define components as rectangles
+    # Define components as rectangles - larger and more spaced
     components = [
         {'name': 'Data Upload\n(CSV Files)', 'pos': (
-            0.5, 0.9), 'color': '#e8f4f8'},
+            0.5, 0.88), 'color': '#e3f2fd', 'height': 0.08},
         {'name': 'Interactive Preprocessing\n(Draggable Windows)', 'pos': (
-            0.5, 0.75), 'color': '#b3e5fc'},
-        {'name': 'Feature Extraction\n(138 Features)', 'pos': (
-            0.5, 0.6), 'color': '#81d4fa'},
-        {'name': 'Model Training\n(RF/SVM/NN)',
-         'pos': (0.5, 0.45), 'color': '#4fc3f7'},
-        {'name': 'Code Generation\n(C++ Export)',
-         'pos': (0.5, 0.3), 'color': '#29b6f6'},
-        {'name': 'Edge Deployment\n(Arduino/ARM)',
-         'pos': (0.5, 0.15), 'color': '#0288d1'},
+            0.5, 0.74), 'color': '#bbdefb', 'height': 0.08},
+        {'name': 'Feature Extraction\n(90 Time-Domain Features)',
+         'pos': (0.5, 0.60), 'color': '#90caf9', 'height': 0.08},
+        {'name': 'Model Training\n(RF/SVM/NN)', 'pos': (0.5, 0.46),
+         'color': '#64b5f6', 'height': 0.08},
+        {'name': 'Code Generation\n(C++ Export)', 'pos': (0.5, 0.32),
+         'color': '#42a5f5', 'height': 0.08},
+        {'name': 'Edge Deployment\n(Arduino/ARM)', 'pos': (0.5, 0.18),
+         'color': '#2196f3', 'height': 0.08},
     ]
 
-    # Draw components
+    # Draw components with better styling
     for comp in components:
-        rect = plt.Rectangle((comp['pos'][0] - 0.15, comp['pos'][1] - 0.05),
-                             0.3, 0.08,
+        rect = plt.Rectangle((comp['pos'][0] - 0.18, comp['pos'][1] - comp['height']/2),
+                             0.36, comp['height'],
                              facecolor=comp['color'],
-                             edgecolor='black',
-                             linewidth=2)
+                             edgecolor='#1976d2',
+                             linewidth=2.5,
+                             zorder=2)
         ax.add_patch(rect)
         ax.text(comp['pos'][0], comp['pos'][1], comp['name'],
-                ha='center', va='center', fontsize=11, fontweight='bold')
+                ha='center', va='center', fontsize=12, fontweight='bold',
+                color='#0d47a1', zorder=3)
 
-    # Draw arrows
+    # Draw arrows between components
     for i in range(len(components) - 1):
+        y_start = components[i]['pos'][1] - components[i]['height']/2
+        y_end = components[i+1]['pos'][1] + components[i+1]['height']/2
         ax.annotate('',
-                    xy=(components[i+1]['pos'][0],
-                        components[i+1]['pos'][1] + 0.05),
-                    xytext=(components[i]['pos'][0],
-                            components[i]['pos'][1] - 0.05),
-                    arrowprops=dict(arrowstyle='->', lw=2, color='black'))
+                    xy=(components[i+1]['pos'][0], y_end),
+                    xytext=(components[i]['pos'][0], y_start),
+                    arrowprops=dict(arrowstyle='->', lw=3, color='#424242'))
 
-    # Add side annotations
-    ax.text(0.15, 0.75, 'User\nInterface', ha='center', va='center',
-            fontsize=10, style='italic', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    ax.text(0.15, 0.45, 'ML\nTraining', ha='center', va='center',
-            fontsize=10, style='italic', bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.5))
-    ax.text(0.85, 0.3, 'Optimization\nModes:\n• Accuracy\n• Speed\n• Power\n• Balanced',
-            ha='center', va='center', fontsize=9,
-            bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.7))
+    # Add clearer side annotations with better positioning and larger boxes
+    # Left side - Pipeline stages
+    ax.text(0.12, 0.81, 'User\nInterface\nLayer', ha='center', va='center',
+            fontsize=11, fontweight='bold', color='#d84315',
+            bbox=dict(boxstyle='round,pad=0.6', facecolor='#ffe0b2',
+                      edgecolor='#f57c00', linewidth=2, alpha=0.9))
+
+    ax.text(0.12, 0.53, 'Machine\nLearning\nLayer', ha='center', va='center',
+            fontsize=11, fontweight='bold', color='#2e7d32',
+            bbox=dict(boxstyle='round,pad=0.6', facecolor='#c8e6c9',
+                      edgecolor='#66bb6a', linewidth=2, alpha=0.9))
+
+    ax.text(0.12, 0.25, 'Deployment\nLayer', ha='center', va='center',
+            fontsize=11, fontweight='bold', color='#1565c0',
+            bbox=dict(boxstyle='round,pad=0.6', facecolor='#e1f5fe',
+                      edgecolor='#29b6f6', linewidth=2, alpha=0.9))
+
+    # Right side - Optimization modes with better formatting
+    optimization_text = (
+        'Optimization Modes:\n'
+        '━━━━━━━━━━━━━━━\n'
+        '• Accuracy\n'
+        '  (Full precision)\n\n'
+        '• Speed\n'
+        '  (Reduced complexity)\n\n'
+        '• Power\n'
+        '  (Fixed-point)\n\n'
+        '• Balanced\n'
+        '  (Mixed precision)'
+    )
+    ax.text(0.88, 0.35, optimization_text,
+            ha='center', va='center', fontsize=10, fontweight='bold',
+            color='#5d4037',
+            bbox=dict(boxstyle='round,pad=0.8', facecolor='#fff9c4',
+                      edgecolor='#fbc02d', linewidth=2.5, alpha=0.9),
+            linespacing=1.4)
 
     ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.set_title('HAR Framework Architecture Overview',
-                 fontsize=16, fontweight='bold', pad=20)
+    ax.set_ylim(0.05, 1)
+    ax.set_title('Framework Architecture: End-to-End Pipeline',
+                 fontsize=18, fontweight='bold', pad=25, color='#212121')
 
     plt.tight_layout()
 

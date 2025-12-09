@@ -33,8 +33,9 @@ def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
                 enhanced_data['weights'] = extract_neural_network_weights(
                     model_obj.model)
             elif model_obj.model_type == 'svm':
-                enhanced_data['support_vectors'] = extract_svm_parameters(
-                    model_obj.model)
+                # Extract and merge SVM parameters
+                svm_params = extract_svm_parameters(model_obj.model)
+                enhanced_data.update(svm_params)
 
             # Extract label encoding
             if hasattr(model_obj, 'label_encoder') and model_obj.label_encoder:
@@ -93,8 +94,31 @@ def extract_svm_parameters(svm_model) -> Dict[str, Any]:
             params['dual_coefficients'] = svm_model.dual_coef_.tolist()
         if hasattr(svm_model, 'intercept_'):
             params['intercept'] = svm_model.intercept_.tolist()
-        if hasattr(svm_model, 'gamma'):
-            params['gamma'] = svm_model.gamma
+
+        # Extract actual gamma value (not 'scale' or 'auto' string)
+        if hasattr(svm_model, '_gamma'):
+            # This is the actual computed gamma value used by the model
+            params['gamma'] = float(svm_model._gamma)
+        elif hasattr(svm_model, 'gamma'):
+            gamma_val = svm_model.gamma
+            # If gamma is a string ('scale' or 'auto'), we need the computed value
+            if isinstance(gamma_val, str):
+                # Fallback: use default scale formula if available
+                if hasattr(svm_model, 'support_vectors_'):
+                    n_features = svm_model.support_vectors_.shape[1]
+                    if gamma_val == 'scale':
+                        # gamma = 1 / (n_features * X.var())
+                        # Use reasonable default since we don't have X.var()
+                        params['gamma'] = 1.0 / n_features
+                    else:  # 'auto'
+                        # gamma = 1 / n_features
+                        params['gamma'] = 1.0 / n_features
+                else:
+                    params['gamma'] = 0.1  # Reasonable default
+            else:
+                params['gamma'] = float(gamma_val)
+        else:
+            params['gamma'] = 0.1  # Default fallback
     except Exception as e:
         print(f"Could not extract SVM parameters: {e}")
     return params
@@ -168,14 +192,17 @@ def create_output_folder_structure(base_output_dir: str, model_type: str,
     # For Arduino-based platforms, folder must match .ino filename
     if platform in ['arduino', 'seeed_xiao', 'esp32', 'teensy']:
         # Create the same base name as the .ino file (without _example.ino)
-        num_features = len(model_data.get('feature_names', [])) if model_data else 0
+        num_features = len(model_data.get(
+            'feature_names', [])) if model_data else 0
         num_classes = len(model_data.get('classes', [])) if model_data else 0
 
         folder_name = f"har_{model_type}_{platform}_f{num_features}_c{num_classes}_{optimization}"
-        folder_path = os.path.join(base_output_dir, f"{model_type}_models", folder_name)
+        folder_path = os.path.join(
+            base_output_dir, f"{model_type}_models", folder_name)
     else:
         # For non-Arduino platforms, use generic platform folder
-        folder_path = os.path.join(base_output_dir, f"{model_type}_models", platform)
+        folder_path = os.path.join(
+            base_output_dir, f"{model_type}_models", platform)
 
     # Create directories if they don't exist
     os.makedirs(folder_path, exist_ok=True)

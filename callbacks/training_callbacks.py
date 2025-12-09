@@ -171,8 +171,9 @@ def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type
                 html.P("Please preprocess your data and create time windows first.")
             ]), no_update)
 
-        # Prepare training data
-        X, y = prepare_training_data(window_files, labels)
+        # Prepare training data - use only time-domain features (90 features)
+        # Frequency features excluded for training-deployment parity
+        X, y = prepare_training_data(window_files, labels, include_frequency=False)
 
         if X.empty:
             return (html.Div([

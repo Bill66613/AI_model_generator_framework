@@ -1,52 +1,89 @@
-\documentclass[12pt,a4paper]{article}
+% Thesis-style document using article class
+\documentclass[12pt,a4paper,oneside]{article}
+
 \usepackage[utf8]{inputenc}
-\usepackage{amsmath}
-\usepackage{amsfonts}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amsfonts,amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{caption}
 \usepackage{multirow}
-\usepackage{cite}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage{indentfirst}
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
-\usepackage[margin=1in]{geometry}
+\usepackage[margin=1in,top=1.5in]{geometry}
 
-\title{\textbf{Building a Framework to Generate AI Models for Human Motion Tracking Applications}}
+% Professional spacing
+\onehalfspacing
+
+% Title page information
+\title{
+  \vspace{-1cm}
+  {\large Vietnam National University Ho Chi Minh City}\\
+  {\large Ho Chi Minh City University of Technology (HCMUT)}\\
+  {\large Faculty of Computer Science and Engineering}\\[2cm]
+  {\large Graduation Thesis}\\[1cm]
+  {\Large\textbf{Building a Framework to Generate AI Models\\for Human Motion Tracking Applications}}
+}
 \author{
-  Nguyen Truong Minh Hoang\\
-  \textit{Student ID: 2270757}\\
-  \textit{Ho Chi Minh City University of Technology (HCMUT)}\\
-  \textit{Vietnam National University - Ho Chi Minh City}\\[0.5cm]
-  Supervisor: Dr. Le Trong Nhan\\
-  Council H
+  \textbf{Student:} Nguyen Truong Minh Hoang\\
+  \textbf{Student ID:} 2270757\\[1cm]
+  \textbf{Supervisor:} Dr. Le Trong Nhan\\
+  \textbf{Council:} H
 }
 \date{\today}
 
 \begin{document}
 
 \maketitle
+\thispagestyle{empty}
+\newpage
 
-\begin{abstract}
+\pagenumbering{roman}
+\setcounter{page}{1}
+
+\section*{Abstract}
+\addcontentsline{toc}{section}{Abstract}
 \input{sections/abstract}
-\end{abstract}
 
+\newpage
+\tableofcontents
+\newpage
+\listoftables
+\newpage
+\listoffigures
+
+\newpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% Main content - using sections as chapters
 \section{Introduction}
 \input{sections/introduction}
 
+\newpage
 \section{Related Work}
 \input{sections/relatedwork}
 
+\newpage
 \section{Methodology}
 \input{sections/methodology}
 
+\newpage
 \section{Results}
 \input{sections/results}
 
+\newpage
 \section{Discussion}
 \input{sections/discussion}
 
+\newpage
 \section{Conclusion}
 \input{sections/conclusion}
 
+\newpage
 \bibliographystyle{plain}
 \bibliography{references}
 

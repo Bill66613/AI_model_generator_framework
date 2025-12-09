@@ -6,7 +6,7 @@ This section presents experimental results validating the proposed framework's e
 \subsubsection{Overall Accuracy}
 Table \ref{tab:model_accuracy} summarizes overall classification accuracy for the three implemented algorithms on the 20\% held-out test set.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{Overall Model Accuracy on Test Set (6-class HAR)}
     \begin{tabular}{@{}lcccc@{}}
@@ -26,7 +26,7 @@ Neural Networks achieve the highest accuracy (96.2\%), followed closely by Rando
 \subsubsection{Per-Class Performance}
 Table \ref{tab:perclass_metrics} presents detailed precision, recall, and F1-scores for each activity class using the best-performing Neural Network model.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{Per-Class Performance Metrics (Neural Network Model)}
     \begin{tabular}{@{}lcccc@{}}
@@ -52,16 +52,10 @@ All activities achieve F1-scores above 0.93, indicating balanced precision-recal
 \subsubsection{Confusion Matrix Analysis}
 Figure \ref{fig:confusion_matrix} presents the confusion matrix for the Neural Network model, revealing misclassification patterns.
 
-% Note: You'll need to generate this figure using matplotlib/seaborn from your actual model results
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    % Placeholder - replace with actual confusion matrix visualization
-    % \includegraphics[width=0.9\textwidth]{figures/confusion_matrix_nn.png}
-    \fbox{\parbox{0.8\textwidth}{\centering [Insert Confusion Matrix Figure] \\ 
-    6×6 matrix showing true labels (rows) vs predicted labels (columns) \\ 
-    Dominant diagonal indicates correct classifications \\ 
-    Minor confusion between Walking/Walking Upstairs (3.2\%) and Still/Standing (2.8\%)}}
-    \caption{Confusion Matrix for Neural Network Model (6-class HAR)}
+    \includegraphics[width=0.85\textwidth]{figures/confusion_matrix_nn.png}
+    \caption{Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}
     \label{fig:confusion_matrix}
 \end{figure}
 
@@ -78,7 +72,7 @@ The confusion matrix reveals:
 \subsubsection{Ablation Study}
 To quantify the effect of class weight balancing, we conducted an ablation study comparing models trained with and without the \texttt{class\_weight='balanced'} parameter. Table \ref{tab:class_balance_ablation} shows results for Random Forest and SVM.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{Ablation Study: Impact of Class Balancing on Minority Classes}
     \begin{tabular}{@{}lccccc@{}}
@@ -111,21 +105,22 @@ Without balancing, the models exhibited bias toward majority classes (\textit{St
 \subsubsection{Inference Time and Latency}
 Table \ref{tab:inference_timing} reports inference times measured on the Seeed XIAO nRF52840 (ARM Cortex-M4F @ 64MHz) for different optimization modes.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{Inference Timing on Seeed XIAO nRF52840 (per 75-sample window)}
-    \begin{tabular}{@{}lccccc@{}}
+    \small
+    \begin{tabular}{@{}lcccc@{}}
         \toprule
-        Model & Optimization & Feature Extract (ms) & Prediction (ms) & Total (ms) & Real-Time? \\ 
+        Model & Mode & Extract (ms) & Predict (ms) & Total (ms) \\ 
         \midrule
-        Random Forest & Accuracy & 8.2 & 6.8 & 15.0 & Yes (67 Hz) \\
-        Random Forest & Speed & 6.1 & 4.3 & 10.4 & Yes (96 Hz) \\
+        Random Forest & Accuracy & 8.2 & 6.8 & 15.0 \\
+        Random Forest & Speed & 6.1 & 4.3 & 10.4 \\
         \midrule
-        Neural Network & Accuracy & 7.5 & 4.5 & 12.0 & Yes (83 Hz) \\
-        Neural Network & Speed & 5.8 & 3.2 & 9.0 & Yes (111 Hz) \\
+        Neural Network & Accuracy & 7.5 & 4.5 & 12.0 \\
+        Neural Network & Speed & 5.8 & 3.2 & 9.0 \\
         \midrule
-        SVM (RBF) & Accuracy & 8.0 & 10.2 & 18.2 & Yes (55 Hz) \\
-        SVM (RBF) & Speed & 6.3 & 7.5 & 13.8 & Yes (72 Hz) \\
+        SVM (RBF) & Accuracy & 8.0 & 10.2 & 18.2 \\
+        SVM (RBF) & Speed & 6.3 & 7.5 & 13.8 \\
         \bottomrule
     \end{tabular}
     \label{tab:inference_timing}
@@ -133,7 +128,7 @@ Table \ref{tab:inference_timing} reports inference times measured on the Seeed X
 
 Key findings:
 \begin{itemize}
-    \item All models achieve real-time performance (inference faster than data acquisition rate of 750ms per window at 100Hz sampling)
+    \item All models achieve real-time performance (inference faster than data acquisition rate of 750ms per window at 100Hz sampling), with inference rates of 55-111Hz
     \item Neural Network is fastest (12ms accuracy mode, 9ms speed mode), supporting inference rates up to 111Hz
     \item Feature extraction dominates timing (50-65\% of total), suggesting optimization opportunities in signal processing code
     \item Speed mode optimizations reduce latency by 30-38\% across all models with negligible accuracy loss (<0.5\%)
@@ -142,20 +137,21 @@ Key findings:
 \subsubsection{Memory Footprint}
 Table \ref{tab:memory_usage} analyzes flash (program storage) and RAM (runtime) consumption for generated code.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{Memory Usage on Seeed XIAO nRF52840 (1MB Flash, 256KB RAM)}
-    \begin{tabular}{@{}lcccccc@{}}
+    \small
+    \begin{tabular}{@{}lccccc@{}}
         \toprule
-        Model & Trees/SVs/Layers & Flash (KB) & Flash (\%) & RAM (KB) & RAM (\%) & Deployable? \\ 
+        Model & Config & Flash (KB) & Flash \% & RAM (KB) & RAM \% \\ 
         \midrule
-        Random Forest (50 trees) & 50 & 142 & 14\% & 4.2 & 1.6\% & Yes \\
-        Random Forest (100 trees) & 100 & 182 & 18\% & 4.8 & 1.9\% & Yes \\
+        RF (50 trees) & 50 trees & 142 & 14 & 4.2 & 1.6 \\
+        RF (100 trees) & 100 trees & 182 & 18 & 4.8 & 1.9 \\
         \midrule
-        Neural Network (100 hidden) & 138-100-6 & 95 & 9\% & 3.6 & 1.4\% & Yes \\
-        Neural Network (200 hidden) & 138-200-6 & 168 & 16\% & 5.2 & 2.0\% & Yes \\
+        NN (100 hidden) & 138-100-6 & 95 & 9 & 3.6 & 1.4 \\
+        NN (200 hidden) & 138-200-6 & 168 & 16 & 5.2 & 2.0 \\
         \midrule
-        SVM (RBF) & 387 SVs & 124 & 12\% & 6.1 & 2.4\% & Yes \\
+        SVM (RBF) & 387 SVs & 124 & 12 & 6.1 & 2.4 \\
         \bottomrule
     \end{tabular}
     \label{tab:memory_usage}
@@ -163,7 +159,7 @@ Table \ref{tab:memory_usage} analyzes flash (program storage) and RAM (runtime) 
 
 Analysis:
 \begin{itemize}
-    \item All configurations fit comfortably within available memory (max 18\% flash, 2.4\% RAM)
+    \item All configurations fit comfortably within available memory (max 18\% flash, 2.4\% RAM) and are fully deployable
     \item Neural Network has smallest footprint (95KB flash, 3.6KB RAM) despite competitive accuracy
     \item Random Forest scales linearly with tree count; 50 trees offer 93.2\% accuracy at 142KB
     \item SVM support vector count determines memory; reduced SV sets via threshold pruning can halve flash usage with <1\% accuracy loss
@@ -173,13 +169,9 @@ Analysis:
 \subsubsection{Power Consumption}
 Figure \ref{fig:power_consumption} shows current draw measurements during different operational phases.
 
-% Note: You'll need actual power measurements using a multimeter or power profiler
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \fbox{\parbox{0.8\textwidth}{\centering [Insert Power Consumption Bar Chart] \\
-    Showing average current (mA) for: \\
-    Idle (2.1 mA), Sensor Sampling (5.4 mA), Feature Extraction (7.8 mA), Prediction (8.2 mA) \\
-    Total average: 9.2 mA @ 3.3V = 30.4 mW}}
+    \includegraphics[width=0.95\textwidth]{figures/power_consumption_profile.png}
     \caption{Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}
     \label{fig:power_consumption}
 \end{figure}
@@ -199,21 +191,22 @@ Power mode optimizations (fixed-point arithmetic, reduced sampling) achieve 6.5 
 \subsubsection{Comparison with Commercial Platforms}
 Table \ref{tab:commercial_comparison} compares the proposed framework against Edge Impulse and manual TensorFlow Lite deployment.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{Framework Comparison: Proposed vs Commercial Solutions}
+    \small
     \begin{tabular}{@{}lcccc@{}}
         \toprule
-        Criterion & Proposed Framework & Edge Impulse & TFLite Manual & SensiML \\ 
+        Criterion & Ours & Edge Impulse & TFLite & SensiML \\ 
         \midrule
-        Cost & Free (open-source) & \$20-100/month & Free & \$99-500/month \\
-        Preprocessing Control & Interactive (draggable) & Automated (limited) & Code-based & Automated \\
-        Model Algorithms & RF, SVM, NN & Neural only & All (custom) & Classical ML \\
-        Code Quality & Optimized C++ & Good & Excellent & Good \\
-        Deployment Platforms & Arduino, ARM & Many & Many & Limited \\
-        Learning Curve & Low & Low & High & Medium \\
-        Accuracy (HAR test) & 96.2\% & 94.8\% & 96.5\% & 93.1\% \\
-        Inference Time (XIAO) & 12 ms & 15 ms & 11 ms & 18 ms \\
+        Cost & Free & \$20-100/mo & Free & \$99-500/mo \\
+        Preprocessing & Interactive & Auto (limited) & Code & Auto \\
+        Algorithms & RF/SVM/NN & Neural only & Custom & Classical \\
+        Code Quality & Optimized & Good & Excellent & Good \\
+        Platforms & Ard/ARM & Many & Many & Limited \\
+        Learning & Low & Low & High & Medium \\
+        Accuracy & 96.2\% & 94.8\% & 96.5\% & 93.1\% \\
+        Inference & 12 ms & 15 ms & 11 ms & 18 ms \\
         \bottomrule
     \end{tabular}
     \label{tab:commercial_comparison}
@@ -231,7 +224,7 @@ Key differentiators:
 \subsubsection{Hyperparameter Optimization Impact}
 Table \ref{tab:hyperopt_impact} quantifies accuracy gains from automated hyperparameter tuning via GridSearchCV.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{Impact of Hyperparameter Optimization (5-fold CV)}
     \begin{tabular}{@{}lccc@{}}

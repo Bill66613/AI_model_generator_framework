@@ -155,7 +155,7 @@ layout = html.Div([
                     min=100,
                     max=10000,
                     step=100,
-                    value=1000,
+                    value=1500,
                     style={
                         'width': '100%',
                         'padding': '12px',
@@ -165,13 +165,13 @@ layout = html.Div([
                     }
                 ),
                 html.Div([
-                    html.P("💡 Recommended values:", style={
+                    html.P("💡 Recommended values (based on HAR research):", style={
                            'margin': '10px 0 5px 0', 'font-weight': 'bold', 'color': '#495057'}),
-                    html.P("• 500ms - Fast activities (running, jumping)",
+                    html.P("• 1000ms - Very fast transitions",
                            style={'margin': '2px 0', 'color': '#666', 'font-size': '14px'}),
-                    html.P("• 1000ms - Standard activities (walking, sitting)",
-                           style={'margin': '2px 0', 'color': '#666', 'font-size': '14px'}),
-                    html.P("• 2000ms - Slow activities (lying, standing)",
+                    html.P("• 1500ms - Optimal for most activities (walking, running, stairs) ✅",
+                           style={'margin': '2px 0', 'color': '#28a745', 'font-size': '14px', 'font-weight': 'bold'}),
+                    html.P("• 2000ms - Complex motion sequences",
                            style={'margin': '2px 0', 'color': '#666', 'font-size': '14px'})
                 ])
             ], style={'width': '60%', 'display': 'inline-block', 'vertical-align': 'top'}),
