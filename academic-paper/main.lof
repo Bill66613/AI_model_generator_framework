@@ -1,3 +1,5 @@
-\contentsline {figure}{\numberline {1}{\ignorespaces Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}}{17}{figure.caption.6}%
-\contentsline {figure}{\numberline {2}{\ignorespaces Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}}{29}{figure.caption.16}%
-\contentsline {figure}{\numberline {3}{\ignorespaces Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}}{32}{figure.caption.20}%
+\contentsline {figure}{\numberline {1}{\ignorespaces Complete User Workflow: From data upload through deployment (estimated 30-60 minutes total)}}{7}{figure.caption.6}%
+\contentsline {figure}{\numberline {2}{\ignorespaces Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}}{16}{figure.caption.7}%
+\contentsline {figure}{\numberline {3}{\ignorespaces Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}}{28}{figure.caption.17}%
+\contentsline {figure}{\numberline {4}{\ignorespaces Comparative analysis of accuracy, inference latency, and power consumption across four optimization modes}}{30}{figure.caption.20}%
+\contentsline {figure}{\numberline {5}{\ignorespaces Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}}{32}{figure.caption.22}%

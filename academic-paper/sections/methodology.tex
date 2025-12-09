@@ -148,12 +148,12 @@ Optimization identifies configurations maximizing cross-validation accuracy, typ
 \subsubsection{Architecture}
 The code generation subsystem translates trained scikit-learn models into standalone C++ implementations executable on microcontrollers without external dependencies. Architecture follows the Factory design pattern with inheritance:
 \begin{itemize}
-    \item \textbf{BaseCodeGenerator}: Abstract base class providing common functionality (header/source file structure, feature extraction code, optimization settings, input validation)
+    \item \textbf{BaseCodeGenerator}: Abstract class with common functionality\\(file structure, serialization, validation).
     \item \textbf{Model-Specific Generators}: Subclasses implementing algorithm-specific prediction logic:
     \begin{itemize}
         \item \texttt{SVMGenerator}: RBF kernel computation, support vector storage, multi-class decision scoring
         \item \texttt{NeuralNetworkGenerator}: Forward propagation through hidden/output layers, activation functions (ReLU, sigmoid)
-        \item \texttt{RandomForestGenerator}: Binary decision tree traversal, majority voting across trees
+\item \texttt{RandomForestGenerator}: Binary tree traversal, majority voting.
         \item \texttt{ARMCortexGenerator}: Fixed-point arithmetic, ARM CMSIS-DSP optimizations (optional)
     \end{itemize}
 \end{itemize}

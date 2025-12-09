@@ -134,6 +134,18 @@ Key findings:
     \item Speed mode optimizations reduce latency by 30-38\% across all models with negligible accuracy loss (<0.5\%)
 \end{itemize}
 
+\subsubsection{Optimization Mode Trade-offs}
+Figure~\ref{fig:optimization_comparison} visualizes the accuracy-latency-power trade-offs across optimization modes for all three algorithms.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/optimization_modes_comparison.png}
+    \caption{Comparative analysis of accuracy, inference latency, and power consumption across four optimization modes}
+    \label{fig:optimization_comparison}
+\end{figure}
+
+The visualization clearly demonstrates that Neural Networks achieve the best overall trade-off, maintaining 95.8\% accuracy in Speed mode with only 9ms latency and 22.8mW power consumption. Power mode sacrifices 2-3\% accuracy but reduces power consumption by 25-35\%, making it ideal for battery-constrained wearable applications. Balanced mode consistently positions between Accuracy and Speed modes, providing a practical default for users uncertain about their deployment constraints.
+
 \subsubsection{Memory Footprint}
 Table \ref{tab:memory_usage} analyzes flash (program storage) and RAM (runtime) consumption for generated code.
 
@@ -241,8 +253,10 @@ Table \ref{tab:hyperopt_impact} quantifies accuracy gains from automated hyperpa
 
 Automated tuning provides consistent 1.9-2.7\% accuracy improvements, demonstrating practical value for users without ML expertise. Best hyperparameters discovered:
 \begin{itemize}
-    \item \textbf{Random Forest}: 100 trees, max depth 20, min\_samples\_split=2, class\_weight='balanced'
-    \item \textbf{Neural Network}: (100,) hidden units, alpha=0.001, learning\_rate=0.001
+    \item \textbf{Random Forest}: 100 trees, max depth 20, min\_samples\_split=2,\\
+          class\_weight='balanced'
+    \item \textbf{Neural Network}: (100,) hidden units, alpha=0.001,\\
+          learning\_rate=0.001
     \item \textbf{SVM}: C=10, gamma=0.01, class\_weight='balanced'
 \end{itemize}
 

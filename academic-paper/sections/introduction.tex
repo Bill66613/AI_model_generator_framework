@@ -66,13 +66,13 @@ To contextualize our contribution, Table~\ref{tab:platform_comparison} compares 
 \midrule
 \textbf{Code Generation} & C++ (Arduino, ARM) & C (MCU-specific) & C++ (TFLite Micro) & C++ (multi-platform) \\
 \midrule
-\textbf{Optimization Modes} & Accuracy/latency trade-off & AutoML optimization & Manual quantization & 4 modes (accuracy, speed, power, balanced) \\
+\textbf{Optimization Modes} & Accuracy/latency & AutoML & Manual quant. & 4 modes (acc./speed/power/bal.) \\
 \midrule
-\textbf{Class Imbalance} & Manual oversampling & Automated balancing & No built-in support & Automatic (class\_weight) \\
+\textbf{Class Imbalance} & Manual oversample & Auto balancing & No built-in & Auto (class\_weight) \\
 \midrule
-\textbf{Customization} & Limited (closed platform) & Moderate (proprietary) & High (open source) & High (modular design) \\
+\textbf{Customization} & Limited & Moderate & High (OSS) & High (modular) \\
 \midrule
-\textbf{Educational Use} & Free tier (limited) & Academic license & Yes & Yes (no restrictions) \\
+\textbf{Educational Use} & Free tier & Academic lic. & Yes & Yes (no limits) \\
 \midrule
 \textbf{Deployment Platforms} & 20+ boards & Selected MCUs & TFLite-compatible & Arduino, ARM Cortex-M, extensible \\
 \midrule
@@ -105,7 +105,14 @@ By supporting all three algorithms within a unified framework, we enable practit
 
 \subsection{Research Objectives}
 
-The primary objective of this research is to design, implement, and evaluate a comprehensive framework that addresses the aforementioned challenges. Specifically, this research aims to:
+The primary objective of this research is to design, implement, and evaluate a comprehensive framework that addresses the aforementioned challenges. Figure~\ref{fig:workflow} illustrates the end-to-end workflow from raw data upload to edge deployment. Specifically, this research aims to:
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/workflow_diagram.png}
+    \caption{Complete User Workflow: From data upload through deployment (estimated 30-60 minutes total)}
+    \label{fig:workflow}
+\end{figure}
 
 \begin{enumerate}
 \item \textbf{Develop an Interactive Preprocessing System}: Create a novel GUI-based preprocessing interface featuring draggable time window selection, enabling efficient data annotation and segmentation without programming requirements.

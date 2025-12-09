@@ -23,23 +23,25 @@
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.3}Biomechanical Basis for Activity Recognition}{3}{subsubsection.1.2.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Problem Statement}{3}{subsection.1.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.4}Comparison with Existing Platforms}{4}{subsection.1.4}\protected@file@percent }
+\citation{web:Edge_Impulse}
+\citation{web:TensorFlowLite}
 \@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Comparison of Edge ML Platforms for Motion Tracking}}{5}{table.caption.5}\protected@file@percent }
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
 \newlabel{tab:platform_comparison}{{1}{5}{Comparison of Edge ML Platforms for Motion Tracking}{table.caption.5}{}}
-\citation{web:Edge_Impulse}
-\citation{web:TensorFlowLite}
 \citation{munzner2014visualization}
 \citation{sweller1988cognitive}
 \citation{amershi2014power}
 \citation{wang2023har_industrial}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.5}Rationale for Key Design Decisions}{6}{subsection.1.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.1}Interactive Preprocessing Approach}{6}{subsubsection.1.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.2}Machine Learning Algorithm Selection}{6}{subsubsection.1.5.2}\protected@file@percent }
 \citation{breiman2001random}
 \citation{cortes1995svm}
 \citation{schmidhuber2015deep}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.5}Rationale for Key Design Decisions}{6}{subsection.1.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.1}Interactive Preprocessing Approach}{6}{subsubsection.1.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.5.2}Machine Learning Algorithm Selection}{6}{subsubsection.1.5.2}\protected@file@percent }
 \citation{wolpert1997no}
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.6}Research Objectives}{7}{subsection.1.6}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Complete User Workflow: From data upload through deployment (estimated 30-60 minutes total)}}{7}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:workflow}{{1}{7}{Complete User Workflow: From data upload through deployment (estimated 30-60 minutes total)}{figure.caption.6}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.7}Research Contributions}{8}{subsection.1.7}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.8}Scope and Limitations}{8}{subsection.1.8}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.9}Thesis Organization}{9}{subsection.1.9}\protected@file@percent }
@@ -71,10 +73,8 @@
 \citation{web:SensiML}
 \citation{web:Google_Mediapipe}
 \citation{web:Google_TeachableMachine}
-\citation{web:TensorFlowLite}
-\citation{warden2019tinyml}
-\citation{merenda2020edge}
-\citation{lin2022mcunet}
+\citation{david2020tensorflow}
+\citation{cai2018proxylessnas}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.6}Model Generation Frameworks}{12}{subsection.2.6}\protected@file@percent }
 \citation{banos2014wisdm}
 \citation{wan2021deep_har_review}
@@ -100,77 +100,80 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.10}Gaps in Existing Work}{15}{subsection.2.10}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.11}Summary}{15}{subsection.2.11}\protected@file@percent }
 \citation{web:XIAO}
-\@writefile{toc}{\contentsline {section}{\numberline {3}Methodology}{17}{section.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Framework Architecture Overview}{17}{subsection.3.1}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}}{17}{figure.caption.6}\protected@file@percent }
-\newlabel{fig:architecture}{{1}{17}{Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}{figure.caption.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Data Collection and Hardware Platform}{17}{subsection.3.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Sensor Hardware}{17}{subsubsection.3.2.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Data Acquisition Protocol}{18}{subsubsection.3.2.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Interactive Preprocessing Pipeline}{18}{subsection.3.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}Data Upload and Visualization}{18}{subsubsection.3.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}Signal Cleaning and Smoothing}{18}{subsubsection.3.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methodology}{16}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Framework Architecture Overview}{16}{subsection.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}}{16}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:architecture}{{2}{16}{Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Data Collection and Hardware Platform}{16}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Sensor Hardware}{16}{subsubsection.3.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Data Acquisition Protocol}{17}{subsubsection.3.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Interactive Preprocessing Pipeline}{17}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}Data Upload and Visualization}{17}{subsubsection.3.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}Signal Cleaning and Smoothing}{17}{subsubsection.3.3.2}\protected@file@percent }
 \citation{banos2014wisdm}
 \citation{whittle2014gait}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.3}Draggable Time Window Segmentation}{19}{subsubsection.3.3.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Feature Extraction}{19}{subsection.3.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.1}Sliding Window Approach}{19}{subsubsection.3.4.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.2}Feature Set}{19}{subsubsection.3.4.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Machine Learning Model Training}{20}{subsection.3.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.1}Supported Algorithms}{20}{subsubsection.3.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Random Forest (RF)}{20}{section*.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Support Vector Machine (SVM)}{21}{section*.8}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Neural Network (NN)}{21}{section*.9}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.2}Class Imbalance Handling}{21}{subsubsection.3.5.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.3}Hyperparameter Optimization}{22}{subsubsection.3.5.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Code Generation for Edge Deployment}{22}{subsection.3.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.1}Architecture}{22}{subsubsection.3.6.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.2}Generated Code Structure}{23}{subsubsection.3.6.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.3}Optimization Strategies}{23}{subsubsection.3.6.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Accuracy Mode}{23}{section*.10}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Speed Mode}{23}{section*.11}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Power Mode}{24}{section*.12}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Balanced Mode}{24}{section*.13}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.4}Platform-Specific Adaptations}{24}{subsubsection.3.6.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Experimental Design}{24}{subsection.3.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.7.1}Dataset}{24}{subsubsection.3.7.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.7.2}Evaluation Metrics}{25}{subsubsection.3.7.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.7.3}Baseline Comparisons}{26}{subsubsection.3.7.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.8}Implementation Details}{26}{subsection.3.8}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4}Results}{27}{section.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Overview}{27}{subsection.4.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Model Training Performance}{27}{subsection.4.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}Overall Accuracy}{27}{subsubsection.4.2.1}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Overall Model Accuracy on Test Set (6-class HAR)}}{27}{table.caption.14}\protected@file@percent }
-\newlabel{tab:model_accuracy}{{2}{27}{Overall Model Accuracy on Test Set (6-class HAR)}{table.caption.14}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.2}Per-Class Performance}{27}{subsubsection.4.2.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Per-Class Performance Metrics (Neural Network Model)}}{28}{table.caption.15}\protected@file@percent }
-\newlabel{tab:perclass_metrics}{{3}{28}{Per-Class Performance Metrics (Neural Network Model)}{table.caption.15}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.3}Confusion Matrix Analysis}{28}{subsubsection.4.2.3}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}}{29}{figure.caption.16}\protected@file@percent }
-\newlabel{fig:confusion_matrix}{{2}{29}{Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}{figure.caption.16}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Impact of Class Balancing}{30}{subsection.4.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.1}Ablation Study}{30}{subsubsection.4.3.1}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Ablation Study: Impact of Class Balancing on Minority Classes}}{30}{table.caption.17}\protected@file@percent }
-\newlabel{tab:class_balance_ablation}{{4}{30}{Ablation Study: Impact of Class Balancing on Minority Classes}{table.caption.17}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Edge Deployment Characteristics}{30}{subsection.4.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.1}Inference Time and Latency}{30}{subsubsection.4.4.1}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Inference Timing on Seeed XIAO nRF52840 (per 75-sample window)}}{31}{table.caption.18}\protected@file@percent }
-\newlabel{tab:inference_timing}{{5}{31}{Inference Timing on Seeed XIAO nRF52840 (per 75-sample window)}{table.caption.18}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.2}Memory Footprint}{31}{subsubsection.4.4.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Memory Usage on Seeed XIAO nRF52840 (1MB Flash, 256KB RAM)}}{31}{table.caption.19}\protected@file@percent }
-\newlabel{tab:memory_usage}{{6}{31}{Memory Usage on Seeed XIAO nRF52840 (1MB Flash, 256KB RAM)}{table.caption.19}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.3}Power Consumption}{32}{subsubsection.4.4.3}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}}{32}{figure.caption.20}\protected@file@percent }
-\newlabel{fig:power_consumption}{{3}{32}{Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}{figure.caption.20}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Comparative Analysis}{33}{subsection.4.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.1}Comparison with Commercial Platforms}{33}{subsubsection.4.5.1}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Framework Comparison: Proposed vs Commercial Solutions}}{33}{table.caption.21}\protected@file@percent }
-\newlabel{tab:commercial_comparison}{{7}{33}{Framework Comparison: Proposed vs Commercial Solutions}{table.caption.21}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.3}Draggable Time Window Segmentation}{18}{subsubsection.3.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Feature Extraction}{18}{subsection.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.1}Sliding Window Approach}{18}{subsubsection.3.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.2}Feature Set}{18}{subsubsection.3.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Machine Learning Model Training}{19}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.1}Supported Algorithms}{19}{subsubsection.3.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Random Forest (RF)}{19}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Support Vector Machine (SVM)}{20}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Neural Network (NN)}{20}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.2}Class Imbalance Handling}{20}{subsubsection.3.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.3}Hyperparameter Optimization}{21}{subsubsection.3.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Code Generation for Edge Deployment}{21}{subsection.3.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.1}Architecture}{21}{subsubsection.3.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.2}Generated Code Structure}{22}{subsubsection.3.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.3}Optimization Strategies}{22}{subsubsection.3.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Accuracy Mode}{22}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Speed Mode}{22}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Power Mode}{23}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Balanced Mode}{23}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.6.4}Platform-Specific Adaptations}{23}{subsubsection.3.6.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Experimental Design}{23}{subsection.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.7.1}Dataset}{23}{subsubsection.3.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.7.2}Evaluation Metrics}{24}{subsubsection.3.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.7.3}Baseline Comparisons}{25}{subsubsection.3.7.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.8}Implementation Details}{25}{subsection.3.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Results}{26}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Overview}{26}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Model Training Performance}{26}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}Overall Accuracy}{26}{subsubsection.4.2.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Overall Model Accuracy on Test Set (6-class HAR)}}{26}{table.caption.15}\protected@file@percent }
+\newlabel{tab:model_accuracy}{{2}{26}{Overall Model Accuracy on Test Set (6-class HAR)}{table.caption.15}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.2}Per-Class Performance}{26}{subsubsection.4.2.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Per-Class Performance Metrics (Neural Network Model)}}{27}{table.caption.16}\protected@file@percent }
+\newlabel{tab:perclass_metrics}{{3}{27}{Per-Class Performance Metrics (Neural Network Model)}{table.caption.16}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.3}Confusion Matrix Analysis}{27}{subsubsection.4.2.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}}{28}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:confusion_matrix}{{3}{28}{Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}{figure.caption.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Impact of Class Balancing}{29}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.1}Ablation Study}{29}{subsubsection.4.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Ablation Study: Impact of Class Balancing on Minority Classes}}{29}{table.caption.18}\protected@file@percent }
+\newlabel{tab:class_balance_ablation}{{4}{29}{Ablation Study: Impact of Class Balancing on Minority Classes}{table.caption.18}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Edge Deployment Characteristics}{29}{subsection.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.1}Inference Time and Latency}{29}{subsubsection.4.4.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Inference Timing on Seeed XIAO nRF52840 (per 75-sample window)}}{30}{table.caption.19}\protected@file@percent }
+\newlabel{tab:inference_timing}{{5}{30}{Inference Timing on Seeed XIAO nRF52840 (per 75-sample window)}{table.caption.19}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.2}Optimization Mode Trade-offs}{30}{subsubsection.4.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Comparative analysis of accuracy, inference latency, and power consumption across four optimization modes}}{30}{figure.caption.20}\protected@file@percent }
+\newlabel{fig:optimization_comparison}{{4}{30}{Comparative analysis of accuracy, inference latency, and power consumption across four optimization modes}{figure.caption.20}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.3}Memory Footprint}{31}{subsubsection.4.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Memory Usage on Seeed XIAO nRF52840 (1MB Flash, 256KB RAM)}}{31}{table.caption.21}\protected@file@percent }
+\newlabel{tab:memory_usage}{{6}{31}{Memory Usage on Seeed XIAO nRF52840 (1MB Flash, 256KB RAM)}{table.caption.21}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.4}Power Consumption}{31}{subsubsection.4.4.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}}{32}{figure.caption.22}\protected@file@percent }
+\newlabel{fig:power_consumption}{{5}{32}{Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}{figure.caption.22}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Comparative Analysis}{32}{subsection.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.1}Comparison with Commercial Platforms}{32}{subsubsection.4.5.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Framework Comparison: Proposed vs Commercial Solutions}}{32}{table.caption.23}\protected@file@percent }
+\newlabel{tab:commercial_comparison}{{7}{32}{Framework Comparison: Proposed vs Commercial Solutions}{table.caption.23}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.2}Hyperparameter Optimization Impact}{33}{subsubsection.4.5.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Impact of Hyperparameter Optimization (5-fold CV)}}{34}{table.caption.22}\protected@file@percent }
-\newlabel{tab:hyperopt_impact}{{8}{34}{Impact of Hyperparameter Optimization (5-fold CV)}{table.caption.22}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Summary of Results}{34}{subsection.4.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Impact of Hyperparameter Optimization (5-fold CV)}}{33}{table.caption.24}\protected@file@percent }
+\newlabel{tab:hyperopt_impact}{{8}{33}{Impact of Hyperparameter Optimization (5-fold CV)}{table.caption.24}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Summary of Results}{33}{subsection.4.6}\protected@file@percent }
 \citation{anguita2013har}
 \citation{banos2014wisdm}
 \citation{cortes1995svm}
@@ -214,10 +217,10 @@
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {6.1.3}Broader Impact}{44}{subsubsection.6.1.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Revisiting Research Objectives}{44}{subsection.6.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Practical Applications}{45}{subsection.6.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Healthcare and Rehabilitation}{45}{section*.23}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Sports and Fitness}{45}{section*.24}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Research and Education}{45}{section*.25}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Smart Home and Ambient Assisted Living}{46}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Healthcare and Rehabilitation}{45}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Sports and Fitness}{45}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Research and Education}{45}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Smart Home and Ambient Assisted Living}{46}{section*.28}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Limitations and Future Work}{46}{subsection.6.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {6.4.1}Dataset Diversity}{46}{subsubsection.6.4.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {6.4.2}Algorithmic Extensions}{46}{subsubsection.6.4.2}\protected@file@percent }
