@@ -1,7 +1,7 @@
 \chapter{Introduction}
 \label{chap:introduction}
 
-\subsection{Background and Motivation}
+\section{Background and Motivation}
 
 Motion tracking is a dynamic and rapidly evolving field that involves the capture, processing, and analysis of movement, whether of objects, individuals, or environments. The technology plays a pivotal role in various domains including healthcare (physical rehabilitation, fall detection, patient monitoring), sports (performance tracking, injury prevention), gaming and virtual/augmented reality (immersive user experiences), and robotics (navigation systems, precise control mechanisms) \cite{article:human_motion_tracking_survey}.
 
@@ -11,25 +11,25 @@ Advances in sensor technology and artificial intelligence (AI) have been transfo
 
 The rise of edge computing has further complicated this landscape while simultaneously presenting new opportunities. Edge devices—resource-constrained microcontrollers with limited memory, processing power, and energy budgets—enable real-time, privacy-preserving, and energy-efficient motion tracking applications. However, deploying AI models on such devices requires specialized knowledge in model optimization, code generation, and platform-specific implementation details.
 
-\subsection{Theoretical Foundation}
+\section{Theoretical Foundation}
 
-\subsubsection{Signal Processing Principles}
+\\section{Signal Processing Principles}
 
 The effectiveness of IMU-based motion tracking is grounded in fundamental signal processing theory. Human motion exhibits characteristic frequency content that can be reliably captured and analyzed. Studies of human biomechanics show that most daily activities generate motion frequencies below 20 Hz, with walking typically occurring at 1-2 Hz (step frequency) and running at 2-3 Hz \cite{whittle2014gait}. The Nyquist-Shannon sampling theorem states that to accurately reconstruct a signal, the sampling frequency must be at least twice the highest frequency component \cite{oppenheim1999discrete}. Thus, a 100 Hz sampling rate provides sufficient bandwidth (50 Hz Nyquist frequency) to capture human motion with significant margin, preventing aliasing while remaining computationally tractable for embedded systems.
 
 Accelerometers measure linear acceleration in three orthogonal axes, capturing both gravitational acceleration (9.81 m/s²) and dynamic motion components. Gyroscopes measure angular velocity (rotation rate), providing complementary information about body orientation changes. The combination of 6-axis IMU data (3-axis accelerometer + 3-axis gyroscope) creates a rich representation of human movement that machine learning algorithms can exploit to distinguish activities \cite{filippeschi2017survey_imu}.
 
-\subsubsection{Feature Extraction Rationale}
+\\section{Feature Extraction Rationale}
 
 Raw sensor data, while information-rich, contains redundancy and noise that hinder classification performance. Feature extraction transforms high-dimensional time-series data into compact statistical representations that emphasize discriminative characteristics. Time-domain features (mean, variance, skewness, kurtosis) capture distribution properties, while frequency-domain features derived from Fourier transforms reveal periodic patterns \cite{oppenheim1999discrete}. This dimensionality reduction is essential for embedded deployment, as computing predictions on 90 carefully chosen features requires orders of magnitude less memory and computation than processing 450 raw samples (75 samples × 6 axes) directly.
 
 Information theory provides additional justification: feature extraction can be viewed as lossy compression that preserves task-relevant information while discarding noise \cite{cover2006elements}. By selecting features that maximize between-class variance and minimize within-class variance, we create representations that facilitate linear separability for classifiers.
 
-\subsubsection{Biomechanical Basis for Activity Recognition}
+\\section{Biomechanical Basis for Activity Recognition}
 
 Different human activities produce distinct biomechanical signatures. Walking exhibits periodic acceleration patterns with characteristic double-peak force curves during heel strike and toe-off phases \cite{whittle2014gait}. Running shows higher impact forces and longer flight phases. Stair climbing introduces asymmetric vertical acceleration patterns. These biomechanical differences manifest as measurable variations in IMU sensor data, providing the physical basis for machine learning classification. The success of HAR systems thus relies not on arbitrary pattern matching, but on learning physically grounded distinctions in how the human body moves during different activities.
 
-\subsection{Problem Statement}
+\section{Problem Statement}
 
 Despite advancements in motion tracking technologies, generating AI models for motion analysis remains a challenging task that presents several critical barriers:
 
@@ -48,7 +48,7 @@ Despite advancements in motion tracking technologies, generating AI models for m
 
 There is therefore an urgent need for a flexible, intuitive, and user-friendly framework that simplifies the creation of AI models suitable for motion tracking applications while providing complete control over the development pipeline.
 
-\subsection{Comparison with Existing Platforms}
+\section{Comparison with Existing Platforms}
 
 To contextualize our contribution, Table~\ref{tab:platform_comparison} compares our framework with leading commercial and open-source alternatives for edge ML deployment in motion tracking applications.
 
@@ -88,9 +88,9 @@ Key differentiators of our framework include: (1) \textbf{Novel interactive prep
 
 While commercial platforms offer advantages in ecosystem maturity (Edge Impulse's 20+ board support) and AutoML sophistication (SensiML's automated feature selection), they impose recurring costs (\$240-2,388/year), limit customization through proprietary APIs, and create vendor lock-in. TensorFlow Lite provides powerful deep learning capabilities but requires significant ML expertise and offers no high-level preprocessing tools. Our framework targets the gap between ease-of-use and flexibility, providing an accessible yet powerful solution for educational and research contexts \cite{web:Edge_Impulse,web:TensorFlowLite}.
 
-\subsection{Rationale for Key Design Decisions}
+\section{Rationale for Key Design Decisions}
 
-\subsubsection{Interactive Preprocessing Approach}
+\\section{Interactive Preprocessing Approach}
 
 The decision to implement GUI-based interactive preprocessing is grounded in established human-computer interaction principles. Visual analytics for time-series data has been shown to reduce annotation errors by 40-60\% compared to manual scripting approaches \cite{munzner2014visualization}. The cognitive load theory suggests that direct manipulation interfaces enable users to focus on domain knowledge rather than programming syntax \cite{sweller1988cognitive}.
 
@@ -98,7 +98,7 @@ Traditional preprocessing workflows require users to write code for each step (f
 
 Research on interactive machine learning demonstrates that tight feedback loops between data exploration and model training improve both model quality and user confidence \cite{amershi2014power}. Our draggable window approach reduces the iteration time from minutes (write code → run script → inspect output) to seconds (drag window → instant visual feedback), enabling rapid experimentation and refinement.
 
-\subsubsection{Machine Learning Algorithm Selection}
+\\section{Machine Learning Algorithm Selection}
 
 The selection of Random Forest, Support Vector Machines, and Neural Networks is motivated by their complementary strengths and established effectiveness in activity recognition tasks. A 2023 systematic review of 156 HAR studies found that these three algorithm families account for 78\% of deployed solutions, with Random Forest achieving optimal accuracy-to-inference-time trade-offs on resource-constrained devices \cite{wang2023har_industrial}.
 
@@ -106,7 +106,7 @@ Random Forest excels in interpretability and resistance to overfitting, critical
 
 By supporting all three algorithms within a unified framework, we enable practitioners to select based on their specific constraints: Random Forest for interpretability and speed, SVM for small datasets with high dimensionality, Neural Networks for maximum accuracy when sufficient training data is available. This multi-algorithm approach is consistent with the No Free Lunch theorem, which asserts that no single algorithm dominates across all problem domains \cite{wolpert1997no}. Our framework thus provides the flexibility to match algorithm characteristics to application requirements.
 
-\subsection{Research Objectives}
+\section{Research Objectives}
 
 The primary objective of this research is to design, implement, and evaluate a comprehensive framework that addresses the aforementioned challenges. Figure~\ref{fig:workflow} illustrates the end-to-end workflow from raw data upload to edge deployment. Specifically, this research aims to:
 
@@ -130,7 +130,7 @@ The primary objective of this research is to design, implement, and evaluate a c
 
 \end{enumerate}
 
-\subsection{Research Contributions}
+\section{Research Contributions}
 
 This research makes the following key contributions to the field of edge-based motion tracking:
 
@@ -147,7 +147,7 @@ This research makes the following key contributions to the field of edge-based m
 
 \end{itemize}
 
-\subsection{Scope and Limitations}
+\section{Scope and Limitations}
 
 This research focuses on IMU-based (accelerometer and gyroscope) motion tracking applications. The scope includes:
 
@@ -167,6 +167,6 @@ The research does not address:
 \item Specialized domains requiring medical certification
 \end{itemize}
 
-\subsection{Thesis Organization}
+\section{Thesis Organization}
 
 The remainder of this paper is organized as follows: Section 2 reviews related work in motion tracking systems, AI model generation frameworks, and edge deployment tools. Section 3 presents the detailed methodology including system architecture, preprocessing pipeline, model training approach, and code generation strategy. Section 4 reports experimental results including model performance metrics, deployment characteristics, and comparative analysis. Section 5 discusses findings, limitations, and implications. Section 6 concludes with a summary of contributions and directions for future work.

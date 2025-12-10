@@ -189,7 +189,8 @@
 
 \providecommand{\phantomsection}{}
 \newenvironment{preface}[1]{
-  \vspace*{\stretch{2}}
+  % \vspace*{\stretch{2}}
+  \vspace{3cm}
   \thispagestyle{plain}
   {\noindent \bfseries \Huge #1}%
   \phantomsection\addcontentsline{toc}{chapter}{#1}

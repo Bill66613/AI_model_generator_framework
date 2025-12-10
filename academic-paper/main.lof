@@ -1,5 +1,17 @@
-\contentsline {figure}{\numberline {1}{\ignorespaces Complete User Workflow: From data upload through deployment (estimated 30-60 minutes total)}}{7}{figure.caption.6}%
-\contentsline {figure}{\numberline {2}{\ignorespaces Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}}{16}{figure.caption.7}%
-\contentsline {figure}{\numberline {3}{\ignorespaces Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}}{28}{figure.caption.17}%
-\contentsline {figure}{\numberline {4}{\ignorespaces Comparative analysis of accuracy, inference latency, and power consumption across four optimization modes}}{30}{figure.caption.20}%
-\contentsline {figure}{\numberline {5}{\ignorespaces Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}}{32}{figure.caption.22}%
+\babel@toc {english}{}\relax 
+\addvspace {10pt}
+\contentsline {figure}{\numberline {1.6.1}{\ignorespaces Complete User Workflow: From data upload through deployment (estimated 30-60 minutes total)}}{7}{figure.caption.8}%
+\addvspace {10pt}
+\addvspace {10pt}
+\contentsline {figure}{\numberline {3.1.1}{\ignorespaces Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}}{18}{figure.caption.9}%
+\contentsline {figure}{\numberline {3.3.1}{\ignorespaces Web interface for CSV file upload and dataset management. The interface allows users to upload sensor data files, validates column names, automatically detects sampling frequency, and provides an interactive preview of the raw six-axis time series.}}{19}{figure.caption.10}%
+\contentsline {figure}{\numberline {3.3.2}{\ignorespaces Interactive draggable window interface for activity segmentation. Users visually inspect accelerometer and gyroscope time series, drag rectangular windows over regions corresponding to distinct activities, assign activity labels, and adjust boundaries via click-and-drag interaction. This eliminates manual timestamp calculation and makes the framework accessible to non-programmers.}}{21}{figure.caption.11}%
+\contentsline {figure}{\numberline {3.5.1}{\ignorespaces Model configuration panel showing algorithm selection (Random Forest, Neural Network, SVM), hyperparameter tuning options with GridSearchCV, class balancing strategies (balanced weights, stratified splitting), and real-time training progress monitoring with cross-validation scores.}}{25}{figure.caption.15}%
+\contentsline {figure}{\numberline {3.6.1}{\ignorespaces Generated Arduino C++ code preview interface. The framework displays the generated header files, implementation files, and Arduino sketches with syntax highlighting. Users can select optimization modes (Accuracy, Speed, Power, Balanced), configure target platform parameters, and download the complete deployment package.}}{27}{figure.caption.16}%
+\addvspace {10pt}
+\contentsline {figure}{\numberline {4.2.1}{\ignorespaces Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}}{34}{figure.caption.23}%
+\contentsline {figure}{\numberline {4.2.2}{\ignorespaces Results dashboard displaying confusion matrix and performance metrics. The interface provides interactive visualizations including confusion matrices with heatmaps, per-class precision/recall/F1-scores, overall accuracy metrics, ROC curves, and downloadable performance reports. Users can compare multiple models side-by-side.}}{35}{figure.caption.24}%
+\contentsline {figure}{\numberline {4.4.1}{\ignorespaces Comparative analysis of accuracy, inference latency, and power consumption across four optimization modes}}{38}{figure.caption.27}%
+\contentsline {figure}{\numberline {4.4.2}{\ignorespaces Power Consumption Profile During Inference (Neural Network, Accuracy Mode)}}{39}{figure.caption.29}%
+\addvspace {10pt}
+\addvspace {10pt}

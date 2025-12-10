@@ -1,89 +1,61 @@
-% Thesis-style document using article class
-\documentclass[12pt,a4paper,oneside]{article}
+% Thesis document using hcmut-thesis class
+\documentclass[final,oneside]{hcmut-thesis}
 
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{caption}
 \usepackage{multirow}
 \usepackage{float}
-\usepackage{setspace}
-\usepackage{indentfirst}
-\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
-\usepackage[margin=1in,top=1.5in]{geometry}
 
-% Professional spacing
-\onehalfspacing
+% References
+\usepackage[nameinlink]{cleveref}
 
-% Title page information
-\title{
-  \vspace{-1cm}
-  {\large Vietnam National University Ho Chi Minh City}\\
-  {\large Ho Chi Minh City University of Technology (HCMUT)}\\
-  {\large Faculty of Computer Science and Engineering}\\[2cm]
-  {\large Graduation Thesis}\\[1cm]
-  {\Large\textbf{Building a Framework to Generate AI Models\\for Human Motion Tracking Applications}}
-}
-\author{
-  \textbf{Student:} Nguyen Truong Minh Hoang\\
-  \textbf{Student ID:} 2270757\\[1cm]
-  \textbf{Supervisor:} Dr. Le Trong Nhan\\
-  \textbf{Council:} H
-}
-\date{\today}
+% Configurations
+\reporttype{Graduation Thesis}
+\title{Building a Framework to Generate AI Models for Human Motion Tracking Applications}
+\defcouncil{Council H}
+\supervisor{Dr.~Le Trong Nhan}
+\reviewer{Dr.~Le Trong Nhan}
+\stuname{STUDENT: Nguyen Truong Minh Hoang}
+\stuid{STUDENT'S ID: 2270757}
 
 \begin{document}
+\coverpage%
 
-\maketitle
-\thispagestyle{empty}
-\newpage
+\frontmatter%
+\begin{center}
+\textbf{\large VERIFICATION OF INSTRUCTOR}
+\end{center}
 
-\pagenumbering{roman}
-\setcounter{page}{1}
+\vspace{15 cm}
+\hspace{9 cm} \textbf{\large Signature confirmation}\\
+\vspace{3 cm}
 
-\section*{Abstract}
-\addcontentsline{toc}{section}{Abstract}
-\input{sections/abstract}
+\include{chapters/front/declaration.tex}
+\include{chapters/front/acknowledge.tex}
+\include{chapters/front/abstract.tex}
 
-\newpage
 \tableofcontents
-\newpage
+\clearpage
 \listoftables
-\newpage
+\clearpage
 \listoffigures
 
-\newpage
-\pagenumbering{arabic}
-\setcounter{page}{1}
+\mainmatter%
 
-% Main content - using sections as chapters
-\section{Introduction}
-\input{sections/introduction}
+% Set depth of numbering depth for counters
+\counterwithin{equation}{section}
+\counterwithin{table}{section}
+\counterwithin{figure}{section}
 
-\newpage
-\section{Related Work}
-\input{sections/relatedwork}
+\include{chapters/main/introduction}
+\include{chapters/main/relatedwork}
+\include{chapters/main/methodology}
+\include{chapters/main/results}
+\include{chapters/main/discussion}
+\include{chapters/main/conclusion}
 
-\newpage
-\section{Methodology}
-\input{sections/methodology}
-
-\newpage
-\section{Results}
-\input{sections/results}
-
-\newpage
-\section{Discussion}
-\input{sections/discussion}
-
-\newpage
-\section{Conclusion}
-\input{sections/conclusion}
-
-\newpage
 \bibliographystyle{plain}
 \bibliography{references}
 

@@ -1,11 +1,11 @@
 \chapter{Conclusion}
 \label{chap:conclusion}
 
-\subsection{Summary of Contributions}
+\section{Summary of Contributions}
 
 This research addresses the challenge of making AI-powered motion tracking accessible to researchers, developers, and educators without sacrificing performance or control. We presented a comprehensive open-source framework that unifies data preprocessing, model training, and edge deployment into a single user-friendly pipeline. The system's key contributions span algorithmic innovation, software engineering, and empirical validation:
 
-\subsubsection{Technical Contributions}
+\\section{Technical Contributions}
 \begin{enumerate}
     \item \textbf{Novel Interactive Preprocessing Interface}: The draggable time window segmentation mechanism represents the first-of-its-kind visual annotation tool for motion sensor data, eliminating the traditional choice between coding complex segmentation logic and accepting black-box automated approaches. This innovation reduces preprocessing time by an estimated 60-80\% while improving annotation accuracy through direct visual feedback.
 
@@ -16,7 +16,7 @@ This research addresses the challenge of making AI-powered motion tracking acces
     \item \textbf{Class Imbalance Handling}: By making \texttt{class\_weight='balanced'} a default configuration rather than optional parameter, the framework systematically addresses a critical but often overlooked challenge in real-world motion tracking. Our experiments demonstrate +42-47\% improvement in minority class recall, transforming models from research prototypes to deployment-ready systems.
 \end{enumerate}
 
-\subsubsection{Empirical Validation}
+\\section{Empirical Validation}
 Comprehensive experiments using a six-class Human Activity Recognition dataset validate the framework's effectiveness:
 \begin{itemize}
     \item \textbf{Model Accuracy}: 93.8-96.2\% across three algorithms, with Neural Networks achieving 96.2\%—within 0.3\% of expert manual TensorFlow Lite deployment while requiring dramatically less technical expertise
@@ -25,7 +25,7 @@ Comprehensive experiments using a six-class Human Activity Recognition dataset v
     \item \textbf{Competitive Positioning}: Outperforms commercial platforms (Edge Impulse, SensiML) by 1.4-3.1\% accuracy while remaining completely free and open-source
 \end{itemize}
 
-\subsubsection{Broader Impact}
+\\section{Broader Impact}
 Beyond technical contributions, this work advances the democratization of edge AI by:
 \begin{itemize}
     \item \textbf{Eliminating Economic Barriers}: Replacing \$20-500/month commercial subscriptions with a free open-source alternative accessible to researchers worldwide
@@ -34,7 +34,7 @@ Beyond technical contributions, this work advances the democratization of edge A
     \item \textbf{Enabling Innovation}: Extensible architecture allows researchers to integrate novel algorithms, platforms, and optimization strategies without starting from scratch
 \end{itemize}
 
-\subsection{Revisiting Research Objectives}
+\section{Revisiting Research Objectives}
 
 The initial research objectives outlined in Section 1.3 have been comprehensively addressed:
 
@@ -50,7 +50,7 @@ The initial research objectives outlined in Section 1.3 have been comprehensivel
     \item \textbf{Accessibility} \checkmark: Web-based GUI with low learning curve makes advanced edge AI development accessible to non-experts while maintaining professional-grade capabilities
 \end{enumerate}
 
-\subsection{Practical Applications}
+\section{Practical Applications}
 
 The validated framework enables diverse real-world applications:
 
@@ -66,11 +66,11 @@ Low-cost platform for teaching edge AI concepts in undergraduate/graduate course
 \paragraph{Smart Home and Ambient Assisted Living}
 Activity monitoring for elderly living independently (detecting unusual inactivity patterns, tracking daily routines), context-aware smart home automation (adjusting lighting/temperature based on detected activity), and long-term health trend analysis. Low power consumption (30mW) supports always-on sensing without frequent battery changes.
 
-\subsection{Limitations and Future Work}
+\section{Limitations and Future Work}
 
 While the framework demonstrates strong capabilities, acknowledged limitations chart directions for future research:
 
-\subsubsection{Dataset Diversity}
+\\section{Dataset Diversity}
 Current validation uses single-subject data for six activities. Future work should:
 \begin{itemize}
     \item Conduct multi-subject studies spanning diverse demographics (age, gender, mobility level)
@@ -78,7 +78,7 @@ Current validation uses single-subject data for six activities. Future work shou
     \item Validate on public benchmark datasets (UCI HAR, WISDM, PAMAP2) for standardized comparisons
 \end{itemize}
 
-\subsubsection{Algorithmic Extensions}
+\\section{Algorithmic Extensions}
 \begin{itemize}
     \item \textbf{Deep Learning}: Integrate TensorFlow Lite Micro for CNN/LSTM/Transformer deployment, supporting end-to-end learning from raw sensor data
     \item \textbf{Online Learning}: Enable deployed models to adapt to user-specific patterns over time without cloud connectivity
@@ -86,14 +86,14 @@ Current validation uses single-subject data for six activities. Future work shou
     \item \textbf{Unsupervised Learning}: Automatic activity discovery without manual labeling for exploratory applications
 \end{itemize}
 
-\subsubsection{Platform Expansion}
+\\section{Platform Expansion}
 \begin{itemize}
     \item Validate code generation on AVR (Arduino Uno), RISC-V (ESP32-C3), ARM Cortex-M0+ (Raspberry Pi Pico)
     \item Support FPGA and ASIC targets for ultra-low-power wearables (<1mW)
     \item Mobile deployment (Android, iOS) for smartphone-based motion tracking
 \end{itemize}
 
-\subsubsection{Advanced Features}
+\\section{Advanced Features}
 \begin{itemize}
     \item \textbf{Sensor Fusion}: Multi-modal integration (IMU + GPS + heart rate + audio) with automated feature synchronization
     \item \textbf{Explainable AI}: Visualization of which sensor patterns triggered specific predictions (LIME, SHAP integration)
@@ -101,7 +101,7 @@ Current validation uses single-subject data for six activities. Future work shou
     \item \textbf{Cloud Backend}: Optional model versioning, community model sharing, and data backup while maintaining local-first architecture
 \end{itemize}
 
-\subsubsection{Usability Enhancements}
+\\section{Usability Enhancements}
 \begin{itemize}
     \item Formal user studies comparing preprocessing interface against alternatives (Edge Impulse, manual coding)
     \item Guided workflows for novice users with step-by-step tutorials and example datasets
@@ -109,7 +109,7 @@ Current validation uses single-subject data for six activities. Future work shou
     \item Automated hardware testing to validate deployed models before field deployment
 \end{itemize}
 
-\subsection{Closing Remarks}
+\section{Closing Remarks}
 
 The proliferation of wearable sensors and ubiquitous edge computing creates unprecedented opportunities for motion tracking applications spanning healthcare, sports, research, and beyond. However, realizing this potential has been hindered by the complexity of AI model development and the scarcity of accessible tools bridging the gap between data collection and edge deployment.
 
@@ -119,7 +119,7 @@ As edge AI continues to mature, tools like the proposed framework will play an i
 
 The source code, documentation, and example datasets are publicly available to support reproducibility, education, and community contributions. We invite researchers and practitioners to build upon this foundation, extending the framework's capabilities and applying it to novel motion tracking challenges. Together, we can bridge the gap between laboratory research and real-world deployment, transforming the landscape of edge AI development.
 
-\subsection{Final Thoughts}
+\section{Final Thoughts}
 
 This thesis presented a comprehensive framework addressing fundamental challenges in edge-based motion tracking: accessibility, performance, and flexibility. Through novel interactive preprocessing, systematic class imbalance handling, and optimization-aware code generation, we have created a tool that matches commercial platforms' ease-of-use while providing full control and zero cost. The experimental validation confirms that democratization and performance excellence are not mutually exclusive—they can and should coexist.
 
