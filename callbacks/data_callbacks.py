@@ -207,9 +207,10 @@ def filter_and_display_data(dataset_name):
             sensor_cols = sensor_cols[:6]
             
             if sensor_cols:
-                # Generate a line chart
+                # Generate a line chart with no template to avoid compatibility issues
                 fig = px.line(df, x="Time_seconds", y=sensor_cols,
-                              title=f"Filtered Preview of {dataset_name}")
+                              title=f"Filtered Preview of {dataset_name}",
+                              template=None)
                 fig.update_layout(
                     xaxis_title="Time (seconds)",
                     yaxis_title="Sensor Values",
@@ -259,9 +260,10 @@ def display_dataset(dataset_name):
             sensor_cols = sensor_cols[:6]
             
             if sensor_cols:
-                # Generate a line chart
+                # Generate a line chart with no template to avoid compatibility issues
                 fig = px.line(df, x='Time_seconds', y=sensor_cols, 
-                              title=f"Preview of {dataset_name}")
+                              title=f"Preview of {dataset_name}",
+                              template=None)
                 fig.update_layout(
                     xaxis_title="Time (seconds)",
                     yaxis_title="Sensor Values",

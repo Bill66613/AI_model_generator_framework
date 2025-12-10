@@ -50,13 +50,20 @@ Table \ref{tab:perclass_metrics} presents detailed precision, recall, and F1-sco
 All activities achieve F1-scores above 0.93, indicating balanced precision-recall performance. Notably, \textit{Walking Downstairs} (the minority class with only 51 test samples) achieves 0.97 F1-score, demonstrating effective class balancing. \textit{Running} and \textit{Standing} are most accurately detected (F1 = 0.98), likely due to distinctive acceleration patterns. \textit{Walking Upstairs} shows slightly lower recall (0.93), with occasional confusion with regular \textit{Walking} (see confusion matrix analysis below).
 
 \subsubsection{Confusion Matrix Analysis}
-Figure \ref{fig:confusion_matrix} presents the confusion matrix for the Neural Network model, revealing misclassification patterns.
+Figure \ref{fig:confusion_matrix} presents the confusion matrix for the Neural Network model, revealing misclassification patterns. Figure \ref{fig:ui_results} shows the interactive results dashboard where users can explore confusion matrices, per-class metrics, and model performance visualizations.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{figures/confusion_matrix_nn.png}
     \caption{Confusion Matrix for Neural Network Model (5-class HAR, 90.91\% accuracy)}
     \label{fig:confusion_matrix}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_results_display.png}
+    \caption{Results dashboard displaying confusion matrix and performance metrics. The interface provides interactive visualizations including confusion matrices with heatmaps, per-class precision/recall/F1-scores, overall accuracy metrics, ROC curves, and downloadable performance reports. Users can compare multiple models side-by-side.}
+    \label{fig:ui_results}
 \end{figure}
 
 The confusion matrix reveals:

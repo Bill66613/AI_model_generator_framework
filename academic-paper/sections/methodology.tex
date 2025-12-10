@@ -29,7 +29,14 @@ The standardized 100Hz sampling rate ensures consistency between training data c
 \subsection{Interactive Preprocessing Pipeline}
 
 \subsubsection{Data Upload and Visualization}
-Users upload multi-class CSV datasets containing timestamped IMU measurements. The system supports per-activity file organization (e.g., \texttt{walking.csv}, \texttt{running.csv}) where each file corresponds to one activity class. Upon upload, the framework displays synchronized plots of raw accelerometer and gyroscope signals across all six axes, enabling visual inspection of data quality.
+Users upload multi-class CSV datasets containing timestamped IMU measurements. The system supports per-activity file organization (e.g., \texttt{walking.csv}, \texttt{running.csv}) where each file corresponds to one activity class. Upon upload, the framework displays synchronized plots of raw accelerometer and gyroscope signals across all six axes, enabling visual inspection of data quality. Figure \ref{fig:ui_data_upload} shows the data upload interface with file selection and initial dataset visualization.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_data_upload.png}
+    \caption{Web interface for CSV file upload and dataset management. The interface allows users to upload sensor data files, validates column names, automatically detects sampling frequency, and provides an interactive preview of the raw six-axis time series.}
+    \label{fig:ui_data_upload}
+\end{figure}
 
 \subsubsection{Signal Cleaning and Smoothing}
 The preprocessing module offers configurable cleaning operations:
@@ -47,7 +54,14 @@ A novel contribution of this framework is the \textit{interactive draggable wind
     \item \textbf{Real-Time Feedback}: Selected windows are highlighted on the plot with distinct colors, and extracted segments are immediately available for inspection.
     \item \textbf{Per-Window Labeling}: Each window is automatically assigned the activity label from the parent file, but can be manually re-labeled if needed (e.g., extracting \textit{standing} segments from \textit{walking} files during transition periods).
 \end{itemize}
-This approach significantly reduces annotation time compared to manual timestamp entry or programmatic segmentation, and eliminates common errors in boundary specification.
+This approach significantly reduces annotation time compared to manual timestamp entry or programmatic segmentation, and eliminates common errors in boundary specification. Figure \ref{fig:ui_preprocessing} demonstrates the interactive draggable window interface, which is the key differentiating feature of this framework.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_preprocessing_draggable.png}
+    \caption{Interactive draggable window interface for activity segmentation. Users visually inspect accelerometer and gyroscope time series, drag rectangular windows over regions corresponding to distinct activities, assign activity labels, and adjust boundaries via click-and-drag interaction. This eliminates manual timestamp calculation and makes the framework accessible to non-programmers.}
+    \label{fig:ui_preprocessing}
+\end{figure}
 
 \subsection{Feature Extraction}
 
@@ -141,7 +155,14 @@ The framework supports automated hyperparameter tuning via scikit-learn's GridSe
     \item \texttt{learning\_rate\_init}: [0.001, 0.01]
 \end{itemize}
 
-Optimization identifies configurations maximizing cross-validation accuracy, typically improving baseline performance by 2-5\%.
+Optimization identifies configurations maximizing cross-validation accuracy, typically improving baseline performance by 2-5\%. Figure \ref{fig:ui_training} shows the training configuration interface where users select algorithms, enable hyperparameter optimization, configure class balancing, and monitor training progress.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_training_config.png}
+    \caption{Model configuration panel showing algorithm selection (Random Forest, Neural Network, SVM), hyperparameter tuning options with GridSearchCV, class balancing strategies (balanced weights, stratified splitting), and real-time training progress monitoring with cross-validation scores.}
+    \label{fig:ui_training}
+\end{figure}
 
 \subsection{Code Generation for Edge Deployment}
 
@@ -165,6 +186,15 @@ For each trained model, the generator produces three files:
     \item \textbf{Implementation File (.cpp)}: Implements feature extraction, prediction logic (algorithm-specific), and utility functions
     \item \textbf{Arduino Sketch (.ino)}: Provides sensor initialization, sliding window buffer management, real-time inference loop, and serial output of predictions
 \end{enumerate}
+
+Figure \ref{fig:ui_code_generation} shows the code generation interface with a preview of the generated Arduino C++ code, deployment configuration options, and downloadable output files.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_code_generation.png}
+    \caption{Generated Arduino C++ code preview interface. The framework displays the generated header files, implementation files, and Arduino sketches with syntax highlighting. Users can select optimization modes (Accuracy, Speed, Power, Balanced), configure target platform parameters, and download the complete deployment package.}
+    \label{fig:ui_code_generation}
+\end{figure}
 
 \subsubsection{Optimization Strategies}
 The framework supports four deployment optimization modes, selectable during code generation:

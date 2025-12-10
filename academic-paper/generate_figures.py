@@ -60,10 +60,10 @@ def generate_confusion_matrix_figure():
     # Calculate accuracy from matrix
     accuracy = np.trace(cm_estimated) / np.sum(cm_estimated) * 100
 
-    # Create figure
-    plt.figure(figsize=(10, 8))
+    # Create figure - even larger for maximum readability
+    plt.figure(figsize=(16, 13))
 
-    # Plot heatmap with annotations
+    # Plot heatmap with annotations - larger fonts
     sns.heatmap(cm_estimated,
                 annot=True,
                 fmt='d',
@@ -71,12 +71,15 @@ def generate_confusion_matrix_figure():
                 xticklabels=ACTIVITY_LABELS,
                 yticklabels=ACTIVITY_LABELS,
                 cbar_kws={'label': 'Number of Samples'},
-                square=True)
+                square=True,
+                annot_kws={'fontsize': 16})
 
-    plt.xlabel('Predicted Label', fontsize=12, fontweight='bold')
-    plt.ylabel('True Label', fontsize=12, fontweight='bold')
+    plt.xlabel('Predicted Label', fontsize=18, fontweight='bold')
+    plt.ylabel('True Label', fontsize=18, fontweight='bold')
     plt.title(f'Confusion Matrix - Neural Network Model\n(Overall Accuracy: {accuracy:.1f}%)',
-              fontsize=14, fontweight='bold', pad=20)
+              fontsize=20, fontweight='bold', pad=20)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
 
     # Adjust layout
     plt.tight_layout()
@@ -108,52 +111,55 @@ def generate_power_consumption_figure():
     current_ma = [2.1, 5.4, 7.8, 8.2]
     power_mw = [i * 3.3 for i in current_ma]  # Convert to mW at 3.3V
 
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    # Create figure with two subplots - larger with less spacing
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+    plt.subplots_adjust(wspace=0.25)  # Reduce spacing between subplots
 
     # Subplot 1: Current consumption
     bars1 = ax1.bar(phases, current_ma, color=['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3'],
-                    edgecolor='black', linewidth=1.5)
-    ax1.set_ylabel('Current Draw (mA)', fontsize=12, fontweight='bold')
+                    edgecolor='black', linewidth=2.0, width=0.7)
+    ax1.set_ylabel('Current Draw (mA)', fontsize=18, fontweight='bold')
     ax1.set_title('Current Consumption Profile\n(Seeed XIAO nRF52840 @ 3.3V)',
-                  fontsize=13, fontweight='bold')
+                  fontsize=19, fontweight='bold', pad=15)
     ax1.grid(axis='y', alpha=0.3)
     ax1.set_ylim(0, 10)
+    ax1.tick_params(axis='both', labelsize=15)
 
-    # Add value labels on bars
+    # Add value labels on bars - larger fonts
     for bar, val in zip(bars1, current_ma):
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + 0.2,
                  f'{val:.1f} mA',
-                 ha='center', va='bottom', fontweight='bold', fontsize=10)
+                 ha='center', va='bottom', fontweight='bold', fontsize=15)
 
     # Subplot 2: Power consumption
     bars2 = ax2.bar(phases, power_mw, color=['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3'],
-                    edgecolor='black', linewidth=1.5)
-    ax2.set_ylabel('Power Consumption (mW)', fontsize=12, fontweight='bold')
+                    edgecolor='black', linewidth=2.0, width=0.7)
+    ax2.set_ylabel('Power Consumption (mW)', fontsize=18, fontweight='bold')
     ax2.set_title('Power Consumption Profile\n(Seeed XIAO nRF52840 @ 3.3V)',
-                  fontsize=13, fontweight='bold')
+                  fontsize=19, fontweight='bold', pad=15)
     ax2.grid(axis='y', alpha=0.3)
     ax2.set_ylim(0, 30)
+    ax2.tick_params(axis='both', labelsize=15)
 
-    # Add value labels on bars
+    # Add value labels on bars - larger fonts
     for bar, val in zip(bars2, power_mw):
         height = bar.get_height()
         ax2.text(bar.get_x() + bar.get_width()/2., height + 0.5,
                  f'{val:.1f} mW',
-                 ha='center', va='bottom', fontweight='bold', fontsize=10)
+                 ha='center', va='bottom', fontweight='bold', fontsize=15)
 
     # Add average line
     # Exclude idle, average active phases
     avg_current = np.mean(current_ma[1:])
     avg_power = avg_current * 3.3
     ax1.axhline(y=avg_current, color='red', linestyle='--',
-                linewidth=2, label=f'Avg Active: {avg_current:.1f} mA')
+                linewidth=3.0, label=f'Avg Active: {avg_current:.1f} mA')
     ax2.axhline(y=avg_power, color='red', linestyle='--',
-                linewidth=2, label=f'Avg Active: {avg_power:.1f} mW')
+                linewidth=3.0, label=f'Avg Active: {avg_power:.1f} mW')
 
-    ax1.legend(loc='upper left', fontsize=10)
-    ax2.legend(loc='upper left', fontsize=10)
+    ax1.legend(loc='upper left', fontsize=15)
+    ax2.legend(loc='upper left', fontsize=15)
 
     plt.tight_layout()
 
@@ -179,22 +185,22 @@ def generate_system_architecture_diagram():
     - LaTeX TikZ for vector graphics
     """
 
-    fig, ax = plt.subplots(figsize=(14, 9))
+    fig, ax = plt.subplots(figsize=(20, 13))
     ax.axis('off')
 
-    # Define components as rectangles - larger and more spaced
+    # Define components as rectangles - more compact spacing
     components = [
         {'name': 'Data Upload\n(CSV Files)', 'pos': (
-            0.5, 0.88), 'color': '#e3f2fd', 'height': 0.08},
+            0.5, 0.90), 'color': '#e3f2fd', 'height': 0.08},
         {'name': 'Interactive Preprocessing\n(Draggable Windows)', 'pos': (
-            0.5, 0.74), 'color': '#bbdefb', 'height': 0.08},
+            0.5, 0.78), 'color': '#bbdefb', 'height': 0.08},
         {'name': 'Feature Extraction\n(90 Time-Domain Features)',
-         'pos': (0.5, 0.60), 'color': '#90caf9', 'height': 0.08},
-        {'name': 'Model Training\n(RF/SVM/NN)', 'pos': (0.5, 0.46),
+         'pos': (0.5, 0.66), 'color': '#90caf9', 'height': 0.08},
+        {'name': 'Model Training\n(RF/SVM/NN)', 'pos': (0.5, 0.54),
          'color': '#64b5f6', 'height': 0.08},
-        {'name': 'Code Generation\n(C++ Export)', 'pos': (0.5, 0.32),
+        {'name': 'Code Generation\n(C++ Export)', 'pos': (0.5, 0.42),
          'color': '#42a5f5', 'height': 0.08},
-        {'name': 'Edge Deployment\n(Arduino/ARM)', 'pos': (0.5, 0.18),
+        {'name': 'Edge Deployment\n(Arduino/ARM)', 'pos': (0.5, 0.30),
          'color': '#2196f3', 'height': 0.08},
     ]
 
@@ -204,11 +210,11 @@ def generate_system_architecture_diagram():
                              0.36, comp['height'],
                              facecolor=comp['color'],
                              edgecolor='#1976d2',
-                             linewidth=2.5,
+                             linewidth=3.5,
                              zorder=2)
         ax.add_patch(rect)
         ax.text(comp['pos'][0], comp['pos'][1], comp['name'],
-                ha='center', va='center', fontsize=12, fontweight='bold',
+                ha='center', va='center', fontsize=17, fontweight='bold',
                 color='#0d47a1', zorder=3)
 
     # Draw arrows between components
@@ -220,22 +226,22 @@ def generate_system_architecture_diagram():
                     xytext=(components[i]['pos'][0], y_start),
                     arrowprops=dict(arrowstyle='->', lw=3, color='#424242'))
 
-    # Add clearer side annotations with better positioning and larger boxes
+    # Add clearer side annotations with adjusted positions for compact layout
     # Left side - Pipeline stages
-    ax.text(0.12, 0.81, 'User\nInterface\nLayer', ha='center', va='center',
-            fontsize=11, fontweight='bold', color='#d84315',
-            bbox=dict(boxstyle='round,pad=0.6', facecolor='#ffe0b2',
-                      edgecolor='#f57c00', linewidth=2, alpha=0.9))
+    ax.text(0.12, 0.84, 'User\nInterface\nLayer', ha='center', va='center',
+            fontsize=16, fontweight='bold', color='#d84315',
+            bbox=dict(boxstyle='round,pad=0.8', facecolor='#ffe0b2',
+                      edgecolor='#f57c00', linewidth=3.0, alpha=0.9))
 
-    ax.text(0.12, 0.53, 'Machine\nLearning\nLayer', ha='center', va='center',
-            fontsize=11, fontweight='bold', color='#2e7d32',
-            bbox=dict(boxstyle='round,pad=0.6', facecolor='#c8e6c9',
-                      edgecolor='#66bb6a', linewidth=2, alpha=0.9))
+    ax.text(0.12, 0.60, 'Machine\nLearning\nLayer', ha='center', va='center',
+            fontsize=16, fontweight='bold', color='#2e7d32',
+            bbox=dict(boxstyle='round,pad=0.8', facecolor='#c8e6c9',
+                      edgecolor='#66bb6a', linewidth=3.0, alpha=0.9))
 
-    ax.text(0.12, 0.25, 'Deployment\nLayer', ha='center', va='center',
-            fontsize=11, fontweight='bold', color='#1565c0',
-            bbox=dict(boxstyle='round,pad=0.6', facecolor='#e1f5fe',
-                      edgecolor='#29b6f6', linewidth=2, alpha=0.9))
+    ax.text(0.12, 0.36, 'Deployment\nLayer', ha='center', va='center',
+            fontsize=16, fontweight='bold', color='#1565c0',
+            bbox=dict(boxstyle='round,pad=0.8', facecolor='#e1f5fe',
+                      edgecolor='#29b6f6', linewidth=3.0, alpha=0.9))
 
     # Right side - Optimization modes with better formatting
     optimization_text = (
@@ -250,17 +256,17 @@ def generate_system_architecture_diagram():
         '• Balanced\n'
         '  (Mixed precision)'
     )
-    ax.text(0.88, 0.35, optimization_text,
-            ha='center', va='center', fontsize=10, fontweight='bold',
+    ax.text(0.88, 0.52, optimization_text,
+            ha='center', va='center', fontsize=15, fontweight='bold',
             color='#5d4037',
-            bbox=dict(boxstyle='round,pad=0.8', facecolor='#fff9c4',
-                      edgecolor='#fbc02d', linewidth=2.5, alpha=0.9),
-            linespacing=1.4)
+            bbox=dict(boxstyle='round,pad=1.0', facecolor='#fff9c4',
+                      edgecolor='#fbc02d', linewidth=3.5, alpha=0.9),
+            linespacing=1.6)
 
     ax.set_xlim(0, 1)
-    ax.set_ylim(0.05, 1)
+    ax.set_ylim(0.20, 1.0)  # Tighter vertical bounds
     ax.set_title('Framework Architecture: End-to-End Pipeline',
-                 fontsize=18, fontweight='bold', pad=25, color='#212121')
+                 fontsize=24, fontweight='bold', pad=35, color='#212121')
 
     plt.tight_layout()
 
