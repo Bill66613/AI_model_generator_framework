@@ -13,10 +13,10 @@ The proposed framework implements an end-to-end pipeline for generating AI model
 
 \section{Data Collection and Hardware Platform}
 
-\\section{Sensor Hardware}
+\subsection{Sensor Hardware}
 Data collection utilizes the Seeed XIAO nRF52840 Sense microcontroller \cite{web:XIAO}, featuring an ARM Cortex-M4F processor (64MHz, 256KB RAM, 1MB Flash) and an integrated LSM6DS3 6-axis IMU sensor communicating via I2C at address 0x6A. The LSM6DS3 provides 3-axis accelerometer data (configured at $\pm$2g range) and 3-axis gyroscope data, sampled at 100Hz to ensure sufficient temporal resolution for capturing human motion dynamics while balancing memory constraints.
 
-\\section{Data Acquisition Protocol}
+\subsection{Data Acquisition Protocol}
 The data collection firmware implements the following procedure:
 \begin{enumerate}
     \item Initialize I2C communication and verify IMU connection
@@ -31,7 +31,7 @@ The standardized 100Hz sampling rate ensures consistency between training data c
 
 \section{Interactive Preprocessing Pipeline}
 
-\\section{Data Upload and Visualization}
+\subsection{Data Upload and Visualization}
 Users upload multi-class CSV datasets containing timestamped IMU measurements. The system supports per-activity file organization (e.g., \texttt{walking.csv}, \texttt{running.csv}) where each file corresponds to one activity class. Upon upload, the framework displays synchronized plots of raw accelerometer and gyroscope signals across all six axes, enabling visual inspection of data quality. Figure \ref{fig:ui_data_upload} shows the data upload interface with file selection and initial dataset visualization.
 
 \begin{figure}[H]
@@ -41,7 +41,7 @@ Users upload multi-class CSV datasets containing timestamped IMU measurements. T
     \label{fig:ui_data_upload}
 \end{figure}
 
-\\section{Signal Cleaning and Smoothing}
+\subsection{Signal Cleaning and Smoothing}
 The preprocessing module offers configurable cleaning operations:
 \begin{itemize}
     \item \textbf{Outlier Removal}: Identifies and removes samples exceeding specified standard deviation thresholds (default: $3\sigma$), addressing sensor anomalies and electromagnetic interference artifacts.
@@ -49,7 +49,7 @@ The preprocessing module offers configurable cleaning operations:
 \end{itemize}
 Cleaned data is visualized alongside original signals, allowing users to verify preprocessing effectiveness before segmentation.
 
-\\section{Draggable Time Window Segmentation}
+\subsection{Draggable Time Window Segmentation}
 A novel contribution of this framework is the \textit{interactive draggable window interface} for activity segmentation. Key features include:
 \begin{itemize}
     \item \textbf{Visual Window Placement}: Users click-and-drag directly on signal plots to define temporal boundaries of activity instances, providing intuitive control over segmentation without coding.
@@ -68,7 +68,7 @@ This approach significantly reduces annotation time compared to manual timestamp
 
 \section{Feature Extraction}
 
-\\section{Sliding Window Approach}
+\subsection{Sliding Window Approach}
 Preprocessed signals are segmented into fixed-size overlapping windows for feature extraction. After empirical validation and comparison with literature recommendations \cite{banos2014wisdm}, the configuration was optimized as:
 \begin{itemize}
     \item \textbf{Window Size}: 150 samples (1.5 seconds at 100Hz)
@@ -76,8 +76,10 @@ Preprocessed signals are segmented into fixed-size overlapping windows for featu
 \end{itemize}
 The 1.5-second window provides sufficient temporal context to capture complete motion cycles for most activities (walking step duration $\approx$ 1.0-1.2 seconds \cite{whittle2014gait}), while 50\% overlap ensures temporal continuity and reduces edge effects at window boundaries. This yields predictions every 0.75 seconds, balancing responsiveness with computational efficiency.
 
-\\section{Feature Set}
+\subsection{Feature Set}
 For each window and each sensor axis (6 axes total), the framework extracts 15 time-domain statistical features. Frequency-domain features were intentionally excluded after identifying training-deployment parity issues: FFT implementations differ substantially between Python (NumPy) and embedded C++ (approximations or ARM CMSIS-DSP), leading to feature value discrepancies that degrade deployed model accuracy.
+
+\textbf{Rationale for Excluding FFT Features}: While frequency-domain features (spectral energy, dominant frequency, spectral entropy) are commonly used in HAR literature \cite{banos2014wisdm}, they introduce significant deployment challenges. Python's NumPy FFT uses highly optimized double-precision floating-point algorithms (FFTPACK/FFTW backends), while embedded C++ typically relies on fixed-point approximations or platform-specific libraries (ARM CMSIS-DSP) with different numerical precision. Preliminary experiments revealed that identical input windows produced FFT magnitude spectra differing by 5-15\% between Python and C++, causing trained models to misclassify 8-12\% of windows during deployment despite 95\%+ training accuracy. This "training-deployment mismatch" is a critical but under-reported issue in edge ML \cite{banbury2021mlperf}. By restricting to time-domain features with deterministic closed-form computations (mean, variance, etc.), we guarantee bit-identical feature extraction across platforms, eliminating this failure mode. The zero-crossing rate and mean-crossing rate serve as frequency proxies, capturing periodic information without FFT overhead.
 
 \textbf{Time-Domain Features (15 per axis):}
 \begin{itemize}
@@ -93,7 +95,7 @@ Total feature vector dimensionality: $15 \times 6 = 90$ features per window. Thi
 
 \section{Machine Learning Model Training}
 
-\\section{Supported Algorithms}
+\subsection{Supported Algorithms}
 The framework integrates three classical machine learning algorithms from scikit-learn, selected for their proven effectiveness in activity recognition and feasibility for embedded deployment:
 
 \paragraph{Random Forest (RF)}
@@ -125,7 +127,7 @@ Multi-layer perceptron with backpropagation. Configuration:
 \end{itemize}
 The two-hidden-layer architecture provides sufficient capacity for learning non-linear activity patterns while remaining small enough for efficient C++ deployment (fixed-weight matrices, no dynamic memory allocation).
 
-\\section{Class Imbalance Handling}
+\subsection{Class Imbalance Handling}
 Motion datasets often exhibit severe class imbalance (e.g., more \textit{standing} samples than \textit{walking\_downstairs}). Imbalanced training biases models toward majority classes, degrading minority class recognition. The framework addresses this via:
 \begin{itemize}
     \item \textbf{Class Weight Balancing}: For RF and SVM, the \texttt{class\_weight='balanced'} parameter assigns weights $w_c = \frac{n\_samples}{n\_classes \times n\_samples_c}$ where $n\_samples_c$ is the count of class $c$. This increases the loss contribution of minority class misclassifications during training.
@@ -133,7 +135,7 @@ Motion datasets often exhibit severe class imbalance (e.g., more \textit{standin
 \end{itemize}
 Class balancing is crucial for real-world deployment where all activity classes must be reliably detected, not just the most frequent ones.
 
-\\section{Hyperparameter Optimization}
+\subsection{Hyperparameter Optimization}
 The framework supports automated hyperparameter tuning via scikit-learn's GridSearchCV with 5-fold cross-validation. Searchable hyperparameters:
 
 \textbf{Random Forest:}
@@ -169,7 +171,7 @@ Optimization identifies configurations maximizing cross-validation accuracy, typ
 
 \section{Code Generation for Edge Deployment}
 
-\\section{Architecture}
+\subsection{Architecture}
 The code generation subsystem translates trained scikit-learn models into standalone C++ implementations executable on microcontrollers without external dependencies. Architecture follows the Factory design pattern with inheritance:
 \begin{itemize}
     \item \textbf{BaseCodeGenerator}: Abstract class with common functionality\\(file structure, serialization, validation).
@@ -182,7 +184,7 @@ The code generation subsystem translates trained scikit-learn models into standa
     \end{itemize}
 \end{itemize}
 
-\\section{Generated Code Structure}
+\subsection{Generated Code Structure}
 For each trained model, the generator produces three files:
 \begin{enumerate}
     \item \textbf{Header File (.h)}: Contains model parameters (e.g., support vectors, tree structures, weight matrices), function declarations, feature count/class count macros
@@ -199,7 +201,7 @@ Figure \ref{fig:ui_code_generation} shows the code generation interface with a p
     \label{fig:ui_code_generation}
 \end{figure}
 
-\\section{Optimization Strategies}
+\subsection{Optimization Strategies}
 The framework supports four deployment optimization modes, selectable during code generation:
 
 \paragraph{Accuracy Mode}
@@ -234,7 +236,7 @@ Compromises between accuracy, speed, and power:
     \item Mixed precision (critical computations in float, intermediate in fixed-point)
 \end{itemize}
 
-\\section{Platform-Specific Adaptations}
+\subsection{Platform-Specific Adaptations}
 While the framework currently targets Arduino-compatible platforms (Seeed XIAO, ESP32, Arduino Nano 33 BLE), the modular architecture supports platform-specific adaptations:
 \begin{itemize}
     \item \textbf{Memory Layout}: Adjusts array storage (PROGMEM for AVR, const for ARM) based on flash/RAM availability
@@ -244,7 +246,7 @@ While the framework currently targets Arduino-compatible platforms (Seeed XIAO, 
 
 \section{Experimental Design}
 
-\\section{Dataset}
+\subsection{Dataset}
 Validation experiments use a Human Activity Recognition (HAR) dataset collected from a single subject performing five activities:
 \begin{itemize}
     \item \textit{Still}, \textit{Walking}, \textit{Walking Upstairs}, \textit{Walking Downstairs}, \textit{Running}
@@ -259,7 +261,7 @@ Data was collected using the Seeed XIAO nRF52840 Sense platform at 100Hz over mu
 \end{itemize}
 Class imbalance ratio: 1.22:1 (walking vs. still), representing a relatively balanced dataset suitable for demonstrating class weight effectiveness without extreme imbalance.
 
-\\section{Evaluation Metrics}
+\subsection{Evaluation Metrics}
 Model performance is assessed using:
 \begin{itemize}
     \item \textbf{Overall Accuracy}: Percentage of correctly classified windows
@@ -271,14 +273,14 @@ Model performance is assessed using:
 
 Edge deployment performance is measured via:
 \begin{itemize}
-    \item \textbf{Inference Time}: Average time to classify one 150-sample window (ms), measured using Arduino \texttt{micros()} timing over 100 consecutive predictions
-    \item \textbf{Memory Usage}: Flash (program storage) and SRAM (runtime variables/buffers) consumption (KB), extracted from compiler map files and Arduino IDE build output
-    \item \textbf{Power Consumption}: Average current draw during different operational phases (idle, sensor sampling, feature extraction, prediction) measured at VCC pin or estimated from phase-specific processor utilization (mA @ 3.3V)
+    \item \textbf{Inference Time}: Average time to classify one 150-sample window (ms), measured using Arduino \texttt{micros()} timing over 100 consecutive predictions on the target hardware
+    \item \textbf{Memory Usage}: Flash (program storage) and SRAM (runtime variables/buffers) consumption (KB), extracted from compiler map files and Arduino IDE build output showing actual compiled binary sizes
+    \item \textbf{Power Consumption}: Average current draw during different operational phases (idle, sensor sampling, feature extraction, prediction). \textit{Note: Power values reported in this thesis are estimates calculated from typical ARM Cortex-M4F current consumption specifications (8-12 mA active, 2-3 mA idle at 64MHz) and measured execution time percentages, not direct hardware measurements with power monitors (e.g., Joulescope, Nordic PPK2). Actual power consumption may vary $\pm$15-20\% based on specific hardware implementation, sensor characteristics, and environmental factors. Future work should validate these estimates with hardware power profiling equipment.}
     \item \textbf{Prediction Frequency}: Sustainable inference rate accounting for sensor sampling overhead (predictions per second)
 \end{itemize}
 Target performance thresholds based on application requirements: inference $<$ 100ms per window (enabling real-time 10Hz updates), flash $<$ 500KB (leaving headroom for application code), SRAM $<$ 128KB (50\% of available 256KB), power $<$ 50mW average (supporting multi-hour battery operation).
 
-\\section{Baseline Comparisons}
+\subsection{Baseline Comparisons}
 To contextualize framework performance, we compare against:
 \begin{enumerate}
     \item \textbf{Edge Impulse}: Commercial platform with automated pipeline (free tier limitations apply)

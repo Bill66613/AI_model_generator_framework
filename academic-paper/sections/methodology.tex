@@ -77,7 +77,7 @@ Preprocessed signals are segmented into fixed-size overlapping windows for featu
 The 1.5-second window provides sufficient temporal context to capture complete motion cycles for most activities (walking step duration $\approx$ 1.0-1.2 seconds \cite{whittle2014gait}), while 50\% overlap ensures temporal continuity and reduces edge effects at window boundaries. This yields predictions every 0.75 seconds, balancing responsiveness with computational efficiency.
 
 \subsubsection{Feature Set}
-For each window and each sensor axis (6 axes total), the framework extracts 15 time-domain statistical features. Frequency-domain features were intentionally excluded after identifying training-deployment parity issues: FFT implementations differ substantially between Python (NumPy) and embedded C++ (approximations or ARM CMSIS-DSP), leading to feature value discrepancies that degrade deployed model accuracy.
+For each window and each sensor axis (6 axes total: 3 accelerometer + 3 gyroscope), the framework extracts 15 time-domain statistical features. \textit{Note: The ``6'' refers to sensor axes from the 6-axis IMU, not the number of activity classes, which is 5.} Frequency-domain features were intentionally excluded after identifying training-deployment parity issues: FFT implementations differ substantially between Python (NumPy) and embedded C++ (approximations or ARM CMSIS-DSP), leading to feature value discrepancies that degrade deployed model accuracy.
 
 \textbf{Time-Domain Features (15 per axis):}
 \begin{itemize}

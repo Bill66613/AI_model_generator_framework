@@ -5,41 +5,60 @@
 \@writefile{lot}{\addvspace {10pt}}
 \@writefile{toc}{\contentsline {chapter}{\chapternumberline {3}Methodology}{17}{chapter.3}\protected@file@percent }
 \newlabel{chap:methodology}{{3}{17}{Methodology}{chapter.3}{}}
-\newlabel{chap:methodology@cref}{{[chapter][3][]3}{[1][17][]17}{}{}{}}
+\newlabel{chap:methodology@cref}{{[chapter][3][]3}{[1][17][]17}}
 \@writefile{toc}{\contentsline {section}{\numberline {3.1}Framework Architecture Overview}{17}{section.3.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {3.2}Data Collection and Hardware Platform}{17}{section.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.1}Sensor Hardware}{17}{subsection.3.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.2}Data Acquisition Protocol}{17}{subsection.3.2.2}\protected@file@percent }
 \@writefile{lof}{\contentsline {figure}{\numberline {3.1.1}{\ignorespaces Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}}{18}{figure.caption.9}\protected@file@percent }
 \newlabel{fig:architecture}{{3.1.1}{18}{Framework Architecture Overview: End-to-end pipeline from data upload to edge deployment}{figure.caption.9}{}}
-\newlabel{fig:architecture@cref}{{[figure][1][3,1]3.1.1}{[1][17][]18}{}{}{}}
+\newlabel{fig:architecture@cref}{{[figure][1][3,1]3.1.1}{[1][17][]18}}
 \@writefile{toc}{\contentsline {section}{\numberline {3.3}Interactive Preprocessing Pipeline}{18}{section.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.1}Data Upload and Visualization}{18}{subsection.3.3.1}\protected@file@percent }
 \@writefile{lof}{\contentsline {figure}{\numberline {3.3.1}{\ignorespaces Web interface for CSV file upload and dataset management. The interface allows users to upload sensor data files, validates column names, automatically detects sampling frequency, and provides an interactive preview of the raw six-axis time series.}}{19}{figure.caption.10}\protected@file@percent }
 \newlabel{fig:ui_data_upload}{{3.3.1}{19}{Web interface for CSV file upload and dataset management. The interface allows users to upload sensor data files, validates column names, automatically detects sampling frequency, and provides an interactive preview of the raw six-axis time series}{figure.caption.10}{}}
-\newlabel{fig:ui_data_upload@cref}{{[figure][1][3,3]3.3.1}{[1][18][]19}{}{}{}}
+\newlabel{fig:ui_data_upload@cref}{{[figure][1][3,3]3.3.1}{[1][19][]19}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.2}Signal Cleaning and Smoothing}{20}{subsection.3.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.3}Draggable Time Window Segmentation}{20}{subsection.3.3.3}\protected@file@percent }
 \citation{banos2014wisdm}
 \citation{whittle2014gait}
 \@writefile{lof}{\contentsline {figure}{\numberline {3.3.2}{\ignorespaces Interactive draggable window interface for activity segmentation. Users visually inspect accelerometer and gyroscope time series, drag rectangular windows over regions corresponding to distinct activities, assign activity labels, and adjust boundaries via click-and-drag interaction. This eliminates manual timestamp calculation and makes the framework accessible to non-programmers.}}{21}{figure.caption.11}\protected@file@percent }
 \newlabel{fig:ui_preprocessing}{{3.3.2}{21}{Interactive draggable window interface for activity segmentation. Users visually inspect accelerometer and gyroscope time series, drag rectangular windows over regions corresponding to distinct activities, assign activity labels, and adjust boundaries via click-and-drag interaction. This eliminates manual timestamp calculation and makes the framework accessible to non-programmers}{figure.caption.11}{}}
-\newlabel{fig:ui_preprocessing@cref}{{[figure][2][3,3]3.3.2}{[1][20][]21}{}{}{}}
+\newlabel{fig:ui_preprocessing@cref}{{[figure][2][3,3]3.3.2}{[1][20][]21}}
 \@writefile{toc}{\contentsline {section}{\numberline {3.4}Feature Extraction}{21}{section.3.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3.5}Machine Learning Model Training}{22}{section.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.1}Sliding Window Approach}{21}{subsection.3.4.1}\protected@file@percent }
+\citation{banos2014wisdm}
+\citation{banbury2021mlperf}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.2}Feature Set}{22}{subsection.3.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.5}Machine Learning Model Training}{23}{section.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.1}Supported Algorithms}{23}{subsection.3.5.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Random Forest (RF)}{23}{section*.12}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Support Vector Machine (SVM)}{23}{section*.13}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Neural Network (NN)}{23}{section*.14}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3.5.1}{\ignorespaces Model configuration panel showing algorithm selection (Random Forest, Neural Network, SVM), hyperparameter tuning options with GridSearchCV, class balancing strategies (balanced weights, stratified splitting), and real-time training progress monitoring with cross-validation scores.}}{25}{figure.caption.15}\protected@file@percent }
-\newlabel{fig:ui_training}{{3.5.1}{25}{Model configuration panel showing algorithm selection (Random Forest, Neural Network, SVM), hyperparameter tuning options with GridSearchCV, class balancing strategies (balanced weights, stratified splitting), and real-time training progress monitoring with cross-validation scores}{figure.caption.15}{}}
-\newlabel{fig:ui_training@cref}{{[figure][1][3,5]3.5.1}{[1][24][]25}{}{}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {3.6}Code Generation for Edge Deployment}{25}{section.3.6}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3.6.1}{\ignorespaces Generated Arduino C++ code preview interface. The framework displays the generated header files, implementation files, and Arduino sketches with syntax highlighting. Users can select optimization modes (Accuracy, Speed, Power, Balanced), configure target platform parameters, and download the complete deployment package.}}{27}{figure.caption.16}\protected@file@percent }
-\newlabel{fig:ui_code_generation}{{3.6.1}{27}{Generated Arduino C++ code preview interface. The framework displays the generated header files, implementation files, and Arduino sketches with syntax highlighting. Users can select optimization modes (Accuracy, Speed, Power, Balanced), configure target platform parameters, and download the complete deployment package}{figure.caption.16}{}}
-\newlabel{fig:ui_code_generation@cref}{{[figure][1][3,6]3.6.1}{[1][26][]27}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{Accuracy Mode}{27}{section*.17}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Speed Mode}{28}{section*.18}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Power Mode}{28}{section*.19}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Balanced Mode}{28}{section*.20}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3.7}Experimental Design}{29}{section.3.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3.8}Implementation Details}{30}{section.3.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Neural Network (NN)}{24}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.2}Class Imbalance Handling}{24}{subsection.3.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.3}Hyperparameter Optimization}{24}{subsection.3.5.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.5.1}{\ignorespaces Model configuration panel showing algorithm selection (Random Forest, Neural Network, SVM), hyperparameter tuning options with GridSearchCV, class balancing strategies (balanced weights, stratified splitting), and real-time training progress monitoring with cross-validation scores.}}{26}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:ui_training}{{3.5.1}{26}{Model configuration panel showing algorithm selection (Random Forest, Neural Network, SVM), hyperparameter tuning options with GridSearchCV, class balancing strategies (balanced weights, stratified splitting), and real-time training progress monitoring with cross-validation scores}{figure.caption.15}{}}
+\newlabel{fig:ui_training@cref}{{[figure][1][3,5]3.5.1}{[1][25][]26}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.6}Code Generation for Edge Deployment}{26}{section.3.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.1}Architecture}{26}{subsection.3.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.2}Generated Code Structure}{27}{subsection.3.6.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.6.1}{\ignorespaces Generated Arduino C++ code preview interface. The framework displays the generated header files, implementation files, and Arduino sketches with syntax highlighting. Users can select optimization modes (Accuracy, Speed, Power, Balanced), configure target platform parameters, and download the complete deployment package.}}{28}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:ui_code_generation}{{3.6.1}{28}{Generated Arduino C++ code preview interface. The framework displays the generated header files, implementation files, and Arduino sketches with syntax highlighting. Users can select optimization modes (Accuracy, Speed, Power, Balanced), configure target platform parameters, and download the complete deployment package}{figure.caption.16}{}}
+\newlabel{fig:ui_code_generation@cref}{{[figure][1][3,6]3.6.1}{[1][27][]28}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.3}Optimization Strategies}{28}{subsection.3.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Accuracy Mode}{28}{section*.17}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Speed Mode}{29}{section*.18}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Power Mode}{29}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Balanced Mode}{29}{section*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6.4}Platform-Specific Adaptations}{29}{subsection.3.6.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.7}Experimental Design}{30}{section.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.1}Dataset}{30}{subsection.3.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.2}Evaluation Metrics}{30}{subsection.3.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7.3}Baseline Comparisons}{31}{subsection.3.7.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.8}Implementation Details}{32}{section.3.8}\protected@file@percent }
 \@setckpt{chapters/main/methodology}{
-\setcounter{page}{32}
+\setcounter{page}{33}
 \setcounter{equation}{0}
 \setcounter{enumi}{3}
 \setcounter{enumii}{0}
@@ -87,9 +106,9 @@
 \setcounter{cmsm@mctr}{0}
 \setcounter{bsm@mctr}{0}
 \setcounter{workm@mctr}{0}
-\setcounter{sheetsequence}{43}
-\setcounter{lastsheet}{71}
-\setcounter{lastpage}{60}
+\setcounter{sheetsequence}{46}
+\setcounter{lastsheet}{76}
+\setcounter{lastpage}{63}
 \setcounter{figure}{0}
 \setcounter{lofdepth}{1}
 \setcounter{table}{0}
@@ -98,7 +117,7 @@
 \setcounter{continuedfloat}{0}
 \setcounter{Item}{26}
 \setcounter{Hfootnote}{0}
-\setcounter{bookmark@seq@number}{37}
+\setcounter{bookmark@seq@number}{59}
 \setcounter{memhycontfloat}{0}
 \setcounter{mem@Hpagenote}{0}
 \setcounter{NAT@ctr}{0}

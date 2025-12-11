@@ -13,19 +13,19 @@ The rise of edge computing has further complicated this landscape while simultan
 
 \section{Theoretical Foundation}
 
-\\section{Signal Processing Principles}
+\subsection{Signal Processing Principles}
 
 The effectiveness of IMU-based motion tracking is grounded in fundamental signal processing theory. Human motion exhibits characteristic frequency content that can be reliably captured and analyzed. Studies of human biomechanics show that most daily activities generate motion frequencies below 20 Hz, with walking typically occurring at 1-2 Hz (step frequency) and running at 2-3 Hz \cite{whittle2014gait}. The Nyquist-Shannon sampling theorem states that to accurately reconstruct a signal, the sampling frequency must be at least twice the highest frequency component \cite{oppenheim1999discrete}. Thus, a 100 Hz sampling rate provides sufficient bandwidth (50 Hz Nyquist frequency) to capture human motion with significant margin, preventing aliasing while remaining computationally tractable for embedded systems.
 
 Accelerometers measure linear acceleration in three orthogonal axes, capturing both gravitational acceleration (9.81 m/s²) and dynamic motion components. Gyroscopes measure angular velocity (rotation rate), providing complementary information about body orientation changes. The combination of 6-axis IMU data (3-axis accelerometer + 3-axis gyroscope) creates a rich representation of human movement that machine learning algorithms can exploit to distinguish activities \cite{filippeschi2017survey_imu}.
 
-\\section{Feature Extraction Rationale}
+\subsection{Feature Extraction Rationale}
 
 Raw sensor data, while information-rich, contains redundancy and noise that hinder classification performance. Feature extraction transforms high-dimensional time-series data into compact statistical representations that emphasize discriminative characteristics. Time-domain features (mean, variance, skewness, kurtosis) capture distribution properties, while frequency-domain features derived from Fourier transforms reveal periodic patterns \cite{oppenheim1999discrete}. This dimensionality reduction is essential for embedded deployment, as computing predictions on 90 carefully chosen features requires orders of magnitude less memory and computation than processing 450 raw samples (75 samples × 6 axes) directly.
 
 Information theory provides additional justification: feature extraction can be viewed as lossy compression that preserves task-relevant information while discarding noise \cite{cover2006elements}. By selecting features that maximize between-class variance and minimize within-class variance, we create representations that facilitate linear separability for classifiers.
 
-\\section{Biomechanical Basis for Activity Recognition}
+\subsection{Biomechanical Basis for Activity Recognition}
 
 Different human activities produce distinct biomechanical signatures. Walking exhibits periodic acceleration patterns with characteristic double-peak force curves during heel strike and toe-off phases \cite{whittle2014gait}. Running shows higher impact forces and longer flight phases. Stair climbing introduces asymmetric vertical acceleration patterns. These biomechanical differences manifest as measurable variations in IMU sensor data, providing the physical basis for machine learning classification. The success of HAR systems thus relies not on arbitrary pattern matching, but on learning physically grounded distinctions in how the human body moves during different activities.
 
@@ -90,7 +90,7 @@ While commercial platforms offer advantages in ecosystem maturity (Edge Impulse'
 
 \section{Rationale for Key Design Decisions}
 
-\\section{Interactive Preprocessing Approach}
+\subsection{Interactive Preprocessing Approach}
 
 The decision to implement GUI-based interactive preprocessing is grounded in established human-computer interaction principles. Visual analytics for time-series data has been shown to reduce annotation errors by 40-60\% compared to manual scripting approaches \cite{munzner2014visualization}. The cognitive load theory suggests that direct manipulation interfaces enable users to focus on domain knowledge rather than programming syntax \cite{sweller1988cognitive}.
 
@@ -98,7 +98,7 @@ Traditional preprocessing workflows require users to write code for each step (f
 
 Research on interactive machine learning demonstrates that tight feedback loops between data exploration and model training improve both model quality and user confidence \cite{amershi2014power}. Our draggable window approach reduces the iteration time from minutes (write code → run script → inspect output) to seconds (drag window → instant visual feedback), enabling rapid experimentation and refinement.
 
-\\section{Machine Learning Algorithm Selection}
+\subsection{Machine Learning Algorithm Selection}
 
 The selection of Random Forest, Support Vector Machines, and Neural Networks is motivated by their complementary strengths and established effectiveness in activity recognition tasks. A 2023 systematic review of 156 HAR studies found that these three algorithm families account for 78\% of deployed solutions, with Random Forest achieving optimal accuracy-to-inference-time trade-offs on resource-constrained devices \cite{wang2023har_industrial}.
 

@@ -119,6 +119,101 @@ As edge AI continues to mature, tools like the proposed framework will play an i
 
 The source code, documentation, and example datasets are publicly available to support reproducibility, education, and community contributions. We invite researchers and practitioners to build upon this foundation, extending the framework's capabilities and applying it to novel motion tracking challenges. Together, we can bridge the gap between laboratory research and real-world deployment, transforming the landscape of edge AI development.
 
+\subsection{Reproducibility and Open Access}
+
+To ensure reproducibility and encourage community contributions, the complete framework source code, experimental datasets, and documentation are publicly available under the MIT open-source license:
+
+\begin{itemize}
+    \item \textbf{GitHub Repository}: \texttt{https://github.com/Bill66613/AI\_model\_generator\_framework}
+    \item \textbf{Branch}: \texttt{develop} (active development)
+    \item \textbf{License}: MIT (permits commercial and academic use, modification, and redistribution)
+\end{itemize}
+
+\subsubsection{Repository Contents}
+The repository includes:
+\begin{enumerate}
+    \item \textbf{Framework Source Code}:
+    \begin{itemize}
+        \item Dash-based web interface (\texttt{app.py}, \texttt{layouts/})
+        \item Code generation modules (\texttt{deployment/})
+        \item Data processing utilities (\texttt{utils/})
+        \item Callback implementations (\texttt{callbacks/})
+    \end{itemize}
+    
+    \item \textbf{Experimental Data}:
+    \begin{itemize}
+        \item UCI HAR dataset preprocessing scripts (\texttt{convert\_uci\_har\_to\_csv.py})
+        \item Sample datasets in \texttt{data/100hz/} directory
+        \item Pre-processed CSV files with labeled activity segments
+    \end{itemize}
+    
+    \item \textbf{Documentation}:
+    \begin{itemize}
+        \item Installation instructions (\texttt{README.md})
+        \item Preprocessing workflow guide (\texttt{docs/PREPROCESSING.md})
+        \item Deployment examples (\texttt{deployment/README.md})
+        \item Project verification scripts (\texttt{verify\_project.py})
+    \end{itemize}
+    
+    \item \textbf{Generated Deployment Code}:
+    \begin{itemize}
+        \item Example Arduino sketches (\texttt{deployment/har\_example\_usr*.ino})
+        \item Deployment configuration (\texttt{deployment/deployment\_config.toml})
+    \end{itemize}
+\end{enumerate}
+
+\subsubsection{Installation and Setup}
+Researchers wishing to reproduce our results or extend the framework should follow these steps:
+
+\begin{enumerate}
+    \item \textbf{System Requirements}:
+    \begin{itemize}
+        \item Python 3.8+ (tested on 3.10)
+        \item 4GB RAM minimum (8GB recommended for large datasets)
+        \item Arduino IDE 1.8+ or PlatformIO (for deployment validation)
+    \end{itemize}
+    
+    \item \textbf{Installation}:
+    \begin{verbatim}
+    git clone https://github.com/Bill66613/
+        AI_model_generator_framework.git
+    cd AI_model_generator_framework
+    pip install -r requirements.txt
+    \end{verbatim}
+    
+    \item \textbf{Launch Framework}:
+    \begin{verbatim}
+    python app.py
+    \end{verbatim}
+    Access web interface at \texttt{http://localhost:8050}
+    
+    \item \textbf{Hardware Setup} (optional, for deployment testing):
+    \begin{itemize}
+        \item Seeed XIAO nRF52840 or compatible ARM Cortex-M4 board
+        \item LSM6DS3 6-axis IMU sensor (often integrated on development boards)
+        \item USB cable for programming and serial monitoring
+    \end{itemize}
+    
+    \item \textbf{Reproduce Experimental Results}:
+    \begin{itemize}
+        \item Use provided UCI HAR dataset conversion: \texttt{python convert\_uci\_har\_to\_csv.py}
+        \item Follow preprocessing workflow in \texttt{docs/PREPROCESSING.md}
+        \item Train models through web interface or programmatically via \texttt{utils/model\_training.py}
+        \item Generate deployment code and flash to hardware
+    \end{itemize}
+\end{enumerate}
+
+\subsubsection{Community Engagement}
+We encourage the research community to:
+\begin{itemize}
+    \item \textbf{Report Issues}: Bug reports and feature requests via GitHub Issues
+    \item \textbf{Contribute Code}: Pull requests for new algorithms, platforms, or features
+    \item \textbf{Share Datasets}: Community-contributed activity recognition datasets in standardized format
+    \item \textbf{Publish Extensions}: Academic papers building on this framework (please cite this work)
+\end{itemize}
+
+The open-source model ensures that improvements benefit the entire research community, accelerating progress in edge AI for motion tracking and related domains.
+
 \subsection{Final Thoughts}
 
 This thesis presented a comprehensive framework addressing fundamental challenges in edge-based motion tracking: accessibility, performance, and flexibility. Through novel interactive preprocessing, systematic class imbalance handling, and optimization-aware code generation, we have created a tool that matches commercial platforms' ease-of-use while providing full control and zero cost. The experimental validation confirms that democratization and performance excellence are not mutually exclusive—they can and should coexist.
