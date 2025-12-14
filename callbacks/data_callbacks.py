@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from dash import dcc, html, Input, Output, State, callback, dash_table, ctx, no_update
 
 from config.config import *
+from config.config import get_window_pattern
 
 def parse_contents(contents, filename):
     """Parse uploaded CSV file contents into a DataFrame."""
@@ -37,6 +38,23 @@ def upload_files(contents, filenames):
     # Process each file
     for content, filename in zip(contents, filenames):
         try:
+            # If persistent directory does not exist, create it
+            if not os.path.exists(PERSISTENT_DIR):
+                os.makedirs(PERSISTENT_DIR)
+
+            # If file name already exists, rename the new file
+            file_path = os.path.join(PERSISTENT_DIR, filename)
+            if os.path.exists(file_path):
+                base, ext = os.path.splitext(filename)
+                count = 1
+                while os.path.exists(file_path):
+                    filename = f"{base}_{count}{ext}"
+                    file_path = os.path.join(PERSISTENT_DIR, filename)
+                    count += 1
+            # Update filenames list with new filename if renamed
+            if file_path != os.path.join(PERSISTENT_DIR, filename):
+                filenames[contents.index(content)] = filename
+
             df = parse_contents(content, filename)
             if df.empty:
                 raise ValueError("The uploaded file is empty.")
@@ -307,7 +325,7 @@ def delete_specific_dataset(n_clicks, dataset_name):
         
         # Delete any split window files
         import glob
-        split_pattern = os.path.join(PERSISTENT_DIR, f"dragged_window_*_{dataset_name}")
+        split_pattern = get_window_pattern(dataset_name)
         split_files = glob.glob(split_pattern)
         for split_file in split_files:
             if os.path.exists(split_file):

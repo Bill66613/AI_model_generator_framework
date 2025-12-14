@@ -41,37 +41,45 @@ Tree-based models (Random Forest, XGBoost) - they're scale-invariant
 When features already have similar scales
 Quick prototyping
 🎯 Feature Selection - Impact on Training
-🎯 All Features
-Includes: All 6 sensors (aX, aY, aZ, gX, gY, gZ)
+
+🎯 All Features (138 features: Time + Frequency Domain)
+Extracts: 90 time-domain features + 48 frequency-domain features
+- Time: 15 statistical features per axis × 6 axes = 90 features
+- Frequency: 8 FFT features per axis × 6 axes = 48 features
 
 Impact:
 
 ✅ Maximum information preserved
 ✅ Good for complex activities requiring multiple sensors
+✅ Captures both temporal patterns and frequency characteristics
 ⚠️ Risk of overfitting with small datasets
 ⚠️ Higher computational cost
-Best for: Complex activities (dancing, sports), large datasets
+⚠️ Frequency features cannot be deployed to Arduino
+Best for: Complex activities (dancing, sports), large datasets, Python-only deployment
 
-📈 Statistical Features
-Includes: Mean, std, min, max, range for each sensor
-
-Impact:
-
-✅ Dimensionality reduction while preserving key characteristics
-✅ Better generalization often achieved
-✅ Reduces noise from raw sensor readings
-⚠️ May lose temporal patterns
-Best for: Simple activities, limited computational resources
-
-🌊 Time-Domain Only
-Includes: Raw accelerometer data (aX, aY, aZ)
+📈 Raw Axes Only (6 features)
+Includes: Raw sensor readings only (aX, aY, aZ, gX, gY, gZ)
 
 Impact:
 
-✅ Lower complexity, faster training
-✅ Good for basic activities (walk, run, sit)
-⚠️ Limited for rotation-based activities
-Best for: Simple activity classification, battery-constrained devices
+✅ Extreme simplicity, fastest training
+✅ Minimal computational resources
+⚠️ Very limited discriminative power
+⚠️ Poor performance on most activities
+Best for: Testing, debugging, or extremely resource-constrained scenarios
+
+🌊 Time-Domain Only (90 features)
+Extracts: 15 statistical features per axis × 6 axes
+- Features per axis: mean, std, min, max, range, median, q25, q75, iqr, skewness, kurtosis, rms, energy, zero_crossings, mean_crossing_rate
+
+Impact:
+
+✅ Excellent balance of performance and complexity
+✅ Can be deployed to Arduino/embedded systems
+✅ Good generalization with proper window size
+✅ Captures temporal patterns without FFT complexity
+⚠️ Missing frequency-domain information
+Best for: Most real-world applications, embedded deployment, production systems
 
 📊 Custom Selection
 User-defined feature subset

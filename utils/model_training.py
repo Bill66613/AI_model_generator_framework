@@ -112,8 +112,21 @@ class EdgeMLModel:
         return X_scaled, y_encoded
 
     def train(self, X_train: pd.DataFrame, y_train: pd.Series,
-              scaler_type: str = 'standard', use_cross_validation: bool = True) -> Dict[str, Any]:
-        """Train the model with the provided data."""
+              scaler_type: str = 'standard', use_cross_validation: bool = True,
+              X_val: Optional[pd.DataFrame] = None, y_val: Optional[pd.Series] = None) -> Dict[str, Any]:
+        """Train the model with the provided data.
+        
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            scaler_type: Type of feature scaling ('standard' or 'minmax')
+            use_cross_validation: Whether to use CV for evaluation
+            X_val: Optional validation features for early stopping
+            y_val: Optional validation labels for early stopping
+        
+        Returns:
+            Dictionary containing performance metrics and training history
+        """
         logger.info(f"Training {self.model_type} model...")
 
         # Initialize model
@@ -123,11 +136,69 @@ class EdgeMLModel:
         X_scaled, y_encoded = self.preprocess_data(
             X_train, y_train, scaler_type)
 
-        # Train model
-        self.model.fit(X_scaled, y_encoded)
+        # Preprocess validation data if provided
+        X_val_scaled, y_val_encoded = None, None
+        if X_val is not None and y_val is not None:
+            X_val_scaled, y_val_encoded = self.preprocess_data(X_val, y_val)
+            logger.info(f"Using validation set: {len(X_val)} samples")
 
-        # Cross-validation for model evaluation
-        if use_cross_validation:
+        # Train model with validation-based early stopping if available
+        if self.model_type == 'neural_network' and X_val_scaled is not None:
+            # Neural networks support partial_fit for monitoring per-epoch progress
+            from sklearn.neural_network import MLPClassifier
+            
+            # Track validation accuracy per epoch
+            val_accuracies = []
+            train_accuracies = []
+            best_val_accuracy = 0
+            best_model_params = None
+            patience_counter = 0
+            patience = 10  # Stop if no improvement for 10 epochs
+            
+            logger.info("Training with validation-based early stopping...")
+            
+            # Train epoch by epoch
+            for epoch in range(self.model.max_iter):
+                # Fit one epoch (using warm_start to continue from previous state)
+                self.model.max_iter = epoch + 1
+                self.model.warm_start = True
+                self.model.fit(X_scaled, y_encoded)
+                
+                # Evaluate on validation set
+                val_pred = self.model.predict(X_val_scaled)
+                val_acc = accuracy_score(y_val_encoded, val_pred)
+                val_accuracies.append(val_acc)
+                
+                # Track training accuracy
+                train_pred = self.model.predict(X_scaled)
+                train_acc = accuracy_score(y_encoded, train_pred)
+                train_accuracies.append(train_acc)
+                
+                # Early stopping check
+                if val_acc > best_val_accuracy:
+                    best_val_accuracy = val_acc
+                    best_model_params = self.model.get_params()
+                    patience_counter = 0
+                    logger.info(f"Epoch {epoch+1}: Val Acc={val_acc:.4f} (improved) - Train Acc={train_acc:.4f}")
+                else:
+                    patience_counter += 1
+                    if patience_counter >= patience:
+                        logger.info(f"Early stopping at epoch {epoch+1}: No improvement for {patience} epochs")
+                        break
+            
+            # Store training history
+            self.performance_metrics['val_accuracies'] = val_accuracies
+            self.performance_metrics['train_accuracies'] = train_accuracies
+            self.performance_metrics['best_val_accuracy'] = best_val_accuracy
+            self.performance_metrics['stopped_epoch'] = epoch + 1
+            self.performance_metrics['early_stopped'] = (patience_counter >= patience)
+            
+        else:
+            # Standard training for other models or when no validation set
+            self.model.fit(X_scaled, y_encoded)
+
+        # Cross-validation for model evaluation (if requested and no validation used)
+        if use_cross_validation and X_val is None:
             cv_scores = cross_val_score(self.model, X_scaled, y_encoded, cv=5)
             self.performance_metrics['cv_mean_accuracy'] = cv_scores.mean()
             self.performance_metrics['cv_std_accuracy'] = cv_scores.std()
@@ -157,11 +228,18 @@ class EdgeMLModel:
         y_pred_proba = self.model.predict_proba(X_scaled) if hasattr(
             self.model, 'predict_proba') else None
 
-        # Calculate metrics
+        # Calculate metrics with original label names
         accuracy = accuracy_score(y_encoded, y_pred)
         conf_matrix = confusion_matrix(y_encoded, y_pred)
-        class_report = classification_report(
-            y_encoded, y_pred, output_dict=True)
+        
+        # Get target names for classification report
+        if self.label_encoder is not None:
+            target_names = self.label_encoder.classes_.tolist()
+            class_report = classification_report(
+                y_encoded, y_pred, target_names=target_names, output_dict=True)
+        else:
+            class_report = classification_report(
+                y_encoded, y_pred, output_dict=True)
 
         # Store evaluation results
         evaluation_results = {
@@ -169,7 +247,8 @@ class EdgeMLModel:
             'confusion_matrix': conf_matrix.tolist(),
             'classification_report': class_report,
             'predictions': y_pred.tolist(),
-            'actual_labels': y_encoded.tolist()
+            'actual_labels': y_encoded.tolist(),
+            'label_names': target_names if self.label_encoder is not None else None
         }
 
         if y_pred_proba is not None:
@@ -214,36 +293,103 @@ class EdgeMLModel:
         return importance_dict
 
     def optimize_hyperparameters(self, X_train: pd.DataFrame, y_train: pd.Series,
-                                 param_grid: Dict[str, List] = None) -> Dict[str, Any]:
-        """Optimize hyperparameters using grid search."""
+                                 param_grid: Dict[str, List] = None,
+                                 X_val: Optional[pd.DataFrame] = None,
+                                 y_val: Optional[pd.Series] = None) -> Dict[str, Any]:
+        """Optimize hyperparameters using validation set or grid search.
+        
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            param_grid: Dictionary of hyperparameters to search
+            X_val: Optional validation features for evaluation
+            y_val: Optional validation labels for evaluation
+        
+        Returns:
+            Dictionary with best parameters and optimization results
+        """
         if param_grid is None:
             param_grid = self._get_default_param_grid()
 
-        # Initialize model
-        self._initialize_model()
-
         # Preprocess data
         X_scaled, y_encoded = self.preprocess_data(X_train, y_train)
+        
+        # Preprocess validation data if provided
+        X_val_scaled, y_val_encoded = None, None
+        if X_val is not None and y_val is not None:
+            X_val_scaled, y_val_encoded = self.preprocess_data(X_val, y_val)
+            logger.info(f"Using validation-based hyperparameter tuning with {len(X_val)} samples")
+        else:
+            logger.info("Using cross-validation for hyperparameter tuning")
 
-        # Grid search
-        grid_search = GridSearchCV(
-            self.model, param_grid, cv=5, scoring='accuracy', n_jobs=-1
-        )
-        grid_search.fit(X_scaled, y_encoded)
+        # Use validation set if available, otherwise fall back to CV
+        if X_val_scaled is not None:
+            # Manual grid search using validation set
+            best_score = 0
+            best_params = None
+            best_model = None
+            
+            # Generate all parameter combinations
+            from itertools import product
+            keys = param_grid.keys()
+            values = param_grid.values()
+            param_combinations = [dict(zip(keys, v)) for v in product(*values)]
+            
+            logger.info(f"Testing {len(param_combinations)} parameter combinations...")
+            
+            for i, params in enumerate(param_combinations, 1):
+                # Initialize model with these parameters
+                self.model_params.update(params)
+                self._initialize_model()
+                
+                # Train on training set
+                self.model.fit(X_scaled, y_encoded)
+                
+                # Evaluate on validation set
+                val_pred = self.model.predict(X_val_scaled)
+                val_score = accuracy_score(y_val_encoded, val_pred)
+                
+                if val_score > best_score:
+                    best_score = val_score
+                    best_params = params.copy()
+                    best_model = self.model
+                    logger.info(f"  [{i}/{len(param_combinations)}] New best: {val_score:.4f} with {params}")
+            
+            # Update model with best parameters
+            self.model = best_model
+            self.model_params.update(best_params)
+            
+            optimization_results = {
+                'best_params': best_params,
+                'best_score': best_score,
+                'method': 'validation_set',
+                'n_combinations_tested': len(param_combinations)
+            }
+            
+        else:
+            # Initialize model
+            self._initialize_model()
+            
+            # Grid search with cross-validation
+            grid_search = GridSearchCV(
+                self.model, param_grid, cv=5, scoring='accuracy', n_jobs=-1
+            )
+            grid_search.fit(X_scaled, y_encoded)
 
-        # Update model with best parameters
-        self.model = grid_search.best_estimator_
-        self.model_params.update(grid_search.best_params_)
+            # Update model with best parameters
+            self.model = grid_search.best_estimator_
+            self.model_params.update(grid_search.best_params_)
 
-        optimization_results = {
-            'best_params': grid_search.best_params_,
-            'best_score': grid_search.best_score_,
-            'cv_results': grid_search.cv_results_
-        }
+            optimization_results = {
+                'best_params': grid_search.best_params_,
+                'best_score': grid_search.best_score_,
+                'method': 'cross_validation',
+                'cv_results': grid_search.cv_results_
+            }
 
         logger.info(
-            f"Hyperparameter optimization completed. Best score: {grid_search.best_score_:.4f}")
-        logger.info(f"Best parameters: {grid_search.best_params_}")
+            f"Hyperparameter optimization completed. Best score: {optimization_results['best_score']:.4f}")
+        logger.info(f"Best parameters: {optimization_results['best_params']}")
 
         return optimization_results
 

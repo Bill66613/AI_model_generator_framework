@@ -5,6 +5,7 @@ Handles model training, evaluation, and deployment workflows
 
 import os
 import json
+import glob
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -23,7 +24,10 @@ from datetime import datetime, timedelta
 import zipfile
 import tempfile
 
-from config.config import *
+from config.config import (
+    PERSISTENT_DIR, METADATA_FILE, MODELS_DIR,
+    get_model_path, get_models_metadata_path
+)
 from utils.model_training import EdgeMLModel, prepare_training_data, create_feature_vector
 from deployment import generate_deployment_code, analyze_resource_requirements, generate_and_save_deployment_code
 
@@ -33,23 +37,27 @@ from deployment import generate_deployment_code, analyze_resource_requirements, 
      Output('start-training-btn', 'disabled'),
      Output('optimize-hyperparams-btn', 'disabled'),
      Output('cross-validate-btn', 'disabled'),
-     Output('trained-model-selector', 'options')],
+     Output('trained-model-selector', 'options'),
+     Output('training-data-summary', 'children')],
     Input('tabs', 'value')
 )
 def enable_training_components(tab):
     """Enable training components when training tab is active and load trained models."""
     # Load available trained models using helper function
     model_options = load_trained_model_options()
+    
+    # Load training data summary
+    data_summary = load_training_data_summary()
 
     if tab == 'tab-3':
-        return False, False, False, False, model_options
-    return True, True, True, True, model_options
+        return False, False, False, False, model_options, data_summary
+    return True, True, True, True, model_options, data_summary
 
 
 # Utility functions
 def save_model_metadata(model_filename, model_info):
     """Save model metadata to the models database."""
-    model_metadata_file = os.path.join(PERSISTENT_DIR, "trained_models.json")
+    model_metadata_file = get_models_metadata_path()
 
     if os.path.exists(model_metadata_file):
         with open(model_metadata_file, 'r') as f:
@@ -67,7 +75,7 @@ def load_trained_model_options():
     """Load available trained model options for dropdown."""
     model_options = []
     try:
-        model_metadata_file = os.path.join(PERSISTENT_DIR, "trained_models.json")
+        model_metadata_file = get_models_metadata_path()
         if os.path.exists(model_metadata_file):
             with open(model_metadata_file, 'r') as f:
                 models_metadata = json.load(f)
@@ -82,38 +90,470 @@ def load_trained_model_options():
     return model_options
 
 
+def load_training_data_summary():
+    """Load and display summary of available training data."""
+    try:
+        from config.config import get_training_data_path
+        
+        training_dir = os.path.join(PERSISTENT_DIR, 'training')
+        if not os.path.exists(training_dir):
+            return html.P(
+                "⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
+                style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic', 'margin': '0'}
+            )
+        
+        # Find available datasets
+        train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
+        if not train_files:
+            return html.P(
+                "⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
+                style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic', 'margin': '0'}
+            )
+        
+        # Collect data statistics
+        all_train_dfs = []
+        all_test_dfs = []
+        all_val_dfs = []
+        all_feature_cols = set()
+        
+        # Load all datasets to get statistics
+        for train_file in train_files:
+            dataset_name = os.path.basename(train_file).replace('_train.csv', '')
+            test_file = get_training_data_path(dataset_name, 'test')
+            val_file = get_training_data_path(dataset_name, 'val')
+            
+            if os.path.exists(train_file) and os.path.exists(test_file):
+                train_df = pd.read_csv(train_file)
+                test_df = pd.read_csv(test_file)
+                
+                # Get feature columns
+                feature_cols = [col for col in train_df.columns if col != 'label']
+                all_feature_cols.update(feature_cols)
+                
+                all_train_dfs.append(train_df)
+                all_test_dfs.append(test_df)
+                
+                if os.path.exists(val_file):
+                    val_df = pd.read_csv(val_file)
+                    all_val_dfs.append(val_df)
+        
+        # Combine datasets
+        train_df = pd.concat(all_train_dfs, ignore_index=True) if all_train_dfs else None
+        test_df = pd.concat(all_test_dfs, ignore_index=True) if all_test_dfs else None
+        val_df = pd.concat(all_val_dfs, ignore_index=True) if all_val_dfs else None
+        
+        if train_df is None:
+            return html.P(
+                "⚠️ Error loading training data.",
+                style={'text-align': 'center', 'color': '#721c24', 'margin': '0'}
+            )
+        
+        # Clean labels
+        def clean_label(x):
+            if pd.notna(x):
+                label = str(x).replace('.csv', '')
+                parts = label.rsplit('_', 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    return parts[0]
+                return label
+            return x
+        
+        train_df['label'] = train_df['label'].apply(clean_label)
+        test_df['label'] = test_df['label'].apply(clean_label)
+        if val_df is not None:
+            val_df['label'] = val_df['label'].apply(clean_label)
+        
+        # Get unique labels
+        unique_labels = sorted(train_df['label'].unique())
+        label_counts = train_df['label'].value_counts()
+        
+        # Build summary display
+        return html.Div([
+            html.Div([
+                html.Div([
+                    html.H5("📊 Dataset Overview", style={'color': '#2E86AB', 'margin-bottom': '15px'}),
+                    html.Div([
+                        html.Div([
+                            html.Strong("Training Samples: "),
+                            html.Span(f"{len(train_df):,}", style={'color': '#28a745', 'font-size': '18px', 'font-weight': 'bold'})
+                        ], style={'margin-bottom': '8px'}),
+                        html.Div([
+                            html.Strong("Validation Samples: "),
+                            html.Span(f"{len(val_df):,}" if val_df is not None else "0", 
+                                     style={'color': '#17a2b8', 'font-size': '18px', 'font-weight': 'bold'})
+                        ], style={'margin-bottom': '8px'}),
+                        html.Div([
+                            html.Strong("Test Samples: "),
+                            html.Span(f"{len(test_df):,}", style={'color': '#ffc107', 'font-size': '18px', 'font-weight': 'bold'})
+                        ], style={'margin-bottom': '8px'}),
+                        html.Div([
+                            html.Strong("Features: "),
+                            html.Span(f"{len(all_feature_cols)}", style={'color': '#6610f2', 'font-size': '18px', 'font-weight': 'bold'})
+                        ])
+                    ])
+                ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-right': '2%'}),
+                
+                html.Div([
+                    html.H5("🏷️ Activity Classes", style={'color': '#2E86AB', 'margin-bottom': '15px'}),
+                    html.Div([
+                        html.Div([
+                            html.Strong("Total Classes: "),
+                            html.Span(f"{len(unique_labels)}", style={'color': '#dc3545', 'font-size': '18px', 'font-weight': 'bold'})
+                        ], style={'margin-bottom': '10px'}),
+                        html.Div([
+                            html.Ul([
+                                html.Li([
+                                    html.Span(f"{label}", style={'font-weight': 'bold'}),
+                                    html.Span(f" ({label_counts[label]} samples)", style={'color': '#6c757d', 'font-size': '14px'})
+                                ]) for label in unique_labels
+                            ], style={'margin': '0', 'padding-left': '20px'})
+                        ])
+                    ])
+                ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-left': '2%'})
+            ]),
+            
+            html.Hr(style={'margin': '20px 0', 'border-color': '#dee2e6'}),
+            
+            html.Div([
+                html.P([
+                    html.Strong("📁 Datasets Loaded: "),
+                    html.Span(f"{len(train_files)} activity dataset(s)", style={'color': '#28a745'})
+                ], style={'margin': '0', 'text-align': 'center', 'color': '#495057'})
+            ])
+        ])
+        
+    except Exception as e:
+        print(f"Error loading training data summary: {e}")
+        import traceback
+        traceback.print_exc()
+        return html.P(
+            f"⚠️ Error loading training data: {str(e)}",
+            style={'text-align': 'center', 'color': '#721c24', 'margin': '0'}
+        )
+
+
 def create_training_results_display(model_info, evaluation_results, y_test, model_type, training_time):
-    """Create comprehensive training results display."""
+    """Create comprehensive training results display with detailed metrics."""
+    
+    # Extract classification report for detailed metrics
+    class_report = evaluation_results.get('classification_report', {})
+    
+    # Calculate overall metrics
+    train_acc = model_info.get('train_accuracy', 0)
+    test_acc = model_info['test_accuracy']
+    val_acc = model_info.get('val_accuracy', 0)
+    cv_acc = model_info.get('cv_accuracy', 0)
+    
+    # Determine performance status
+    if test_acc >= 0.95:
+        status_color = '#28a745'  # Excellent - Green
+        status_text = "Excellent"
+        status_icon = "🌟"
+    elif test_acc >= 0.85:
+        status_color = '#17a2b8'  # Good - Blue
+        status_text = "Good"
+        status_icon = "✅"
+    elif test_acc >= 0.75:
+        status_color = '#ffc107'  # Fair - Yellow
+        status_text = "Fair"
+        status_icon = "⚠️"
+    else:
+        status_color = '#dc3545'  # Needs Improvement - Red
+        status_text = "Needs Improvement"
+        status_icon = "❌"
+    
+    # Check for overfitting
+    overfitting_warning = []
+    if train_acc - test_acc > 0.1:
+        overfitting_warning = [
+            html.Div([
+                html.Strong("⚠️ Overfitting Detected: ", style={'color': '#dc3545'}),
+                html.Span(f"Training accuracy ({train_acc:.4f}) is significantly higher than test accuracy ({test_acc:.4f}). "),
+                html.Span("Consider: reducing model complexity, adding regularization, or collecting more training data.")
+            ], style={
+                'background-color': '#fff3cd',
+                'border-left': '4px solid #ffc107',
+                'padding': '12px',
+                'margin': '15px 0',
+                'border-radius': '4px'
+            })
+        ]
+    
+    # Build per-class metrics table
+    per_class_metrics = []
+    if class_report:
+        # Extract per-class metrics (excluding 'accuracy', 'macro avg', 'weighted avg')
+        class_names = [k for k in class_report.keys() if k not in ['accuracy', 'macro avg', 'weighted avg']]
+        
+        if class_names:
+            per_class_metrics = [
+                html.H5("📊 Per-Class Performance:", style={'margin-top': '20px', 'color': '#2E86AB'}),
+                html.Div([
+                    html.Table([
+                        html.Thead(
+                            html.Tr([
+                                html.Th("Activity", style={'text-align': 'left', 'padding': '10px', 'background-color': '#e9ecef'}),
+                                html.Th("Precision", style={'text-align': 'center', 'padding': '10px', 'background-color': '#e9ecef'}),
+                                html.Th("Recall", style={'text-align': 'center', 'padding': '10px', 'background-color': '#e9ecef'}),
+                                html.Th("F1-Score", style={'text-align': 'center', 'padding': '10px', 'background-color': '#e9ecef'}),
+                                html.Th("Support", style={'text-align': 'center', 'padding': '10px', 'background-color': '#e9ecef'})
+                            ])
+                        ),
+                        html.Tbody([
+                            html.Tr([
+                                html.Td(class_name.replace('_', ' ').title(), style={'padding': '8px', 'font-weight': 'bold'}),
+                                html.Td(f"{class_report[class_name]['precision']:.3f}", 
+                                       style={'text-align': 'center', 'padding': '8px', 
+                                              'color': '#28a745' if class_report[class_name]['precision'] >= 0.9 else '#495057'}),
+                                html.Td(f"{class_report[class_name]['recall']:.3f}", 
+                                       style={'text-align': 'center', 'padding': '8px',
+                                              'color': '#28a745' if class_report[class_name]['recall'] >= 0.9 else '#495057'}),
+                                html.Td(f"{class_report[class_name]['f1-score']:.3f}", 
+                                       style={'text-align': 'center', 'padding': '8px',
+                                              'color': '#28a745' if class_report[class_name]['f1-score'] >= 0.9 else '#495057'}),
+                                html.Td(f"{int(class_report[class_name]['support'])}", 
+                                       style={'text-align': 'center', 'padding': '8px'})
+                            ], style={'border-bottom': '1px solid #dee2e6'})
+                            for class_name in sorted(class_names)
+                        ])
+                    ], style={
+                        'width': '100%',
+                        'border-collapse': 'collapse',
+                        'border': '1px solid #dee2e6',
+                        'border-radius': '4px'
+                    })
+                ], style={'overflow-x': 'auto'})
+            ]
+            
+            # Add macro/weighted averages
+            if 'macro avg' in class_report or 'weighted avg' in class_report:
+                avg_rows = []
+                if 'macro avg' in class_report:
+                    avg_rows.append(
+                        html.Tr([
+                            html.Td("Macro Average", style={'padding': '8px', 'font-weight': 'bold', 'background-color': '#f8f9fa'}),
+                            html.Td(f"{class_report['macro avg']['precision']:.3f}", 
+                                   style={'text-align': 'center', 'padding': '8px', 'background-color': '#f8f9fa'}),
+                            html.Td(f"{class_report['macro avg']['recall']:.3f}", 
+                                   style={'text-align': 'center', 'padding': '8px', 'background-color': '#f8f9fa'}),
+                            html.Td(f"{class_report['macro avg']['f1-score']:.3f}", 
+                                   style={'text-align': 'center', 'padding': '8px', 'background-color': '#f8f9fa'}),
+                            html.Td(f"{int(class_report['macro avg']['support'])}", 
+                                   style={'text-align': 'center', 'padding': '8px', 'background-color': '#f8f9fa'})
+                        ])
+                    )
+                if 'weighted avg' in class_report:
+                    avg_rows.append(
+                        html.Tr([
+                            html.Td("Weighted Average", style={'padding': '8px', 'font-weight': 'bold', 'background-color': '#f8f9fa'}),
+                            html.Td(f"{class_report['weighted avg']['precision']:.3f}", 
+                                   style={'text-align': 'center', 'padding': '8px', 'background-color': '#f8f9fa'}),
+                            html.Td(f"{class_report['weighted avg']['recall']:.3f}", 
+                                   style={'text-align': 'center', 'padding': '8px', 'background-color': '#f8f9fa'}),
+                            html.Td(f"{class_report['weighted avg']['f1-score']:.3f}", 
+                                   style={'text-align': 'center', 'padding': '8px', 'background-color': '#f8f9fa'}),
+                            html.Td(f"{int(class_report['weighted avg']['support'])}", 
+                                   style={'text-align': 'center', 'padding': '8px', 'background-color': '#f8f9fa'})
+                        ])
+                    )
+                
+                if avg_rows:
+                    per_class_metrics.append(
+                        html.Table([
+                            html.Tbody(avg_rows)
+                        ], style={
+                            'width': '100%',
+                            'border-collapse': 'collapse',
+                            'border': '1px solid #dee2e6',
+                            'margin-top': '10px'
+                        })
+                    )
+    
+    # Build early stopping info
+    early_stopping_info = []
+    if model_info.get('early_stopped', False):
+        early_stopping_info = [
+            html.Div([
+                html.H5("⏱️ Early Stopping Applied", style={'color': '#17a2b8', 'margin-bottom': '10px'}),
+                html.Div([
+                    html.P([
+                        html.Strong("Stopped at Epoch: "),
+                        html.Span(f"{model_info.get('stopped_epoch', 'N/A')}", style={'color': '#17a2b8', 'font-size': '16px'})
+                    ], style={'margin': '5px 0'}),
+                    html.P([
+                        html.Strong("Best Validation Accuracy: "),
+                        html.Span(f"{model_info.get('val_accuracy', 0):.4f}", style={'color': '#28a745', 'font-size': '16px'})
+                    ], style={'margin': '5px 0'}),
+                    html.P([
+                        html.Strong("Reason: "),
+                        html.Span("No improvement for 10 consecutive epochs")
+                    ], style={'margin': '5px 0'})
+                ])
+            ], style={
+                'background-color': '#d1ecf1',
+                'border-left': '4px solid #17a2b8',
+                'padding': '15px',
+                'margin': '15px 0',
+                'border-radius': '4px'
+            })
+        ]
+    
     return html.Div([
-        html.H4("✅ Model Training Completed!", style={'color': 'green'}),
-        html.Hr(),
-        html.H5("📊 Training Summary:"),
-        html.Ul([
-            html.Li(f"Model Type: {model_type.replace('_', ' ').title()}"),
-            html.Li(f"Training Samples: {model_info['training_samples']}"),
-            html.Li(f"Test Samples: {model_info['test_samples']}"),
-            html.Li(f"Features: {model_info['features']}"),
-            html.Li(f"Activity Classes: {model_info['classes']}"),
-            html.Li(f"Training Time: {training_time:.2f} seconds"),
+        # Success Header with Status Badge
+        html.Div([
+            html.Div([
+                html.H4("✅ Model Training Completed!", style={'color': '#28a745', 'display': 'inline-block', 'margin-right': '15px'}),
+                html.Span([
+                    html.Span(status_icon + " ", style={'font-size': '18px'}),
+                    html.Span(status_text, style={'font-weight': 'bold'})
+                ], style={
+                    'background-color': status_color,
+                    'color': 'white',
+                    'padding': '8px 16px',
+                    'border-radius': '20px',
+                    'display': 'inline-block',
+                    'font-size': '14px'
+                })
+            ], style={'margin-bottom': '10px'})
         ]),
-        html.H5("🎯 Performance Metrics:"),
-        html.Ul([
-            html.Li(
-                f"Training Accuracy: {model_info.get('train_accuracy', 0):.4f}"),
-            html.Li(f"Test Accuracy: {model_info['test_accuracy']:.4f}"),
-            html.Li(
-                f"Cross-Validation Accuracy: {model_info.get('cv_accuracy', 0):.4f}"),
-        ]),
-        html.H5("💾 Model Saved:"),
-        html.P(f"Model saved as: {os.path.basename(model_info['model_path'])}", style={
-            'font-family': 'monospace',
-            'background-color': '#f0f0f0',
-            'padding': '10px'
+        
+        html.Hr(style={'margin': '20px 0'}),
+        
+        # Two-column layout for summary
+        html.Div([
+            # Left column - Training Configuration
+            html.Div([
+                html.H5("⚙️ Training Configuration", style={'color': '#2E86AB', 'margin-bottom': '15px'}),
+                html.Ul([
+                    html.Li([html.Strong("Model Type: "), model_type.replace('_', ' ').title()]),
+                    html.Li([html.Strong("Features: "), f"{model_info['features']}"]),
+                    html.Li([html.Strong("Classes: "), f"{model_info['classes']}"]),
+                    html.Li([html.Strong("Training Time: "), f"{training_time:.2f}s"]),
+                ], style={'list-style-type': 'none', 'padding': '0'})
+            ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-right': '2%'}),
+            
+            # Right column - Dataset Split
+            html.Div([
+                html.H5("📊 Dataset Split", style={'color': '#2E86AB', 'margin-bottom': '15px'}),
+                html.Ul([
+                    html.Li([html.Strong("Training: "), f"{model_info['training_samples']} samples"]),
+                    html.Li([html.Strong("Validation: "), f"{model_info.get('val_samples', 0)} samples"]),
+                    html.Li([html.Strong("Test: "), f"{model_info['test_samples']} samples"]),
+                    html.Li([html.Strong("Total: "), f"{model_info['training_samples'] + model_info.get('val_samples', 0) + model_info['test_samples']} samples"])
+                ], style={'list-style-type': 'none', 'padding': '0'})
+            ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-left': '2%'})
+        ], style={'margin-bottom': '20px'}),
+        
+        # Accuracy Metrics Cards
+        html.Div([
+            html.Div([
+                html.Div([
+                    html.H6("Training", style={'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '12px'}),
+                    html.Div(f"{train_acc:.1%}", style={'font-size': '24px', 'font-weight': 'bold', 'color': '#007bff'})
+                ], style={
+                    'background-color': '#f8f9fa',
+                    'padding': '15px',
+                    'border-radius': '8px',
+                    'text-align': 'center',
+                    'border': '2px solid #007bff',
+                    'width': '23%',
+                    'display': 'inline-block',
+                    'margin-right': '2%'
+                })
+            ]),
+            html.Div([
+                html.Div([
+                    html.H6("Validation", style={'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '12px'}),
+                    html.Div(f"{val_acc:.1%}" if val_acc > 0 else "N/A", 
+                            style={'font-size': '24px', 'font-weight': 'bold', 'color': '#17a2b8'})
+                ], style={
+                    'background-color': '#f8f9fa',
+                    'padding': '15px',
+                    'border-radius': '8px',
+                    'text-align': 'center',
+                    'border': '2px solid #17a2b8',
+                    'width': '23%',
+                    'display': 'inline-block',
+                    'margin-right': '2%'
+                })
+            ]) if val_acc > 0 else html.Div(),
+            html.Div([
+                html.Div([
+                    html.H6("Test", style={'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '12px'}),
+                    html.Div(f"{test_acc:.1%}", style={'font-size': '24px', 'font-weight': 'bold', 'color': '#28a745'})
+                ], style={
+                    'background-color': '#f8f9fa',
+                    'padding': '15px',
+                    'border-radius': '8px',
+                    'text-align': 'center',
+                    'border': '2px solid #28a745',
+                    'width': '23%',
+                    'display': 'inline-block',
+                    'margin-right': '2%' if cv_acc == 0 else '2%'
+                })
+            ]),
+            html.Div([
+                html.Div([
+                    html.H6("Cross-Validation", style={'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '12px'}),
+                    html.Div(f"{cv_acc:.1%}", style={'font-size': '24px', 'font-weight': 'bold', 'color': '#ffc107'})
+                ], style={
+                    'background-color': '#f8f9fa',
+                    'padding': '15px',
+                    'border-radius': '8px',
+                    'text-align': 'center',
+                    'border': '2px solid #ffc107',
+                    'width': '23%',
+                    'display': 'inline-block'
+                })
+            ]) if cv_acc > 0 else html.Div()
+        ], style={'margin': '20px 0'}),
+        
+        # Overfitting Warning
+        *overfitting_warning,
+        
+        # Early Stopping Info
+        *early_stopping_info,
+        
+        # Per-Class Metrics
+        *per_class_metrics,
+        
+        html.Hr(style={'margin': '25px 0'}),
+        
+        # Model Saved Info
+        html.Div([
+            html.H5("💾 Model Saved Successfully", style={'color': '#28a745', 'margin-bottom': '10px'}),
+            html.P([
+                html.Strong("Filename: "),
+                html.Code(os.path.basename(model_info['model_path']), style={
+                    'background-color': '#f8f9fa',
+                    'padding': '4px 8px',
+                    'border-radius': '4px',
+                    'color': '#212529'
+                })
+            ], style={'margin': '5px 0'}),
+            html.P([
+                html.Strong("Location: "),
+                html.Code(os.path.dirname(model_info['model_path']), style={
+                    'background-color': '#f8f9fa',
+                    'padding': '4px 8px',
+                    'border-radius': '4px',
+                    'color': '#212529',
+                    'font-size': '11px'
+                })
+            ], style={'margin': '5px 0'})
+        ], style={
+            'background-color': '#d4edda',
+            'border-left': '4px solid #28a745',
+            'padding': '15px',
+            'border-radius': '4px',
+            'margin-bottom': '25px'
         }),
-        html.Hr(),
+        
+        # Visualizations
+        html.Hr(style={'margin': '25px 0'}),
         dcc.Graph(
             figure=create_training_results_visualization(
-                evaluation_results, y_test, model_type)
+                evaluation_results, y_test, model_type, model_info)
         )
     ])
 
@@ -141,77 +581,209 @@ def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type
         ]), no_update)
 
     try:
-        # Load metadata to find processed windows
-        if not os.path.exists(METADATA_FILE):
+        from config.config import get_training_data_path
+        
+        # Get list of available training datasets
+        training_dir = os.path.join(PERSISTENT_DIR, 'training')
+        if not os.path.exists(training_dir):
             return (html.Div([
-                html.H4("❌ No datasets found.", style={'color': 'red'}),
-                html.P("Please upload and preprocess data first.")
+                html.H4("❌ No training data found.", style={'color': 'red'}),
+                html.P("Please perform train-validation-test split first.")
             ]), no_update)
 
-        with open(METADATA_FILE, 'r') as f:
-            metadata = json.load(f)
-
-        # Collect all processed window files
-        window_files = []
-        labels = []
-
-        for dataset_name, dataset_info in metadata.items():
-            if 'dragged_samples' in dataset_info:
-                dataset_label = dataset_info.get(
-                    'label', dataset_name.replace('.csv', ''))
-                for sample_file in dataset_info['dragged_samples']:
-                    if os.path.exists(sample_file):
-                        window_files.append(sample_file)
-                        labels.append(dataset_label)
-
-        if not window_files:
+        # Find available datasets (look for *_train.csv files)
+        train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
+        if not train_files:
             return (html.Div([
-                html.H4("❌ No processed windows found.",
-                        style={'color': 'red'}),
-                html.P("Please preprocess your data and create time windows first.")
+                html.H4("❌ No training data found.", style={'color': 'red'}),
+                html.P("Please perform train-validation-test split first.")
             ]), no_update)
 
-        # Prepare training data - use only time-domain features (90 features)
-        # Frequency features excluded for training-deployment parity
-        X, y = prepare_training_data(window_files, labels, include_frequency=False)
-
-        if X.empty:
+        # Load and combine ALL training files
+        all_train_dfs = []
+        all_test_dfs = []
+        all_val_dfs = []
+        
+        # First pass: collect all unique feature columns
+        all_feature_cols = set()
+        for train_file in train_files:
+            temp_df = pd.read_csv(train_file)
+            feature_cols = [col for col in temp_df.columns if col != 'label']
+            all_feature_cols.update(feature_cols)
+            print(f"DEBUG: {os.path.basename(train_file)} has {len(feature_cols)} features")
+        
+        all_feature_cols = sorted(list(all_feature_cols))
+        print(f"DEBUG: Total unique features across all files: {len(all_feature_cols)}")
+        
+        # Second pass: load data and align columns
+        for train_file in train_files:
+            dataset_name = os.path.basename(train_file).replace('_train.csv', '')
+            test_file = get_training_data_path(dataset_name, 'test')
+            val_file = get_training_data_path(dataset_name, 'val')
+            
+            if os.path.exists(train_file) and os.path.exists(test_file):
+                # Load and clean labels
+                train_df = pd.read_csv(train_file)
+                test_df = pd.read_csv(test_file)
+                
+                # Clean labels: remove .csv extension and trailing numeric suffix only
+                # "laying_1.csv" -> "laying", "walking_downstairs_2.csv" -> "walking_downstairs"
+                def clean_label(x):
+                    if pd.notna(x):
+                        label = str(x).replace('.csv', '')
+                        # Only remove suffix if it's a number (like _1, _2, _3)
+                        parts = label.rsplit('_', 1)
+                        if len(parts) == 2 and parts[1].isdigit():
+                            return parts[0]
+                        return label
+                    return x
+                
+                train_df['label'] = train_df['label'].apply(clean_label)
+                test_df['label'] = test_df['label'].apply(clean_label)
+                
+                # Align columns - add missing features with 0
+                for col in all_feature_cols:
+                    if col not in train_df.columns:
+                        train_df[col] = 0.0
+                    if col not in test_df.columns:
+                        test_df[col] = 0.0
+                
+                # Reorder columns to match
+                train_df = train_df[all_feature_cols + ['label']]
+                test_df = test_df[all_feature_cols + ['label']]
+                
+                all_train_dfs.append(train_df)
+                all_test_dfs.append(test_df)
+                
+                if os.path.exists(val_file):
+                    val_df = pd.read_csv(val_file)
+                    val_df['label'] = val_df['label'].apply(clean_label)
+                    
+                    # Align columns
+                    for col in all_feature_cols:
+                        if col not in val_df.columns:
+                            val_df[col] = 0.0
+                    val_df = val_df[all_feature_cols + ['label']]
+                    
+                    all_val_dfs.append(val_df)
+        
+        if not all_train_dfs or not all_test_dfs:
             return (html.Div([
-                html.H4("❌ Failed to prepare training data.",
-                        style={'color': 'red'}),
-                html.P("Check your window files.")
+                html.H4("❌ No valid training data found.", style={'color': 'red'}),
+                html.P("Please check your training data files.")
             ]), no_update)
-
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
+        
+        # Combine all datasets
+        train_df = pd.concat(all_train_dfs, ignore_index=True)
+        test_df = pd.concat(all_test_dfs, ignore_index=True)
+        
+        # Debug: Check what's in the data
+        print(f"DEBUG: Combined {len(all_train_dfs)} training files")
+        print(f"DEBUG: Train shape: {train_df.shape}")
+        print(f"DEBUG: Unique labels in train: {train_df['label'].unique()}")
+        print(f"DEBUG: Label counts in train:\n{train_df['label'].value_counts()}")
+        
+        # Handle NaN values before training
+        # Check for NaN in features
+        feature_cols = [col for col in train_df.columns if col != 'label']
+        nan_counts_train = train_df[feature_cols].isna().sum()
+        nan_counts_test = test_df[feature_cols].isna().sum()
+        
+        if nan_counts_train.sum() > 0:
+            print(f"WARNING: Found {nan_counts_train.sum()} NaN values in training features")
+            print(f"NaN counts per feature:\n{nan_counts_train[nan_counts_train > 0]}")
+            # Replace NaN with 0
+            train_df[feature_cols] = train_df[feature_cols].fillna(0)
+        
+        if nan_counts_test.sum() > 0:
+            print(f"WARNING: Found {nan_counts_test.sum()} NaN values in test features")
+            # Replace NaN with 0
+            test_df[feature_cols] = test_df[feature_cols].fillna(0)
+        
+        # Check for NaN in labels
+        if train_df['label'].isna().any():
+            print(f"WARNING: Found {train_df['label'].isna().sum()} NaN labels in training data - removing these rows")
+            train_df = train_df.dropna(subset=['label'])
+        
+        if test_df['label'].isna().any():
+            print(f"WARNING: Found {test_df['label'].isna().sum()} NaN labels in test data - removing these rows")
+            test_df = test_df.dropna(subset=['label'])
+        
+        X_train = train_df.drop('label', axis=1).values
+        y_train = train_df['label'].values
+        X_test = test_df.drop('label', axis=1).values
+        y_test = test_df['label'].values
+        
+        print(f"DEBUG: y_train unique: {np.unique(y_train)}")
+        print(f"DEBUG: y_test unique: {np.unique(y_test)}")
+        print(f"DEBUG: X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
+        
+        # Check for validation data
+        X_val, y_val = None, None
+        if all_val_dfs:
+            val_df = pd.concat(all_val_dfs, ignore_index=True)
+            
+            # Handle NaN in validation data
+            feature_cols = [col for col in val_df.columns if col != 'label']
+            if val_df[feature_cols].isna().sum().sum() > 0:
+                print(f"WARNING: Found {val_df[feature_cols].isna().sum().sum()} NaN values in validation features")
+                val_df[feature_cols] = val_df[feature_cols].fillna(0)
+            
+            if val_df['label'].isna().any():
+                print(f"WARNING: Found {val_df['label'].isna().sum()} NaN labels in validation data - removing these rows")
+                val_df = val_df.dropna(subset=['label'])
+            
+            X_val = val_df.drop('label', axis=1).values
+            y_val = val_df['label'].values
+            print(f"DEBUG: y_val unique: {np.unique(y_val)}")
 
         # Create model
         model = EdgeMLModel(model_type)
 
         if button_id == 'start-training-btn':
-            return perform_basic_training(model, X_train, X_test, y_train, y_test, model_type)
+            return perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val)
         elif button_id == 'optimize-hyperparams-btn':
-            return perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type)
+            return perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val)
         elif button_id == 'cross-validate-btn':
+            # CV doesn't use validation set
             return perform_cross_validation(model, X_train, y_train, model_type)
 
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         return (html.Div([
             html.H4("❌ Training failed", style={'color': 'red'}),
-            html.P(f"Error: {str(e)}")
+            html.P(f"Error: {str(e)}"),
+            html.Pre(error_details, style={'font-size': '10px', 'max-height': '200px', 'overflow': 'auto'})
         ]), no_update)
 
 
-def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type):
-    """Perform basic model training."""
+def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None):
+    """Perform basic model training with optional validation set."""
     start_time = time.time()
 
-    # Training
-    training_results = model.train(X_train, y_train, use_cross_validation=True)
+    # Training - use CV only if no validation set provided
+    use_cv = (X_val is None or y_val is None)
+    
+    # Pass validation data to train() for early stopping
+    training_results = model.train(
+        X_train, y_train, 
+        use_cross_validation=use_cv,
+        X_val=X_val,
+        y_val=y_val
+    )
 
-    # Evaluation
+    # Evaluation on validation set if available (not needed for early stopping models)
+    val_accuracy = None
+    if not use_cv:
+        # Check if already evaluated during training (early stopping)
+        if 'best_val_accuracy' in training_results:
+            val_accuracy = training_results['best_val_accuracy']
+        else:
+            val_predictions = model.predict(X_val)
+            val_accuracy = np.mean(val_predictions == y_val)
+    
+    # Evaluation on test set
     evaluation_results = model.evaluate(X_test, y_test)
 
     training_time = time.time() - start_time
@@ -219,7 +791,7 @@ def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type):
     # Save trained model
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_filename = f"{model_type}_har_model_{timestamp}.joblib"
-    model_path = os.path.join(PERSISTENT_DIR, model_filename)
+    model_path = get_model_path(model_filename)
     model.save_model(model_path)
 
     # Update metadata with model info
@@ -227,12 +799,18 @@ def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type):
         'model_path': model_path,
         'model_type': model_type,
         'training_samples': len(X_train),
+        'val_samples': len(X_val) if X_val is not None else 0,
         'test_samples': len(X_test),
-        'features': len(X_train.columns),
+        'features': X_train.shape[1] if len(X_train.shape) > 1 else 1,
         'classes': len(set(y_train)),
         'train_accuracy': training_results['train_accuracy'],
+        'val_accuracy': val_accuracy if val_accuracy is not None else 0,
         'test_accuracy': evaluation_results['test_accuracy'],
-        'cv_accuracy': training_results.get('cv_mean_accuracy', 0),
+        'cv_accuracy': training_results.get('cv_mean_accuracy', 0) if use_cv else 0,
+        'used_validation': not use_cv,
+        'early_stopped': training_results.get('early_stopped', False),
+        'stopped_epoch': training_results.get('stopped_epoch', None),
+        'performance_metrics': training_results,  # Include full training results for visualization
         'training_time': training_time,
         'timestamp': timestamp
     }
@@ -246,14 +824,24 @@ def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type):
     return training_output, updated_options
 
 
-def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type):
-    """Perform hyperparameter optimization."""
+def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None):
+    """Perform hyperparameter optimization with optional validation set."""
     start_time = time.time()
 
-    # Hyperparameter optimization
-    optimization_results = model.optimize_hyperparameters(X_train, y_train)
+    # Hyperparameter optimization - uses validation set if available, otherwise CV
+    optimization_results = model.optimize_hyperparameters(
+        X_train, y_train,
+        X_val=X_val,
+        y_val=y_val
+    )
 
-    # Evaluate optimized model
+    # Evaluate on validation set if available (already done during optimization)
+    val_accuracy = None
+    if X_val is not None and y_val is not None:
+        val_predictions = model.predict(X_val)
+        val_accuracy = np.mean(val_predictions == y_val)
+    
+    # Evaluate optimized model on test set
     evaluation_results = model.evaluate(X_test, y_test)
 
     training_time = time.time() - start_time
@@ -261,7 +849,7 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
     # Save optimized model
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_filename = f"{model_type}_optimized_{timestamp}.joblib"
-    model_path = os.path.join(PERSISTENT_DIR, model_filename)
+    model_path = get_model_path(model_filename)
     model.save_model(model_path)
 
     # Update metadata
@@ -269,12 +857,16 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
         'model_path': model_path,
         'model_type': model_type,
         'training_samples': len(X_train),
+        'val_samples': len(X_val) if X_val is not None else 0,
         'test_samples': len(X_test),
-        'features': len(X_train.columns),
+        'features': X_train.shape[1] if len(X_train.shape) > 1 else 1,
         'classes': len(set(y_train)),
+        'val_accuracy': val_accuracy if val_accuracy is not None else 0,
         'test_accuracy': evaluation_results['test_accuracy'],
         'best_params': optimization_results['best_params'],
         'optimization_score': optimization_results['best_score'],
+        'optimization_method': optimization_results.get('method', 'cross_validation'),
+        'used_validation': (X_val is not None and y_val is not None),
         'training_time': training_time,
         'timestamp': timestamp,
         'optimized': True
@@ -282,32 +874,167 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
 
     save_model_metadata(model_filename, model_info)
 
+    # Determine optimization method used
+    opt_method = optimization_results.get('method', 'cross_validation')
+    method_badge = "Validation Set" if opt_method == 'validation_set' else "Cross-Validation"
+    method_color = '#17a2b8' if opt_method == 'validation_set' else '#ffc107'
+    
+    # Calculate improvement info if available
+    test_acc = evaluation_results['test_accuracy']
+    opt_score = optimization_results['best_score']
+    
     optimization_output = html.Div([
-        html.H4("✅ Hyperparameter Optimization Completed!",
-                style={'color': 'green'}),
-        html.Hr(),
-        html.H5("🎯 Optimization Results:"),
-        html.Ul([
-            html.Li(f"Model Type: {model_type.replace('_', ' ').title()}"),
-            html.Li(
-                f"Best CV Score: {optimization_results['best_score']:.4f}"),
-            html.Li(
-                f"Test Accuracy: {evaluation_results['test_accuracy']:.4f}"),
-            html.Li(f"Training Time: {training_time:.2f} seconds"),
-        ]),
-        html.H5("⚙️ Best Parameters:"),
-        html.Ul([
-            html.Li(f"{param}: {value}")
-            for param, value in optimization_results['best_params'].items()
-        ]),
-        html.P(f"Optimized model saved as: {model_filename}", style={
-            'font-family': 'monospace',
-            'background-color': '#f0f0f0',
-            'padding': '10px'
+        # Header with method badge
+        html.Div([
+            html.H4("✅ Hyperparameter Optimization Completed!", 
+                   style={'color': '#28a745', 'display': 'inline-block', 'margin-right': '15px'}),
+            html.Span(method_badge, style={
+                'background-color': method_color,
+                'color': 'white',
+                'padding': '8px 16px',
+                'border-radius': '20px',
+                'font-size': '14px',
+                'font-weight': 'bold'
+            })
+        ], style={'margin-bottom': '15px'}),
+        
+        html.Hr(style={'margin': '20px 0'}),
+        
+        # Optimization Summary Cards
+        html.Div([
+            html.Div([
+                html.Div([
+                    html.H6("Optimization Score", style={'color': '#6c757d', 'margin': '0 0 8px 0', 'font-size': '13px'}),
+                    html.Div(f"{opt_score:.1%}", style={'font-size': '28px', 'font-weight': 'bold', 'color': '#007bff'}),
+                    html.P(f"via {method_badge}", style={'font-size': '11px', 'color': '#6c757d', 'margin': '5px 0 0 0'})
+                ], style={
+                    'background': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    'color': 'white',
+                    'padding': '20px',
+                    'border-radius': '10px',
+                    'text-align': 'center',
+                    'width': '30%',
+                    'display': 'inline-block',
+                    'margin-right': '3%',
+                    'box-shadow': '0 4px 6px rgba(0,0,0,0.1)'
+                })
+            ]),
+            html.Div([
+                html.Div([
+                    html.H6("Test Accuracy", style={'color': '#6c757d', 'margin': '0 0 8px 0', 'font-size': '13px'}),
+                    html.Div(f"{test_acc:.1%}", style={'font-size': '28px', 'font-weight': 'bold', 'color': '#28a745'}),
+                    html.P("on holdout set", style={'font-size': '11px', 'color': '#6c757d', 'margin': '5px 0 0 0'})
+                ], style={
+                    'background': 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                    'color': 'white',
+                    'padding': '20px',
+                    'border-radius': '10px',
+                    'text-align': 'center',
+                    'width': '30%',
+                    'display': 'inline-block',
+                    'margin-right': '3%',
+                    'box-shadow': '0 4px 6px rgba(0,0,0,0.1)'
+                })
+            ]),
+            html.Div([
+                html.Div([
+                    html.H6("Training Time", style={'color': '#6c757d', 'margin': '0 0 8px 0', 'font-size': '13px'}),
+                    html.Div(f"{training_time:.1f}s", style={'font-size': '28px', 'font-weight': 'bold', 'color': '#ffc107'}),
+                    html.P("optimization", style={'font-size': '11px', 'color': '#6c757d', 'margin': '5px 0 0 0'})
+                ], style={
+                    'background': 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                    'color': 'white',
+                    'padding': '20px',
+                    'border-radius': '10px',
+                    'text-align': 'center',
+                    'width': '30%',
+                    'display': 'inline-block',
+                    'box-shadow': '0 4px 6px rgba(0,0,0,0.1)'
+                })
+            ])
+        ], style={'margin': '25px 0'}),
+        
+        # Best Parameters Section
+        html.Div([
+            html.H5("⚙️ Optimized Hyperparameters", style={'color': '#2E86AB', 'margin-bottom': '15px'}),
+            html.Div([
+                html.Table([
+                    html.Thead(
+                        html.Tr([
+                            html.Th("Parameter", style={'text-align': 'left', 'padding': '12px', 'background-color': '#e9ecef', 'width': '40%'}),
+                            html.Th("Value", style={'text-align': 'left', 'padding': '12px', 'background-color': '#e9ecef', 'width': '60%'})
+                        ])
+                    ),
+                    html.Tbody([
+                        html.Tr([
+                            html.Td(param.replace('_', ' ').title(), 
+                                   style={'padding': '10px', 'font-weight': 'bold', 'color': '#495057'}),
+                            html.Td(html.Code(str(value), style={
+                                'background-color': '#f8f9fa',
+                                'padding': '4px 8px',
+                                'border-radius': '4px',
+                                'color': '#007bff',
+                                'font-weight': 'bold'
+                            }), style={'padding': '10px'})
+                        ], style={'border-bottom': '1px solid #dee2e6'})
+                        for param, value in optimization_results['best_params'].items()
+                    ])
+                ], style={
+                    'width': '100%',
+                    'border-collapse': 'collapse',
+                    'border': '1px solid #dee2e6',
+                    'border-radius': '6px',
+                    'overflow': 'hidden'
+                })
+            ])
+        ], style={
+            'background-color': '#ffffff',
+            'padding': '20px',
+            'border-radius': '8px',
+            'border': '1px solid #dee2e6',
+            'margin': '20px 0'
         }),
+        
+        # Model Info
+        html.Div([
+            html.H5("💾 Model Information", style={'color': '#28a745', 'margin-bottom': '10px'}),
+            html.Div([
+                html.Div([
+                    html.Strong("Filename: "),
+                    html.Code(model_filename, style={
+                        'background-color': '#f8f9fa',
+                        'padding': '4px 8px',
+                        'border-radius': '4px',
+                        'color': '#212529'
+                    })
+                ], style={'margin-bottom': '8px'}),
+                html.Div([
+                    html.Strong("Type: "),
+                    html.Span(model_type.replace('_', ' ').title())
+                ], style={'margin-bottom': '8px'}),
+                html.Div([
+                    html.Strong("Optimization Method: "),
+                    html.Span(method_badge, style={'color': method_color, 'font-weight': 'bold'})
+                ], style={'margin-bottom': '8px'}),
+                html.Div([
+                    html.Strong("Timestamp: "),
+                    html.Span(timestamp)
+                ])
+            ])
+        ], style={
+            'background-color': '#d4edda',
+            'border-left': '4px solid #28a745',
+            'padding': '15px',
+            'border-radius': '4px',
+            'margin': '20px 0'
+        }),
+        
+        html.Hr(style={'margin': '25px 0'}),
+        
+        # Visualizations
         dcc.Graph(
             figure=create_training_results_visualization(
-                evaluation_results, y_test, model_type)
+                evaluation_results, y_test, model_type, model_info)
         )
     ])
     updated_options = load_trained_model_options()
@@ -376,49 +1103,136 @@ def create_cv_visualization(cv_results, model_type):
     return fig
 
 
-def create_training_results_visualization(evaluation_results, y_test, model_type):
+def create_training_results_visualization(evaluation_results, y_test, model_type, model_info=None):
     """Create comprehensive visualization of training results."""
 
-    # Create subplots
-    fig = make_subplots(
-        rows=2, cols=2,
-        subplot_titles=('Confusion Matrix', 'Class Distribution',
-                        'Feature Importance', 'Model Performance'),
-        specs=[[{'type': 'heatmap'}, {'type': 'bar'}],
-               [{'type': 'bar'}, {'type': 'indicator'}]]
-    )
+    # Check if we have training history (for early stopping visualization)
+    has_training_history = (model_info is not None and 
+                           'train_accuracies' in model_info.get('performance_metrics', {}) or
+                           ('train_accuracies' in model_info if model_info else False))
+    
+    # Adjust layout based on whether we have training history
+    if has_training_history:
+        # 3 rows for training history graph
+        fig = make_subplots(
+            rows=3, cols=2,
+            subplot_titles=('Confusion Matrix', 'Class Distribution',
+                           'Training History', 'Model Performance'),
+            specs=[[{'type': 'heatmap'}, {'type': 'bar'}],
+                   [{'type': 'scatter', 'colspan': 2}, None],
+                   [{'type': 'bar'}, {'type': 'indicator'}]],
+            row_heights=[0.35, 0.3, 0.35]
+        )
+        perf_row, perf_col = 3, 2
+    else:
+        # Original 2x2 layout
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=('Confusion Matrix', 'Class Distribution',
+                           'Feature Importance', 'Model Performance'),
+            specs=[[{'type': 'heatmap'}, {'type': 'bar'}],
+                   [{'type': 'bar'}, {'type': 'indicator'}]]
+        )
+        perf_row, perf_col = 2, 2
 
-    # 1. Confusion Matrix
+    # 1. Confusion Matrix with proper label names
     conf_matrix = evaluation_results['confusion_matrix']
-    class_names = sorted(set(y_test))
+    
+    # Get label names from evaluation results or y_test
+    label_names = evaluation_results.get('label_names', None)
+    if label_names is None:
+        # Fallback to unique values from y_test
+        class_names = sorted([str(label) for label in set(y_test)])
+    else:
+        # Use the actual label names in order
+        class_names = [str(name) for name in label_names]
+    
+    # Format class names for display (replace underscores, capitalize)
+    display_names = [name.replace('_', ' ').title() for name in class_names]
 
     fig.add_trace(
         go.Heatmap(
             z=conf_matrix,
-            x=class_names,
-            y=class_names,
+            x=display_names,
+            y=display_names,
             colorscale='Blues',
             showscale=True,
             text=conf_matrix,
             texttemplate="%{text}",
-            textfont={"size": 12}
+            textfont={"size": 10},
+            hovertemplate='Predicted: %{x}<br>Actual: %{y}<br>Count: %{z}<extra></extra>'
         ),
         row=1, col=1
     )
 
-    # 2. Class Distribution
+    # 2. Class Distribution with proper formatting
     class_counts = pd.Series(y_test).value_counts()
+    # Format the index names for display
+    formatted_index = [str(label).replace('_', ' ').title() for label in class_counts.index]
+    
     fig.add_trace(
         go.Bar(
-            x=class_counts.index,
+            x=formatted_index,
             y=class_counts.values,
             name='Test Set Distribution',
-            marker_color='skyblue'
+            marker_color='skyblue',
+            text=class_counts.values,
+            textposition='outside',
+            hovertemplate='%{x}<br>Count: %{y}<extra></extra>'
         ),
         row=1, col=2
     )
 
-    # 3. Performance Indicator
+    # 3. Training History (if available)
+    if has_training_history:
+        # Get training history from model_info
+        perf_metrics = model_info.get('performance_metrics', model_info)
+        train_accs = perf_metrics.get('train_accuracies', [])
+        val_accs = perf_metrics.get('val_accuracies', [])
+        
+        epochs = list(range(1, len(train_accs) + 1))
+        
+        # Training accuracy line
+        fig.add_trace(
+            go.Scatter(
+                x=epochs,
+                y=train_accs,
+                mode='lines+markers',
+                name='Training Accuracy',
+                line=dict(color='blue', width=2),
+                marker=dict(size=6)
+            ),
+            row=2, col=1
+        )
+        
+        # Validation accuracy line
+        fig.add_trace(
+            go.Scatter(
+                x=epochs,
+                y=val_accs,
+                mode='lines+markers',
+                name='Validation Accuracy',
+                line=dict(color='red', width=2),
+                marker=dict(size=6)
+            ),
+            row=2, col=1
+        )
+        
+        # Mark early stopping point if applicable
+        if model_info.get('early_stopped', False):
+            stopped_epoch = model_info.get('stopped_epoch', len(epochs))
+            fig.add_vline(
+                x=stopped_epoch, 
+                line_dash="dash", 
+                line_color="green",
+                annotation_text="Early Stop",
+                row=2, col=1
+            )
+        
+        fig.update_xaxes(title_text="Epoch", row=2, col=1)
+        fig.update_yaxes(title_text="Accuracy", row=2, col=1)
+
+    # 4. Performance Indicator
     test_accuracy = evaluation_results['test_accuracy']
     fig.add_trace(
         go.Indicator(
@@ -436,21 +1250,33 @@ def create_training_results_visualization(evaluation_results, y_test, model_type
             title={
                 'text': f"Test Accuracy<br>{model_type.replace('_', ' ').title()}"}
         ),
-        row=2, col=2
+        row=perf_row, col=perf_col
     )
 
-    # Update layout
+    # Update layout with better spacing
     fig.update_layout(
-        title=f"Model Training Results - {model_type.replace('_', ' ').title()}",
-        height=800,
-        showlegend=False
+        title={
+            'text': f"Model Training Results - {model_type.replace('_', ' ').title()}",
+            'y': 0.98,
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        height=1100 if has_training_history else 850,
+        showlegend=has_training_history,
+        margin=dict(l=80, r=80, t=100, b=80),
+        font=dict(size=11)
     )
 
-    # Update subplot titles
-    fig.update_xaxes(title_text="Predicted", row=1, col=1)
-    fig.update_yaxes(title_text="Actual", row=1, col=1)
-    fig.update_xaxes(title_text="Activity Classes", row=1, col=2)
-    fig.update_yaxes(title_text="Sample Count", row=1, col=2)
+    # Update subplot titles and axes with better formatting
+    fig.update_xaxes(title_text="Predicted", row=1, col=1, title_font=dict(size=12))
+    fig.update_yaxes(title_text="Actual", row=1, col=1, title_font=dict(size=12))
+    fig.update_xaxes(title_text="Activity Classes", row=1, col=2, title_font=dict(size=12), tickangle=-45)
+    fig.update_yaxes(title_text="Sample Count", row=1, col=2, title_font=dict(size=12))
+    
+    # Adjust confusion matrix labels for better readability
+    fig.update_xaxes(tickangle=-45, row=1, col=1)
+    fig.update_yaxes(tickangle=0, row=1, col=1)
 
     return fig
 
@@ -473,7 +1299,7 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename):
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
     try:
-        model_path = os.path.join(PERSISTENT_DIR, model_filename)
+        model_path = get_model_path(model_filename)
         if not os.path.exists(model_path):
             return {}
 
@@ -495,7 +1321,7 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename):
 def create_model_evaluation_plot(model, model_filename):
     """Create comprehensive model evaluation visualization."""
     # Load model metadata
-    model_metadata_file = os.path.join(PERSISTENT_DIR, "trained_models.json")
+    model_metadata_file = get_models_metadata_path()
     model_info = {}
 
     if os.path.exists(model_metadata_file):
@@ -687,14 +1513,13 @@ def remove_trained_model(submit_n_clicks, model_filename):
 
     try:
         # Remove model file
-        model_path = os.path.join(PERSISTENT_DIR, model_filename)
+        model_path = get_model_path(model_filename)
         if os.path.exists(model_path):
             os.remove(model_path)
             print(f"DEBUG: Removed model file: {model_path}")
 
         # Update metadata
-        model_metadata_file = os.path.join(
-            PERSISTENT_DIR, "trained_models.json")
+        model_metadata_file = get_models_metadata_path()
         if os.path.exists(model_metadata_file):
             with open(model_metadata_file, 'r') as f:
                 models_metadata = json.load(f)
@@ -790,8 +1615,7 @@ def remove_trained_model(submit_n_clicks, model_filename):
 def remove_model_metadata(model_filename):
     """Remove model from metadata file."""
     try:
-        model_metadata_file = os.path.join(
-            PERSISTENT_DIR, "trained_models.json")
+        model_metadata_file = get_models_metadata_path()
 
         if os.path.exists(model_metadata_file):
             with open(model_metadata_file, 'r') as f:
@@ -860,28 +1684,52 @@ def handle_deployment_actions(generate_clicks, resource_clicks, model_filename, 
 
     try:
         # Load model and metadata
-        model_path = os.path.join(PERSISTENT_DIR, model_filename)
+        model_path = get_model_path(model_filename)
         if not os.path.exists(model_path):
+            print(f"DEBUG: Model path not found: {model_path}")
             error_msg = html.Div([
-                html.H4("❌ Model file not found.", style={'color': 'red'})
+                html.H4("❌ Model file not found.", style={'color': 'red'}),
+                html.P(f"Looking for: {model_path}", style={'font-size': '12px', 'color': '#666'})
             ])
-            return error_msg, no_update
+            return error_msg
 
+        print(f"DEBUG: Loading model from: {model_path}")
         model = EdgeMLModel.load_model(model_path)
 
         # Get model metadata
-        model_metadata_file = os.path.join(
-            PERSISTENT_DIR, "trained_models.json")
+        model_metadata_file = get_models_metadata_path()
         model_info = {}
         if os.path.exists(model_metadata_file):
             with open(model_metadata_file, 'r') as f:
                 models_metadata = json.load(f)
                 model_info = models_metadata.get(model_filename, {})
 
+        # Get feature names - try from model first, then from training metadata
+        feature_names = model.feature_names
+        if not feature_names:
+            print("DEBUG: Feature names not in model, checking training metadata...")
+            # Try to get from any training metadata file
+            training_dir = os.path.join(PERSISTENT_DIR, 'training')
+            metadata_files = glob.glob(os.path.join(training_dir, '*_metadata.json'))
+            if metadata_files:
+                with open(metadata_files[0], 'r') as f:
+                    training_metadata = json.load(f)
+                    feature_names = training_metadata.get('feature_names', [])
+                    print(f"DEBUG: Found {len(feature_names)} feature names from training metadata")
+        
+        if not feature_names:
+            print("DEBUG: Still no feature names, loading from training file...")
+            # Last resort: load from any training CSV file
+            train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
+            if train_files:
+                temp_df = pd.read_csv(train_files[0])
+                feature_names = [col for col in temp_df.columns if col != 'label']
+                print(f"DEBUG: Extracted {len(feature_names)} feature names from CSV")
+        
         # Prepare model data for code generation
         model_data = {
             'model_type': model.model_type,
-            'feature_names': model.feature_names or [],
+            'feature_names': feature_names or [],
             'classes': list(model.label_encoder.classes_) if model.label_encoder else ['activity_1', 'activity_2'],
             'model_params': model.model_params,
             'performance_metrics': model.performance_metrics,
@@ -1164,8 +2012,7 @@ def get_training_session_stats():
     """Get current training session statistics."""
     try:
         # Load trained models metadata
-        model_metadata_file = os.path.join(
-            PERSISTENT_DIR, "trained_models.json")
+        model_metadata_file = get_models_metadata_path()
 
         if not os.path.exists(model_metadata_file):
             return {
@@ -1236,7 +2083,7 @@ def get_training_session_stats():
 # Additional utility functions for training callbacks
 def load_available_models():
     """Load list of available trained models."""
-    model_metadata_file = os.path.join(PERSISTENT_DIR, "trained_models.json")
+    model_metadata_file = get_models_metadata_path()
     if os.path.exists(model_metadata_file):
         with open(model_metadata_file, 'r') as f:
             return json.load(f)

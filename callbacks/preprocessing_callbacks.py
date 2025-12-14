@@ -10,8 +10,23 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 import numpy as np
 
-from config.config import *
+from config.config import (
+    PERSISTENT_DIR, METADATA_FILE, DATASETS_DIR, WINDOWS_DIR, TRAINING_DIR, MODELS_DIR,
+    get_dataset_path, get_window_path, get_window_pattern, get_training_data_path
+)
 from utils.data_processing import clean_data, low_pass_filter
+from utils.model_training import extract_time_domain_features, extract_frequency_domain_features
+
+
+def _get_feature_method_label(feature_method):
+    """Convert feature method code to descriptive label."""
+    labels = {
+        'all': 'Time + Frequency Domain',
+        'statistical': 'Raw Sensor Axes Only',
+        'time_domain': 'Time-Domain Only',
+        'custom': 'Custom Selection'
+    }
+    return labels.get(feature_method, feature_method)
 
 
 @callback(
@@ -51,11 +66,9 @@ def display_dataset_and_status(dataset_name):
     }
 
     # Check if training data exists
-    training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
-    train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
-    test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
-    stages['training_ready'] = os.path.exists(
-        train_file) and os.path.exists(test_file)
+    train_file = get_training_data_path(dataset_name, 'train')
+    test_file = get_training_data_path(dataset_name, 'test')
+    stages['training_ready'] = os.path.exists(train_file) and os.path.exists(test_file)
 
     # Create status display
     status_badges = []
@@ -236,8 +249,8 @@ def display_dataset_and_status(dataset_name):
 
 
 @callback(
-    Output('preprocessed-graph', 'figure', True),
-    Output('stored-datasets', 'data', True),
+    Output('preprocessed-graph', 'figure', allow_duplicate=True),
+    Output('stored-datasets', 'data', allow_duplicate=True),
     Input('clean-smooth-btn', 'n_clicks'),
     State('dataset-selector_', 'value'),
     prevent_initial_call=True
@@ -245,11 +258,11 @@ def display_dataset_and_status(dataset_name):
 def clean_and_smooth_data(n_clicks, dataset_name):
     """Clean and smooth the selected dataset and display it in a graph."""
     if not dataset_name:
-        return {}, {}
+        return no_update, no_update
 
     file_path = os.path.join(PERSISTENT_DIR, dataset_name)
     if not os.path.exists(file_path):
-        return {}, {}
+        return no_update, no_update
 
     df = pd.read_csv(file_path)
 
@@ -947,8 +960,7 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
             window_data['Time_seconds'] = df[mask]['Time_seconds']
             all_selected_data.append(window_data)
 
-            sample_file_path = os.path.join(
-                PERSISTENT_DIR, f"dragged_window_{window_id}_{dataset_name}")
+            sample_file_path = get_window_path(window_id, dataset_name)
             # Use 4 decimal places precision for sensor data readability
             window_data[available_cols].to_csv(
                 sample_file_path, index=False, float_format='%.4f')
@@ -1096,8 +1108,7 @@ def update_split_dataset_selector(split_clicks, dataset_name, split_graph, curre
 
         # Also check for any files in persistent_data that match the pattern
         import glob
-        pattern = os.path.join(
-            PERSISTENT_DIR, f"dragged_window_*_{dataset_name}")
+        pattern = get_window_pattern(dataset_name)
         existing_files = glob.glob(pattern)
 
         # Combine and deduplicate
@@ -1286,8 +1297,7 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name):
 
         # Get updated options
         import glob
-        pattern = os.path.join(
-            PERSISTENT_DIR, f"dragged_window_*_{dataset_name}")
+        pattern = get_window_pattern(dataset_name)
         existing_files = glob.glob(pattern)
 
         options = []
@@ -1336,13 +1346,12 @@ def clean_all_generated_data(n_clicks, dataset_name):
         import glob
 
         # Get all split window files for the current dataset
-        pattern = os.path.join(
-            PERSISTENT_DIR, f"dragged_window_*_{dataset_name}")
+        pattern = get_window_pattern(dataset_name)
         split_files = glob.glob(pattern)
 
         # Also get sample_window files that might have been generated
         sample_pattern = os.path.join(
-            PERSISTENT_DIR, f"sample_window_*_{dataset_name}")
+            WINDOWS_DIR, f"sample_window_*_{dataset_name}")
         sample_files = glob.glob(sample_pattern)
 
         all_files_to_delete = split_files + sample_files
@@ -1426,8 +1435,7 @@ def populate_training_dataset_selector(dataset_name, split_graph, split_options)
         import glob
 
         # Get all split window files for the current dataset
-        pattern = os.path.join(
-            PERSISTENT_DIR, f"dragged_window_*_{dataset_name}")
+        pattern = get_window_pattern(dataset_name)
         split_files = glob.glob(pattern)
 
         if not split_files:
@@ -1503,23 +1511,53 @@ def manage_training_window_selection(select_all_clicks, clear_all_clicks, availa
 
 
 @callback(
+    Output('test-split-display', 'children'),
     Output('split-ratio-info', 'children'),
-    Input('train-test-split', 'value')
+    Input('train-split', 'value'),
+    Input('val-split', 'value')
 )
-def update_split_ratio_info(split_ratio):
-    """Update split ratio information display."""
-    if not split_ratio:
-        return ""
-
-    train_percent = int(split_ratio * 100)
-    test_percent = 100 - train_percent
-
-    return html.Div([
-        html.Span(f"🎓 Training: {train_percent}%", style={
-                  'margin-right': '20px', 'color': '#4CAF50', 'font-weight': 'bold'}),
-        html.Span(f"🧪 Testing: {test_percent}%", style={
-                  'color': '#2196F3', 'font-weight': 'bold'})
-    ])
+def update_split_displays(train_ratio, val_ratio):
+    """Update test split display and split ratio information."""
+    if train_ratio is None or val_ratio is None:
+        return "20%", ""
+    
+    # Calculate test ratio
+    test_ratio = 1.0 - train_ratio - val_ratio
+    
+    # Ensure valid split (test >= 0.1)
+    if test_ratio < 0.1:
+        test_ratio = 0.1
+        train_ratio = 0.9 - val_ratio
+    
+    train_percent = int(train_ratio * 100)
+    val_percent = int(val_ratio * 100)
+    test_percent = int(test_ratio * 100)
+    
+    # Test display
+    test_display = f"{test_percent}%"
+    
+    # Info message
+    if val_percent == 0:
+        info_msg = html.Div([
+            html.Span(f"🎓 Training: {train_percent}%", style={
+                'margin-right': '15px', 'color': '#4CAF50', 'font-weight': 'bold'}),
+            html.Span(f"🧪 Testing: {test_percent}%", style={
+                'margin-right': '15px', 'color': '#2196F3', 'font-weight': 'bold'}),
+            html.Br(),
+            html.Span("⚙️ Validation set is 0% - will use 5-fold cross-validation on training set", 
+                     style={'color': '#FF9800', 'font-style': 'italic', 'font-size': '12px'})
+        ])
+    else:
+        info_msg = html.Div([
+            html.Span(f"🎓 Training: {train_percent}%", style={
+                'margin-right': '15px', 'color': '#4CAF50', 'font-weight': 'bold'}),
+            html.Span(f"🔍 Validation: {val_percent}%", style={
+                'margin-right': '15px', 'color': '#FF9800', 'font-weight': 'bold'}),
+            html.Span(f"🧪 Testing: {test_percent}%", style={
+                'color': '#2196F3', 'font-weight': 'bold'})
+        ])
+    
+    return test_display, info_msg
 
 
 @callback(
@@ -1538,6 +1576,31 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
         return {}, html.Div("⚠️ Please select datasets and preprocessing options.", style={'color': '#FF9800'})
 
     try:
+        # Get the correct label from metadata.json
+        activity_label = None
+        try:
+            if os.path.exists(METADATA_FILE):
+                with open(METADATA_FILE, 'r') as f:
+                    metadata = json.load(f)
+                
+                dataset_info = metadata.get(dataset_name, {})
+                # Get the actual label from metadata
+                activity_label = dataset_info.get('label', None)
+                
+                if activity_label:
+                    print(f"DEBUG: Dataset '{dataset_name}' has label '{activity_label}' from metadata")
+                else:
+                    print(f"WARNING: No label found in metadata for '{dataset_name}', using fallback")
+            else:
+                print(f"WARNING: Metadata file not found at {METADATA_FILE}")
+        except Exception as meta_error:
+            print(f"WARNING: Error reading metadata: {meta_error}")
+        
+        # Fallback: extract from dataset name if metadata not available
+        if not activity_label:
+            activity_label = dataset_name.replace('.csv', '').rsplit('_', 1)[0]
+            print(f"DEBUG: Using fallback label '{activity_label}' from dataset name")
+        
         # Load and combine all selected split windows
         all_data = []
         file_info = []
@@ -1554,8 +1617,8 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
 
                 # Add window ID and label for classification
                 df['Window_ID'] = window_id
-                # Use dataset name as activity label
-                df['Activity_Label'] = dataset_name
+                # Use the label from metadata.json
+                df['Activity_Label'] = activity_label
 
                 all_data.append(df)
                 file_info.append({
@@ -1567,34 +1630,54 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
         if not all_data:
             return {}, html.Div("❌ No valid data files found.", style={'color': '#dc3545'})
 
-        # Combine all data
-        combined_df = pd.concat(all_data, ignore_index=True)
-
-        # Feature selection
-        if feature_method == 'all':
-            # Use all sensor columns
-            feature_cols = [col for col in combined_df.columns if col not in [
-                'Time_seconds', 'Window_ID', 'Activity_Label']]
-        elif feature_method == 'statistical':
-            # Use only statistical features (if available) or primary sensors
-            priority_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
-            feature_cols = [
-                col for col in priority_cols if col in combined_df.columns]
-        elif feature_method == 'time_domain':
-            # Use time-domain features only
-            feature_cols = [col for col in combined_df.columns if col not in ['Time_seconds', 'Window_ID',
-                                                                              'Activity_Label'] and not any(freq in col.lower() for freq in ['freq', 'fft', 'spectrum'])]
-        else:  # custom
-            feature_cols = [col for col in combined_df.columns if col not in [
-                'Time_seconds', 'Window_ID', 'Activity_Label']]
-
+        # Extract features from each window
+        sensor_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+        extracted_features_list = []
+        labels_list = []
+        window_ids_list = []
+        
+        for df in all_data:
+            # Get window-specific data
+            window_id = df['Window_ID'].iloc[0]
+            activity_label = df['Activity_Label'].iloc[0]
+            
+            # Remove metadata columns for feature extraction
+            window_data = df[sensor_cols]
+            
+            # Extract features based on selection method
+            if feature_method == 'statistical':
+                # Use only raw sensor values (no feature engineering)
+                # Average each sensor across the window
+                features_df = pd.DataFrame([{
+                    col: window_data[col].mean() for col in sensor_cols
+                }])
+            elif feature_method == 'time_domain':
+                # Extract 90 time-domain features (15 per axis)
+                features_df = extract_time_domain_features(window_data, sensor_cols)
+            elif feature_method == 'all':
+                # Extract both time-domain (90) and frequency-domain (48) features = 138 total
+                time_features = extract_time_domain_features(window_data, sensor_cols)
+                freq_features = extract_frequency_domain_features(window_data, sensor_cols)
+                features_df = pd.concat([time_features, freq_features], axis=1)
+            else:  # custom
+                # Default to time-domain
+                features_df = extract_time_domain_features(window_data, sensor_cols)
+            
+            extracted_features_list.append(features_df)
+            labels_list.append(activity_label)
+            window_ids_list.append(window_id)
+        
+        # Combine all extracted features
+        features_df = pd.concat(extracted_features_list, ignore_index=True)
+        feature_cols = features_df.columns.tolist()
+        
         if not feature_cols:
             return {}, html.Div("❌ No features available for training.", style={'color': '#dc3545'})
 
-        # Extract features
-        X = combined_df[feature_cols].values
-        y = combined_df['Activity_Label'].values
-        window_ids = combined_df['Window_ID'].values
+        # Prepare arrays
+        X = features_df.values
+        y = np.array(labels_list)
+        window_ids = np.array(window_ids_list)
 
         # Handle any missing values
         if np.isnan(X).any():
@@ -1636,8 +1719,8 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
                     html.Span(f"{len(X_scaled)}")
                 ], style={'margin-bottom': '5px'}),
                 html.Div([
-                    html.Span("🎯 Features: ", style={'font-weight': 'bold'}),
-                    html.Span(f"{len(feature_cols)} ({feature_method})")
+                    html.Span("🎯 Features Extracted: ", style={'font-weight': 'bold'}),
+                    html.Span(f"{len(feature_cols)} features ({_get_feature_method_label(feature_method)})")
                 ], style={'margin-bottom': '5px'}),
                 html.Div([
                     html.Span("📏 Normalization: ", style={
@@ -1664,8 +1747,18 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
         return preprocessed_data, results_content
 
     except Exception as e:
-        error_msg = f"❌ Error during preprocessing: {str(e)}"
-        return {}, html.Div(error_msg, style={'color': '#dc3545'})
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"ERROR in preprocess_for_training: {error_details}")
+        error_msg = html.Div([
+            html.H5("❌ Error during preprocessing", style={'color': '#dc3545', 'margin-bottom': '10px'}),
+            html.P(f"Error: {str(e)}", style={'margin-bottom': '5px'}),
+            html.Details([
+                html.Summary("Show technical details", style={'cursor': 'pointer', 'color': '#6c757d'}),
+                html.Pre(error_details, style={'font-size': '11px', 'background-color': '#f8f9fa', 'padding': '10px', 'border-radius': '4px', 'overflow': 'auto'})
+            ])
+        ])
+        return {}, error_msg
 
 
 @callback(
@@ -1673,13 +1766,14 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
     Output('train-test-split-graph', 'figure'),
     Input('train-test-split-btn', 'n_clicks'),
     State('preprocessed-training-data', 'data'),
-    State('train-test-split', 'value'),
+    State('train-split', 'value'),
+    State('val-split', 'value'),
     State('random-state-input', 'value'),
     prevent_initial_call=True
 )
-def perform_enhanced_train_test_split(n_clicks, preprocessed_data, split_ratio, random_state):
-    """Perform train-test split on preprocessed data and visualize results."""
-    if not (preprocessed_data and split_ratio):
+def perform_enhanced_train_val_test_split(n_clicks, preprocessed_data, train_ratio, val_ratio, random_state):
+    """Perform train-validation-test split on preprocessed data and visualize results."""
+    if not (preprocessed_data and train_ratio is not None and val_ratio is not None):
         return {}, {}
 
     try:
@@ -1687,21 +1781,47 @@ def perform_enhanced_train_test_split(n_clicks, preprocessed_data, split_ratio, 
         X = np.array(preprocessed_data['features'])
         y = np.array(preprocessed_data['labels'])
         feature_names = preprocessed_data['feature_names']
+        
+        # Calculate test ratio
+        test_ratio = 1.0 - train_ratio - val_ratio
+        if test_ratio < 0.1:
+            test_ratio = 0.1
+            train_ratio = 0.9 - val_ratio
 
-        # Perform train-test split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=1-split_ratio, random_state=random_state, stratify=y
-        )
+        # Perform split based on validation ratio
+        if val_ratio == 0:
+            # 2-way split: train and test only (use CV during training)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_ratio, random_state=random_state, stratify=y
+            )
+            X_val, y_val = None, None
+        else:
+            # 3-way split: train, validation, and test
+            # First split: separate test set
+            X_temp, X_test, y_temp, y_test = train_test_split(
+                X, y, test_size=test_ratio, random_state=random_state, stratify=y
+            )
+            
+            # Second split: separate train and validation from remaining data
+            val_size_adjusted = val_ratio / (train_ratio + val_ratio)
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_temp, y_temp, test_size=val_size_adjusted, random_state=random_state, stratify=y_temp
+            )
 
         # Store split data
         split_data = {
             'X_train': X_train.tolist(),
+            'X_val': X_val.tolist() if X_val is not None else [],
             'X_test': X_test.tolist(),
             'y_train': y_train.tolist(),
+            'y_val': y_val.tolist() if y_val is not None else [],
             'y_test': y_test.tolist(),
             'feature_names': feature_names,
-            'split_ratio': split_ratio,
-            'random_state': random_state
+            'train_ratio': train_ratio,
+            'val_ratio': val_ratio,
+            'test_ratio': test_ratio,
+            'random_state': random_state,
+            'has_validation': val_ratio > 0
         }
 
         # Create visualization
@@ -1716,10 +1836,11 @@ def perform_enhanced_train_test_split(n_clicks, preprocessed_data, split_ratio, 
 
         for i, feature in enumerate(selected_features):
             feature_idx = feature_names.index(feature)
+            current_idx = 0
 
             # Training data
             fig.add_trace(go.Scatter(
-                x=list(range(len(X_train))),
+                x=list(range(current_idx, current_idx + len(X_train))),
                 y=X_train[:, feature_idx],
                 mode='markers',
                 name=f'{feature} (Train)',
@@ -1727,10 +1848,24 @@ def perform_enhanced_train_test_split(n_clicks, preprocessed_data, split_ratio, 
                             symbol='circle', size=4),
                 opacity=0.7
             ))
+            current_idx += len(X_train)
+
+            # Validation data (if present)
+            if val_ratio > 0:
+                fig.add_trace(go.Scatter(
+                    x=list(range(current_idx, current_idx + len(X_val))),
+                    y=X_val[:, feature_idx],
+                    mode='markers',
+                    name=f'{feature} (Val)',
+                    marker=dict(color=colors[i % len(colors)],
+                                symbol='square', size=4),
+                    opacity=0.7
+                ))
+                current_idx += len(X_val)
 
             # Test data
             fig.add_trace(go.Scatter(
-                x=list(range(len(X_train), len(X_train) + len(X_test))),
+                x=list(range(current_idx, current_idx + len(X_test))),
                 y=X_test[:, feature_idx],
                 mode='markers',
                 name=f'{feature} (Test)',
@@ -1739,19 +1874,35 @@ def perform_enhanced_train_test_split(n_clicks, preprocessed_data, split_ratio, 
                 opacity=0.7
             ))
 
-        # Add vertical line to separate train/test
+        # Add vertical lines to separate sets
         fig.add_vline(
             x=len(X_train)-0.5,
-            line=dict(color="red", width=2, dash="dash"),
-            annotation_text="Train | Test Split",
+            line=dict(color="green", width=2, dash="dash"),
+            annotation_text="Train | Val" if val_ratio > 0 else "Train | Test",
             annotation_position="top"
         )
+        
+        if val_ratio > 0:
+            fig.add_vline(
+                x=len(X_train) + len(X_val) - 0.5,
+                line=dict(color="red", width=2, dash="dash"),
+                annotation_text="Val | Test",
+                annotation_position="top"
+            )
 
         # Update layout
+        if val_ratio > 0:
+            title_text = (f"Train-Validation-Test Split Visualization<br>"
+                         f"Training: {len(X_train)} samples ({train_ratio:.1%}) | "
+                         f"Validation: {len(X_val)} samples ({val_ratio:.1%}) | "
+                         f"Testing: {len(X_test)} samples ({test_ratio:.1%})")
+        else:
+            title_text = (f"Train-Test Split Visualization (CV Mode)<br>"
+                         f"Training: {len(X_train)} samples ({train_ratio:.1%}) | "
+                         f"Testing: {len(X_test)} samples ({test_ratio:.1%})")
+        
         fig.update_layout(
-            title=f"Train-Test Split Visualization<br>"
-            f"Training: {len(X_train)} samples ({split_ratio:.1%}) | "
-            f"Testing: {len(X_test)} samples ({1-split_ratio:.1%})",
+            title=title_text,
             xaxis_title="Sample Index",
             yaxis_title="Normalized Feature Values",
             height=500,
@@ -1767,11 +1918,21 @@ def perform_enhanced_train_test_split(n_clicks, preprocessed_data, split_ratio, 
         )
 
         # Add summary annotation
+        if val_ratio > 0:
+            annotation_text = (f"📊 Features Extracted: {len(feature_names)}<br>"
+                             f"🎓 Train: {len(X_train)} samples<br>"
+                             f"📋 Validation: {len(X_val)} samples<br>"
+                             f"🧪 Test: {len(X_test)} samples<br>"
+                             f"🎲 Random State: {random_state}")
+        else:
+            annotation_text = (f"📊 Features Extracted: {len(feature_names)}<br>"
+                             f"🎓 Train: {len(X_train)} samples<br>"
+                             f"🧪 Test: {len(X_test)} samples<br>"
+                             f"⚙️ Using 5-fold CV<br>"
+                             f"🎲 Random State: {random_state}")
+        
         fig.add_annotation(
-            text=f"📊 Features: {len(feature_names)}<br>"
-            f"🎓 Train: {len(X_train)} samples<br>"
-            f"🧪 Test: {len(X_test)} samples<br>"
-            f"🎲 Random State: {random_state}",
+            text=annotation_text,
             xref="paper", yref="paper",
             x=0.02, y=0.98,
             showarrow=False,
@@ -1798,15 +1959,13 @@ def perform_enhanced_train_test_split(n_clicks, preprocessed_data, split_ratio, 
     prevent_initial_call=True
 )
 def save_preprocessed_training_data(n_clicks, split_data, dataset_name):
-    """Save preprocessed training data to files."""
+    """Save preprocessed training data to files (supports 2-way and 3-way splits)."""
     if not (split_data and dataset_name):
         return html.Div("⚠️ No preprocessed data to save.", style={'color': '#FF9800'})
 
     try:
-        # Create training data directory
-        training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
-        os.makedirs(training_dir, exist_ok=True)
-
+        from config.config import get_training_data_path
+        
         # Save training and test data
         train_df = pd.DataFrame(
             split_data['X_train'], columns=split_data['feature_names'])
@@ -1816,24 +1975,42 @@ def save_preprocessed_training_data(n_clicks, split_data, dataset_name):
             split_data['X_test'], columns=split_data['feature_names'])
         test_df['label'] = split_data['y_test']
 
-        # Save files
-        train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
-        test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
+        # Save files using helper functions
+        train_file = get_training_data_path(dataset_name, 'train')
+        test_file = get_training_data_path(dataset_name, 'test')
 
         train_df.to_csv(train_file, index=False)
         test_df.to_csv(test_file, index=False)
 
+        # Check if validation data exists
+        has_validation = split_data.get('has_validation', False)
+        val_file = None
+        val_samples = 0
+        
+        if has_validation and split_data.get('X_val'):
+            val_df = pd.DataFrame(
+                split_data['X_val'], columns=split_data['feature_names'])
+            val_df['label'] = split_data['y_val']
+            
+            val_file = get_training_data_path(dataset_name, 'val')
+            val_df.to_csv(val_file, index=False)
+            val_samples = len(split_data['X_val'])
+
         # Save metadata
-        metadata_file = os.path.join(
-            training_dir, f"{dataset_name}_metadata.json")
+        metadata_file = get_training_data_path(dataset_name, 'metadata')
         metadata = {
             'dataset_name': dataset_name,
             'feature_names': split_data['feature_names'],
-            'split_ratio': split_data['split_ratio'],
+            'train_ratio': split_data.get('train_ratio', split_data.get('split_ratio', 0.8)),
+            'val_ratio': split_data.get('val_ratio', 0.0),
+            'test_ratio': split_data.get('test_ratio', 1.0 - split_data.get('train_ratio', 0.8)),
             'random_state': split_data['random_state'],
             'train_samples': len(split_data['X_train']),
+            'val_samples': val_samples,
             'test_samples': len(split_data['X_test']),
+            'has_validation': has_validation,
             'train_file': train_file,
+            'val_file': val_file,
             'test_file': test_file,
             'created_at': pd.Timestamp.now().isoformat()
         }
@@ -1841,30 +2018,37 @@ def save_preprocessed_training_data(n_clicks, split_data, dataset_name):
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
 
-        # Success message
+        # Build success message
+        file_list = [
+            html.Div([
+                html.Span("📁 Training File: ", style={'font-weight': 'bold'}),
+                html.Span(os.path.basename(train_file), style={'font-family': 'monospace'})
+            ], style={'margin-bottom': '5px'})
+        ]
+        
+        if has_validation:
+            file_list.append(html.Div([
+                html.Span("📁 Validation File: ", style={'font-weight': 'bold'}),
+                html.Span(os.path.basename(val_file), style={'font-family': 'monospace'})
+            ], style={'margin-bottom': '5px'}))
+        
+        file_list.extend([
+            html.Div([
+                html.Span("📁 Test File: ", style={'font-weight': 'bold'}),
+                html.Span(os.path.basename(test_file), style={'font-family': 'monospace'})
+            ], style={'margin-bottom': '5px'}),
+            html.Div([
+                html.Span("📄 Metadata: ", style={'font-weight': 'bold'}),
+                html.Span(os.path.basename(metadata_file), style={'font-family': 'monospace'})
+            ], style={'margin-bottom': '10px'}),
+            html.P("✅ Data is ready for model training!", style={
+                'color': '#4CAF50', 'font-weight': 'bold'})
+        ])
+
         return html.Div([
             html.H5("💾 Training Data Saved Successfully", style={
-                    'color': '#4CAF50', 'margin': '0 0 15px 0'}),
-            html.Div([
-                html.Div([
-                    html.Span("📁 Training File: ", style={
-                              'font-weight': 'bold'}),
-                    html.Span(os.path.basename(train_file),
-                              style={'font-family': 'monospace'})
-                ], style={'margin-bottom': '5px'}),
-                html.Div([
-                    html.Span("📁 Test File: ", style={'font-weight': 'bold'}),
-                    html.Span(os.path.basename(test_file),
-                              style={'font-family': 'monospace'})
-                ], style={'margin-bottom': '5px'}),
-                html.Div([
-                    html.Span("📄 Metadata: ", style={'font-weight': 'bold'}),
-                    html.Span(os.path.basename(metadata_file),
-                              style={'font-family': 'monospace'})
-                ], style={'margin-bottom': '10px'}),
-                html.P("✅ Data is ready for model training!", style={
-                       'color': '#4CAF50', 'font-weight': 'bold'})
-            ])
+                'color': '#4CAF50', 'margin': '0 0 15px 0'}),
+            html.Div(file_list)
         ])
 
     except Exception as e:

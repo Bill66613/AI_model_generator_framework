@@ -632,10 +632,11 @@ layout = html.Div([
                     dcc.Dropdown(
                         id='feature-selection-method',
                         options=[
-                            {'label': '🎯 All Features', 'value': 'all'},
-                            {'label': '📈 Statistical Features',
+                            {'label': '🎯 All Features (138: Time + Frequency)',
+                             'value': 'all'},
+                            {'label': '📈 Raw Axes Only (6 sensors)',
                                 'value': 'statistical'},
-                            {'label': '🌊 Time-Domain Only',
+                            {'label': '🌊 Time-Domain Only (90 features)',
                                 'value': 'time_domain'},
                             {'label': '📊 Custom Selection', 'value': 'custom'}
                         ],
@@ -647,25 +648,66 @@ layout = html.Div([
             ])
         ], style={'margin-bottom': '25px'}),
 
-        # Train-test split configuration
+        # Train-validation-test split configuration
         html.Div([
-            html.H5("🎲 Train-Test Split Configuration",
+            html.H5("🎲 Train-Validation-Test Split Configuration",
                     style={'color': '#495057', 'margin-bottom': '15px'}),
+            
+            html.Div([
+                html.P("Configure data split ratios. Set validation to 0% to use cross-validation instead.",
+                       style={'color': '#666', 'font-size': '13px', 'margin-bottom': '15px', 'font-style': 'italic'}),
+            ]),
 
             html.Div([
                 html.Div([
-                    html.Label("Train-Test Split Ratio:",
-                               style={'font-weight': 'bold', 'margin-bottom': '10px'}),
+                    html.Label("🎓 Training Set:",
+                               style={'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Slider(
-                        id='train-test-split',
-                        min=0.1, max=0.9, step=0.05,
-                        marks={i/10: f"{i*10}%" for i in range(1, 10)},
-                        value=0.8,
+                        id='train-split',
+                        min=0.4, max=0.8, step=0.05,
+                        marks={i/10: f"{i*10}%" for i in range(4, 9)},
+                        value=0.6,
                         tooltip={"placement": "bottom", "always_visible": True}
                     ),
+                ], style={'width': '32%', 'display': 'inline-block', 'vertical-align': 'top'}),
+
+                html.Div([
+                    html.Label("🔍 Validation Set:",
+                               style={'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                    dcc.Slider(
+                        id='val-split',
+                        min=0.0, max=0.3, step=0.05,
+                        marks={0: '0% (CV)', **{i/10: f"{i*10}%" for i in range(1, 4)}},
+                        value=0.2,
+                        tooltip={"placement": "bottom", "always_visible": True}
+                    ),
+                ], style={'width': '32%', 'display': 'inline-block', 'margin-left': '2%', 'vertical-align': 'top'}),
+
+                html.Div([
+                    html.Label("🧪 Test Set:",
+                               style={'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     html.Div(
-                        id='split-ratio-info', style={'margin-top': '10px', 'font-size': '14px', 'color': '#666'})
-                ], style={'width': '65%', 'display': 'inline-block', 'vertical-align': 'top'}),
+                        id='test-split-display',
+                        style={
+                            'padding': '10px',
+                            'background-color': '#f8f9fa',
+                            'border-radius': '4px',
+                            'border': '1px solid #dee2e6',
+                            'text-align': 'center',
+                            'font-size': '18px',
+                            'font-weight': 'bold',
+                            'color': '#495057'
+                        }
+                    ),
+                ], style={'width': '32%', 'display': 'inline-block', 'margin-left': '2%', 'vertical-align': 'top'})
+            ]),
+            
+            html.Div(
+                id='split-ratio-info', 
+                style={'margin-top': '15px', 'font-size': '14px', 'color': '#666', 'padding': '10px', 'background-color': '#e3f2fd', 'border-radius': '4px'}
+            ),
+            
+            html.Div([
 
                 html.Div([
                     html.Label("Random State:", style={
@@ -707,7 +749,7 @@ layout = html.Div([
                 }
             ),
             html.Button(
-                "📊 Perform Train-Test Split",
+                "📊 Perform Train-Val-Test Split",
                 id='train-test-split-btn',
                 n_clicks=0,
                 style={

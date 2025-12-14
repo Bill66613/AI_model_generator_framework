@@ -67,14 +67,18 @@ This approach significantly reduces annotation time compared to manual timestamp
 \end{figure}
 
 \section{Feature Extraction}
+\label{sec:feature_extraction}
 
 \subsection{Sliding Window Approach}
 Preprocessed signals are segmented into fixed-size overlapping windows for feature extraction. After empirical validation and comparison with literature recommendations \cite{banos2014wisdm}, the configuration was optimized as:
 \begin{itemize}
+    \item \textbf{Sampling Rate}: 100Hz (fixed)
     \item \textbf{Window Size}: 150 samples (1.5 seconds at 100Hz)
     \item \textbf{Overlap}: 50\% (75-sample stride)
 \end{itemize}
 The 1.5-second window provides sufficient temporal context to capture complete motion cycles for most activities (walking step duration $\approx$ 1.0-1.2 seconds \cite{whittle2014gait}), while 50\% overlap ensures temporal continuity and reduces edge effects at window boundaries. This yields predictions every 0.75 seconds, balancing responsiveness with computational efficiency.
+
+\textit{Implementation Note}: These parameters are currently hardcoded in both the training pipeline (\texttt{utils/model\_training.py}) and code generation module (\texttt{deployment/base\_generator.py}) to ensure training-deployment consistency. Future work could expose these as user-configurable parameters with validation to prevent incompatible configurations. The framework assumes labeled samples exceed the minimum window size (1.5 seconds); shorter segments are not zero-padded and may produce invalid features.
 
 \subsection{Feature Set}
 For each window and each sensor axis (6 axes total), the framework extracts 15 time-domain statistical features. Frequency-domain features were intentionally excluded after identifying training-deployment parity issues: FFT implementations differ substantially between Python (NumPy) and embedded C++ (approximations or ARM CMSIS-DSP), leading to feature value discrepancies that degrade deployed model accuracy.
@@ -127,11 +131,27 @@ Multi-layer perceptron with backpropagation. Configuration:
 \end{itemize}
 The two-hidden-layer architecture provides sufficient capacity for learning non-linear activity patterns while remaining small enough for efficient C++ deployment (fixed-weight matrices, no dynamic memory allocation).
 
-\subsection{Class Imbalance Handling}
+\subsection{Training and Evaluation Protocol}
+
+\subsubsection{Data Splitting Strategy}
+The framework implements a rigorous three-way split to prevent information leakage and ensure unbiased performance estimates:
+\begin{enumerate}
+    \item \textbf{Training Set (60\%)}: Used exclusively for model training (fitting model parameters)
+    \item \textbf{Validation Set (20\%)}: Used for hyperparameter tuning, model selection, and monitoring training progress
+    \item \textbf{Test Set (20\%)}: Completely held-out for final evaluation only; never accessed during training or hyperparameter optimization
+\end{enumerate}
+
+All splits use stratified sampling to preserve class proportions across sets, critical for imbalanced activity recognition tasks.
+
+\textit{Validation vs. Test Set Distinction}: The validation set enables iterative model development—users can tune hyperparameters, try different algorithms, or adjust preprocessing steps while monitoring validation accuracy without contaminating the test set. The test set is evaluated \textit{exactly once} per trained model to report final performance, providing an unbiased estimate of generalization to unseen data. This methodology follows best practices in machine learning research \cite{goodfellow2016deep} and eliminates the subtle information leakage that occurs when repeatedly evaluating on a single held-out set.
+
+\textit{Cross-Validation Option}: For exploratory analysis, the framework also supports 5-fold cross-validation performed on the combined training+validation set (80\% of data), while still preserving the test set (20\%) as completely unseen. This provides robust performance estimates for algorithm comparison studies without requiring a separate validation split.
+
+\subsubsection{Class Imbalance Handling}
 Motion datasets often exhibit severe class imbalance (e.g., more \textit{standing} samples than \textit{walking\_downstairs}). Imbalanced training biases models toward majority classes, degrading minority class recognition. The framework addresses this via:
 \begin{itemize}
     \item \textbf{Class Weight Balancing}: For RF and SVM, the \texttt{class\_weight='balanced'} parameter assigns weights $w_c = \frac{n\_samples}{n\_classes \times n\_samples_c}$ where $n\_samples_c$ is the count of class $c$. This increases the loss contribution of minority class misclassifications during training.
-    \item \textbf{Stratified Splitting}: Train-test splits preserve class proportions using stratified sampling (80\% train, 20\% test).
+    \item \textbf{Stratified Splitting}: Train-test splits preserve class proportions using stratified sampling.
 \end{itemize}
 Class balancing is crucial for real-world deployment where all activity classes must be reliably detected, not just the most frequent ones.
 
@@ -249,17 +269,19 @@ While the framework currently targets Arduino-compatible platforms (Seeed XIAO, 
 \subsection{Dataset}
 Validation experiments use a Human Activity Recognition (HAR) dataset collected from a single subject performing five activities:
 \begin{itemize}
-    \item \textit{Still}, \textit{Walking}, \textit{Walking Upstairs}, \textit{Walking Downstairs}, \textit{Running}
+    \item \textit{Running}, \textit{Still}, \textit{Walking}, \textit{Walking Downstairs}, \textit{Walking Upstairs}
 \end{itemize}
-Data was collected using the Seeed XIAO nRF52840 Sense platform at 100Hz over multiple recording sessions. Each activity was recorded for 30-60 seconds across multiple sessions, with careful attention to transitional periods. The draggable window interface was used to segment continuous recordings into labeled windows, extracting 51 representative windows per activity. After applying 50\% overlapping sliding windows during feature extraction, this yielded 5,390 total training samples with the following distribution:
+Data was collected using the Seeed XIAO nRF52840 Sense platform at 100Hz over multiple recording sessions. Each activity was recorded for 30-60 seconds across multiple sessions, with careful attention to transitional periods. The draggable window interface was used to segment continuous recordings into \textbf{labeled samples} (manually-annotated activity segments), extracting multiple representative windows per activity. 
+
+\textit{Feature Extraction Process}: Each labeled sample (typically 30-60 seconds long) is then processed using the sliding window approach (Section~\ref{sec:feature_extraction}) with 1.5-second windows and 50\% overlap. This transforms the labeled samples into 159 \textbf{feature vectors} (training data points) that are split into training (101 samples, 63.5\%), validation (28 samples, 17.6\%), and test sets (30 samples, 18.9\%). The dataset contains five activity classes:
 \begin{itemize}
-    \item Walking Downstairs: 1,050 samples (19.5\%)
-    \item Running: 1,100 samples (20.4\%)
-    \item Still: 1,000 samples (18.6\%)
-    \item Walking Upstairs: 1,020 samples (18.9\%)
-    \item Walking: 1,220 samples (22.6\%)
+    \item Running: 30 total samples (18.9\%)
+    \item Still: 30 total samples (18.9\%)
+    \item Walking: 30 total samples (18.9\%)
+    \item Walking Downstairs: 35 total samples (22.0\%)
+    \item Walking Upstairs: 34 total samples (21.4\%)
 \end{itemize}
-Class imbalance ratio: 1.22:1 (walking vs. still), representing a relatively balanced dataset suitable for demonstrating class weight effectiveness without extreme imbalance.
+Class imbalance ratio: 1.17:1 (walking downstairs vs. running/still/walking), representing a relatively balanced dataset suitable for demonstrating class weight effectiveness without extreme imbalance. Each feature vector contains 90 time-domain features (15 features × 6 sensor axes).
 
 \subsection{Evaluation Metrics}
 Model performance is assessed using:
