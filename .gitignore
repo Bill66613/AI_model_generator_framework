@@ -299,6 +299,39 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+# Core latex/pdflatex auxiliary files
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+*.nav
+*.snm
+*.vrb
+*.dvi
+*.xdv
+*.blg
+*.bbl
+*.brf
+*.idx
+*.ind
+*.ilg
+*.fdb_latexmk
+*.synctex.gz
+*.spl
+*.maf
+*.mtc
+*.mtc0
+*.mbo
+*.mbe
+*.mp
+
 # User-specific files
 .vscode
 data/

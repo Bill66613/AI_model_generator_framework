@@ -60,26 +60,31 @@ def generate_confusion_matrix_figure():
     # Calculate accuracy from matrix
     accuracy = np.trace(cm_estimated) / np.sum(cm_estimated) * 100
 
-    # Create figure - even larger for maximum readability
-    plt.figure(figsize=(16, 13))
+    # Create figure - optimized for A4 paper
+    plt.figure(figsize=(18, 15))
 
-    # Plot heatmap with annotations - larger fonts
+    # Plot heatmap with annotations - larger fonts for A4
     sns.heatmap(cm_estimated,
                 annot=True,
                 fmt='d',
                 cmap='Blues',
                 xticklabels=ACTIVITY_LABELS,
                 yticklabels=ACTIVITY_LABELS,
-                cbar_kws={'label': 'Number of Samples'},
+                cbar_kws={'label': 'Number of Samples', 'shrink': 0.8},
                 square=True,
-                annot_kws={'fontsize': 16})
+                annot_kws={'fontsize': 20})
 
-    plt.xlabel('Predicted Label', fontsize=18, fontweight='bold')
-    plt.ylabel('True Label', fontsize=18, fontweight='bold')
+    plt.xlabel('Predicted Label', fontsize=24, fontweight='bold')
+    plt.ylabel('True Label', fontsize=24, fontweight='bold')
     plt.title(f'Confusion Matrix - Neural Network Model\n(Overall Accuracy: {accuracy:.1f}%)',
-              fontsize=20, fontweight='bold', pad=20)
-    plt.xticks(fontsize=15)
-    plt.yticks(fontsize=15)
+              fontsize=26, fontweight='bold', pad=25)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    
+    # Update colorbar font size
+    cbar = plt.gca().collections[0].colorbar
+    cbar.ax.tick_params(labelsize=18)
+    cbar.set_label('Number of Samples', fontsize=20, fontweight='bold')
 
     # Adjust layout
     plt.tight_layout()
@@ -111,55 +116,55 @@ def generate_power_consumption_figure():
     current_ma = [2.1, 5.4, 7.8, 8.2]
     power_mw = [i * 3.3 for i in current_ma]  # Convert to mW at 3.3V
 
-    # Create figure with two subplots - larger with less spacing
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
-    plt.subplots_adjust(wspace=0.25)  # Reduce spacing between subplots
+    # Create figure with two subplots - optimized for A4 paper
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
+    plt.subplots_adjust(wspace=0.28)  # Slightly more spacing for larger text
 
     # Subplot 1: Current consumption
     bars1 = ax1.bar(phases, current_ma, color=['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3'],
-                    edgecolor='black', linewidth=2.0, width=0.7)
-    ax1.set_ylabel('Current Draw (mA)', fontsize=18, fontweight='bold')
+                    edgecolor='black', linewidth=2.5, width=0.7)
+    ax1.set_ylabel('Current Draw (mA)', fontsize=24, fontweight='bold')
     ax1.set_title('Current Consumption Profile\n(Seeed XIAO nRF52840 @ 3.3V)',
-                  fontsize=19, fontweight='bold', pad=15)
-    ax1.grid(axis='y', alpha=0.3)
+                  fontsize=26, fontweight='bold', pad=20)
+    ax1.grid(axis='y', alpha=0.3, linewidth=1.5)
     ax1.set_ylim(0, 10)
-    ax1.tick_params(axis='both', labelsize=15)
+    ax1.tick_params(axis='both', labelsize=20)
 
     # Add value labels on bars - larger fonts
     for bar, val in zip(bars1, current_ma):
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + 0.2,
                  f'{val:.1f} mA',
-                 ha='center', va='bottom', fontweight='bold', fontsize=15)
+                 ha='center', va='bottom', fontweight='bold', fontsize=18)
 
     # Subplot 2: Power consumption
     bars2 = ax2.bar(phases, power_mw, color=['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3'],
-                    edgecolor='black', linewidth=2.0, width=0.7)
-    ax2.set_ylabel('Power Consumption (mW)', fontsize=18, fontweight='bold')
+                    edgecolor='black', linewidth=2.5, width=0.7)
+    ax2.set_ylabel('Power Consumption (mW)', fontsize=24, fontweight='bold')
     ax2.set_title('Power Consumption Profile\n(Seeed XIAO nRF52840 @ 3.3V)',
-                  fontsize=19, fontweight='bold', pad=15)
-    ax2.grid(axis='y', alpha=0.3)
+                  fontsize=26, fontweight='bold', pad=20)
+    ax2.grid(axis='y', alpha=0.3, linewidth=1.5)
     ax2.set_ylim(0, 30)
-    ax2.tick_params(axis='both', labelsize=15)
+    ax2.tick_params(axis='both', labelsize=20)
 
     # Add value labels on bars - larger fonts
     for bar, val in zip(bars2, power_mw):
         height = bar.get_height()
         ax2.text(bar.get_x() + bar.get_width()/2., height + 0.5,
                  f'{val:.1f} mW',
-                 ha='center', va='bottom', fontweight='bold', fontsize=15)
+                 ha='center', va='bottom', fontweight='bold', fontsize=18)
 
     # Add average line
     # Exclude idle, average active phases
     avg_current = np.mean(current_ma[1:])
     avg_power = avg_current * 3.3
     ax1.axhline(y=avg_current, color='red', linestyle='--',
-                linewidth=3.0, label=f'Avg Active: {avg_current:.1f} mA')
+                linewidth=3.5, label=f'Avg Active: {avg_current:.1f} mA')
     ax2.axhline(y=avg_power, color='red', linestyle='--',
-                linewidth=3.0, label=f'Avg Active: {avg_power:.1f} mW')
+                linewidth=3.5, label=f'Avg Active: {avg_power:.1f} mW')
 
-    ax1.legend(loc='upper left', fontsize=15)
-    ax2.legend(loc='upper left', fontsize=15)
+    ax1.legend(loc='upper left', fontsize=18, frameon=True, edgecolor='black', fancybox=True)
+    ax2.legend(loc='upper left', fontsize=18, frameon=True, edgecolor='black', fancybox=True)
 
     plt.tight_layout()
 
@@ -185,7 +190,7 @@ def generate_system_architecture_diagram():
     - LaTeX TikZ for vector graphics
     """
 
-    fig, ax = plt.subplots(figsize=(20, 13))
+    fig, ax = plt.subplots(figsize=(22, 14))
     ax.axis('off')
 
     # Define components as rectangles - more compact spacing
@@ -204,17 +209,17 @@ def generate_system_architecture_diagram():
          'color': '#2196f3', 'height': 0.08},
     ]
 
-    # Draw components with better styling
+    # Draw components with better styling and larger text
     for comp in components:
         rect = plt.Rectangle((comp['pos'][0] - 0.18, comp['pos'][1] - comp['height']/2),
                              0.36, comp['height'],
                              facecolor=comp['color'],
                              edgecolor='#1976d2',
-                             linewidth=3.5,
+                             linewidth=4.0,
                              zorder=2)
         ax.add_patch(rect)
         ax.text(comp['pos'][0], comp['pos'][1], comp['name'],
-                ha='center', va='center', fontsize=17, fontweight='bold',
+                ha='center', va='center', fontsize=20, fontweight='bold',
                 color='#0d47a1', zorder=3)
 
     # Draw arrows between components
@@ -227,23 +232,23 @@ def generate_system_architecture_diagram():
                     arrowprops=dict(arrowstyle='->', lw=3, color='#424242'))
 
     # Add clearer side annotations with adjusted positions for compact layout
-    # Left side - Pipeline stages
+    # Left side - Pipeline stages with larger fonts
     ax.text(0.12, 0.84, 'User\nInterface\nLayer', ha='center', va='center',
-            fontsize=16, fontweight='bold', color='#d84315',
+            fontsize=19, fontweight='bold', color='#d84315',
             bbox=dict(boxstyle='round,pad=0.8', facecolor='#ffe0b2',
-                      edgecolor='#f57c00', linewidth=3.0, alpha=0.9))
+                      edgecolor='#f57c00', linewidth=3.5, alpha=0.9))
 
     ax.text(0.12, 0.60, 'Machine\nLearning\nLayer', ha='center', va='center',
-            fontsize=16, fontweight='bold', color='#2e7d32',
+            fontsize=19, fontweight='bold', color='#2e7d32',
             bbox=dict(boxstyle='round,pad=0.8', facecolor='#c8e6c9',
-                      edgecolor='#66bb6a', linewidth=3.0, alpha=0.9))
+                      edgecolor='#66bb6a', linewidth=3.5, alpha=0.9))
 
     ax.text(0.12, 0.36, 'Deployment\nLayer', ha='center', va='center',
-            fontsize=16, fontweight='bold', color='#1565c0',
+            fontsize=19, fontweight='bold', color='#1565c0',
             bbox=dict(boxstyle='round,pad=0.8', facecolor='#e1f5fe',
-                      edgecolor='#29b6f6', linewidth=3.0, alpha=0.9))
+                      edgecolor='#29b6f6', linewidth=3.5, alpha=0.9))
 
-    # Right side - Optimization modes with better formatting
+    # Right side - Optimization modes with better formatting and larger text
     optimization_text = (
         'Optimization Modes:\n'
         '━━━━━━━━━━━━━━━\n'
@@ -257,16 +262,16 @@ def generate_system_architecture_diagram():
         '  (Mixed precision)'
     )
     ax.text(0.88, 0.52, optimization_text,
-            ha='center', va='center', fontsize=15, fontweight='bold',
+            ha='center', va='center', fontsize=18, fontweight='bold',
             color='#5d4037',
             bbox=dict(boxstyle='round,pad=1.0', facecolor='#fff9c4',
-                      edgecolor='#fbc02d', linewidth=3.5, alpha=0.9),
+                      edgecolor='#fbc02d', linewidth=4.0, alpha=0.9),
             linespacing=1.6)
 
     ax.set_xlim(0, 1)
     ax.set_ylim(0.20, 1.0)  # Tighter vertical bounds
     ax.set_title('Framework Architecture: End-to-End Pipeline',
-                 fontsize=24, fontweight='bold', pad=35, color='#212121')
+                 fontsize=28, fontweight='bold', pad=35, color='#212121')
 
     plt.tight_layout()
 
@@ -306,57 +311,61 @@ def generate_optimization_comparison():
         'power': [32.5, 27.2, 23.8, 28.9]
     }
     
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    # Create figure optimized for A4 paper at 0.95\textwidth (~160mm width)
+    fig, axes = plt.subplots(1, 3, figsize=(24, 8))
     
     # Plot 1: Accuracy comparison
     x = np.arange(len(modes))
     width = 0.25
     
     axes[0].bar(x - width, rf_data['accuracy'], width, label='Random Forest', 
-                color='#66c2a5', edgecolor='black', linewidth=1.2)
+                color='#66c2a5', edgecolor='black', linewidth=2.5)
     axes[0].bar(x, nn_data['accuracy'], width, label='Neural Network',
-                color='#fc8d62', edgecolor='black', linewidth=1.2)
+                color='#fc8d62', edgecolor='black', linewidth=2.5)
     axes[0].bar(x + width, svm_data['accuracy'], width, label='SVM (RBF)',
-                color='#8da0cb', edgecolor='black', linewidth=1.2)
+                color='#8da0cb', edgecolor='black', linewidth=2.5)
     
-    axes[0].set_ylabel('Accuracy (%)', fontsize=11, fontweight='bold')
-    axes[0].set_title('Model Accuracy by Optimization Mode', fontsize=12, fontweight='bold')
+    axes[0].set_ylabel('Accuracy (%)', fontsize=24, fontweight='bold')
+    axes[0].set_title('Model Accuracy by Optimization Mode', fontsize=26, fontweight='bold', pad=20)
     axes[0].set_xticks(x)
-    axes[0].set_xticklabels(modes, fontsize=10)
-    axes[0].legend(fontsize=9, loc='lower right')
-    axes[0].grid(axis='y', alpha=0.3)
+    axes[0].set_xticklabels(modes, fontsize=20, fontweight='bold')
+    axes[0].tick_params(axis='y', labelsize=20)
+    axes[0].legend(fontsize=18, loc='lower right', framealpha=0.95, frameon=True, edgecolor='black', fancybox=True)
+    axes[0].grid(axis='y', alpha=0.3, linewidth=1.5)
     axes[0].set_ylim(90, 97)
     
     # Plot 2: Latency comparison
     axes[1].bar(x - width, rf_data['latency'], width, label='Random Forest',
-                color='#66c2a5', edgecolor='black', linewidth=1.2)
+                color='#66c2a5', edgecolor='black', linewidth=2.5)
     axes[1].bar(x, nn_data['latency'], width, label='Neural Network',
-                color='#fc8d62', edgecolor='black', linewidth=1.2)
+                color='#fc8d62', edgecolor='black', linewidth=2.5)
     axes[1].bar(x + width, svm_data['latency'], width, label='SVM (RBF)',
-                color='#8da0cb', edgecolor='black', linewidth=1.2)
+                color='#8da0cb', edgecolor='black', linewidth=2.5)
     
-    axes[1].set_ylabel('Inference Latency (ms)', fontsize=11, fontweight='bold')
-    axes[1].set_title('Inference Time by Optimization Mode', fontsize=12, fontweight='bold')
+    axes[1].set_ylabel('Inference Latency (ms)', fontsize=24, fontweight='bold')
+    axes[1].set_title('Inference Time by Optimization Mode', fontsize=26, fontweight='bold', pad=20)
     axes[1].set_xticks(x)
-    axes[1].set_xticklabels(modes, fontsize=10)
-    axes[1].legend(fontsize=9, loc='upper right')
-    axes[1].grid(axis='y', alpha=0.3)
+    axes[1].set_xticklabels(modes, fontsize=20, fontweight='bold')
+    axes[1].tick_params(axis='y', labelsize=20)
+    axes[1].legend(fontsize=18, loc='upper right', framealpha=0.95, frameon=True, edgecolor='black', fancybox=True)
+    axes[1].grid(axis='y', alpha=0.3, linewidth=1.5)
     axes[1].set_ylim(0, 20)
     
     # Plot 3: Power comparison
     axes[2].bar(x - width, rf_data['power'], width, label='Random Forest',
-                color='#66c2a5', edgecolor='black', linewidth=1.2)
+                color='#66c2a5', edgecolor='black', linewidth=2.5)
     axes[2].bar(x, nn_data['power'], width, label='Neural Network',
-                color='#fc8d62', edgecolor='black', linewidth=1.2)
+                color='#fc8d62', edgecolor='black', linewidth=2.5)
     axes[2].bar(x + width, svm_data['power'], width, label='SVM (RBF)',
-                color='#8da0cb', edgecolor='black', linewidth=1.2)
+                color='#8da0cb', edgecolor='black', linewidth=2.5)
     
-    axes[2].set_ylabel('Power Consumption (mW)', fontsize=11, fontweight='bold')
-    axes[2].set_title('Power Usage by Optimization Mode', fontsize=12, fontweight='bold')
+    axes[2].set_ylabel('Power Consumption (mW)', fontsize=24, fontweight='bold')
+    axes[2].set_title('Power Usage by Optimization Mode', fontsize=26, fontweight='bold', pad=20)
     axes[2].set_xticks(x)
-    axes[2].set_xticklabels(modes, fontsize=10)
-    axes[2].legend(fontsize=9, loc='upper right')
-    axes[2].grid(axis='y', alpha=0.3)
+    axes[2].set_xticklabels(modes, fontsize=20, fontweight='bold')
+    axes[2].tick_params(axis='y', labelsize=20)
+    axes[2].legend(fontsize=18, loc='upper right', framealpha=0.95, frameon=True, edgecolor='black', fancybox=True)
+    axes[2].grid(axis='y', alpha=0.3, linewidth=1.5)
     axes[2].set_ylim(0, 35)
     
     plt.tight_layout()
@@ -399,35 +408,35 @@ def generate_workflow_diagram():
                              zorder=2)
         ax.add_patch(rect)
         ax.text(step['x'], y_center, step['name'],
-                ha='center', va='center', fontsize=11, fontweight='bold',
+                ha='center', va='center', fontsize=14, fontweight='bold',
                 color='#1b5e20', zorder=3)
     
-    # Draw arrows
+    # Draw arrows with thicker lines
     for i in range(len(steps) - 1):
         x_start = steps[i]['x'] + box_width/2
         x_end = steps[i+1]['x'] - box_width/2
         ax.annotate('',
                     xy=(x_end, y_center),
                     xytext=(x_start, y_center),
-                    arrowprops=dict(arrowstyle='->', lw=3, color='#424242'))
+                    arrowprops=dict(arrowstyle='->', lw=4, color='#424242'))
     
-    # Add time estimates below
+    # Add time estimates below with larger font
     time_labels = ['5 min', '3 min', '10 min', '2 min', '5-30 min', '1 min', '5 min']
     for step, time_label in zip(steps, time_labels):
         ax.text(step['x'], 0.15, time_label,
-                ha='center', va='center', fontsize=9, style='italic',
-                color='#757575')
+                ha='center', va='center', fontsize=14, style='italic',
+                color='#757575', fontweight='bold')
     
     ax.text(0.5, 0.05, 'Estimated Total Time: 30-60 minutes',
-            ha='center', va='center', fontsize=11, fontweight='bold',
+            ha='center', va='center', fontsize=16, fontweight='bold',
             color='#d84315',
             bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffccbc', 
-                     edgecolor='#ff5722', linewidth=2))
+                     edgecolor='#ff5722', linewidth=3))
     
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 0.8)
     ax.set_title('User Workflow: From Raw Data to Edge Deployment',
-                 fontsize=16, fontweight='bold', pad=20, color='#212121')
+                 fontsize=24, fontweight='bold', pad=20, color='#212121')
     
     plt.tight_layout()
     

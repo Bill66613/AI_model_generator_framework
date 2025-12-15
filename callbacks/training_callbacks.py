@@ -1143,13 +1143,67 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
 
 
 def perform_cross_validation(model, X_train, y_train, model_type):
-    """Perform cross-validation analysis."""
+    """Perform cross-validation analysis and optionally save the trained model."""
     start_time = time.time()
 
     # Perform training with cross-validation
     training_results = model.train(X_train, y_train, use_cross_validation=True)
 
+    # Split data for test evaluation (20% holdout)
+    X_train_full, X_test, y_train_full, y_test = train_test_split(
+        X_train, y_train, test_size=0.2, random_state=42, stratify=y_train
+    )
+
+    # Retrain on full training set for final model
+    model.train(X_train_full, y_train_full, use_cross_validation=False)
+
+    # Evaluate on test set
+    evaluation_results = model.evaluate(X_test, y_test)
+
+    # Get training accuracy
+    train_predictions = model.predict(X_train_full)
+    train_accuracy = np.mean(train_predictions == y_train_full)
+
     training_time = time.time() - start_time
+
+    # Save the trained model with full evaluation data
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_filename = f"{model_type}_cv_{timestamp}.joblib"
+    model_path = get_model_path(model_filename)
+    model.save_model(model_path)
+
+    # Build performance metrics for detailed evaluation
+    performance_metrics = {
+        'train_accuracy': train_accuracy,
+        'test_accuracy': evaluation_results['test_accuracy'],
+        'cv_mean_accuracy': training_results.get('cv_mean_accuracy', 0),
+        'cv_std_accuracy': training_results.get('cv_std_accuracy', 0),
+        'confusion_matrix': evaluation_results.get('confusion_matrix', []),
+        'classification_report': evaluation_results.get('classification_report', {}),
+        'label_names': evaluation_results.get('label_names', [])
+    }
+
+    # Save model metadata
+    model_info = {
+        'model_path': model_path,
+        'model_type': model_type,
+        'training_samples': len(X_train_full),
+        'val_samples': 0,
+        'test_samples': len(X_test),
+        'features': X_train.shape[1] if len(X_train.shape) > 1 else 1,
+        'classes': len(set(y_train)),
+        'train_accuracy': train_accuracy,
+        'val_accuracy': 0,
+        'test_accuracy': evaluation_results['test_accuracy'],
+        'cv_accuracy': training_results.get('cv_mean_accuracy', 0),
+        'used_validation': False,
+        'performance_metrics': performance_metrics,
+        'training_time': training_time,
+        'timestamp': timestamp,
+        'cv_std_accuracy': training_results.get('cv_std_accuracy', 0)
+    }
+
+    save_model_metadata(model_filename, model_info)
 
     # Create cross-validation visualization
     cv_results = training_results
@@ -1165,7 +1219,11 @@ def perform_cross_validation(model, X_train, y_train, model_type):
                 f"Mean CV Accuracy: {cv_results.get('cv_mean_accuracy', 0):.4f}"),
             html.Li(
                 f"Standard Deviation: {cv_results.get('cv_std_accuracy', 0):.4f}"),
+            html.Li(
+                f"Test Accuracy: {evaluation_results['test_accuracy']:.4f}"),
             html.Li(f"Training Time: {training_time:.2f} seconds"),
+            html.Li(f"Model Saved: {model_filename}", style={
+                    'color': '#28a745', 'font-weight': 'bold'})
         ]),
         html.Div([
             dcc.Graph(
@@ -1173,8 +1231,10 @@ def perform_cross_validation(model, X_train, y_train, model_type):
             )
         ])
     ])
-    # Cross-validation doesn't save a model, so return no_update for model options
-    return cv_output, no_update
+
+    # Return updated model options since we saved a model
+    updated_options = load_trained_model_options()
+    return cv_output, updated_options
 
 
 def create_cv_visualization(cv_results, model_type):
