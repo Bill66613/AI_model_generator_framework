@@ -338,7 +338,11 @@ layout = html.Div([
                     }
                 }
             )
-        ])
+        ]),
+
+        # Detailed Evaluation Results Display
+        html.Div(id='detailed-evaluation-results',
+                 style={'margin-top': '20px'})
     ], style={
         'background-color': '#ffffff',
         'padding': '25px',
@@ -355,7 +359,8 @@ layout = html.Div([
     ),
 
     # Alert for removal status
-    html.Div(id='remove-model-alert', style={'margin-bottom': '20px', 'display': 'none'}),
+    html.Div(id='remove-model-alert',
+             style={'margin-bottom': '20px', 'display': 'none'}),
     # Edge Deployment Section
     html.Div([
         html.H3("📱 Edge Deployment & Code Generation", style={
