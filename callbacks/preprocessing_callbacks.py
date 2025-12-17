@@ -2070,6 +2070,7 @@ def clear_training_data(n_clicks, dataset_name):
     if not dataset_name:
         return {}, {}, {}, html.Div("⚠️ No dataset selected.", style={'color': '#FF9800'})
 
+    deleted_files = []
     try:
         # Clear training data directory for this dataset
         training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
@@ -2082,7 +2083,6 @@ def clear_training_data(n_clicks, dataset_name):
                 f"{dataset_name}_metadata.json"
             ]
 
-            deleted_files = []
             for pattern in patterns:
                 file_path = os.path.join(training_dir, pattern)
                 if os.path.exists(file_path):
