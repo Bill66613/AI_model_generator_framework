@@ -1,7 +1,7 @@
 import os
 import json
 import pandas as pd
-from dash import Input, Output, State, callback, no_update, html
+from dash import Input, Output, State, callback, no_update, html, dcc
 from scipy.signal import savgol_filter
 import plotly.express as px
 import plotly.graph_objects as go
@@ -27,6 +27,163 @@ def _get_feature_method_label(feature_method):
         'custom': 'Custom Selection'
     }
     return labels.get(feature_method, feature_method)
+
+
+def compute_window_quality(window_data, sensor_cols=['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']):
+    """
+    Calculate quality score for a window.
+    
+    Args:
+        window_data: DataFrame with sensor readings
+        sensor_cols: List of sensor column names
+    
+    Returns:
+        quality_score: 0-1 (1 = high quality)
+        reasons: List of quality issues
+    """
+    quality_score = 1.0
+    reasons = []
+    
+    # Check 1: Sufficient variance (not stationary/flat line)
+    available_accel = [col for col in ['aX', 'aY', 'aZ'] if col in window_data.columns]
+    if available_accel:
+        variance = window_data[available_accel].var().mean()
+        if variance < 0.01:
+            quality_score -= 0.3
+            reasons.append("Low variance (possibly stationary)")
+    
+    # Check 2: No extreme outliers
+    for col in sensor_cols:
+        if col in window_data.columns:
+            # Accelerometer: check for > 4g (unusual for human activities)
+            if col.startswith('a') and (window_data[col].abs() > 40).any():
+                quality_score -= 0.2
+                reasons.append(f"Extreme outliers in {col}")
+                break
+            # Gyroscope: check for > 2000 deg/s
+            elif col.startswith('g') and (window_data[col].abs() > 2000).any():
+                quality_score -= 0.2
+                reasons.append(f"Extreme outliers in {col}")
+                break
+    
+    # Check 3: No missing data
+    if window_data[sensor_cols].isnull().any().any():
+        quality_score -= 0.5
+        reasons.append("Missing data")
+    
+    # Check 4: Sufficient data points
+    if len(window_data) < 100:  # Less than 1 second @ 100Hz
+        quality_score -= 0.3
+        reasons.append("Insufficient data points")
+    
+    return max(0, quality_score), reasons
+
+
+def generate_sliding_windows_from_current(current_windows, df, window_size_samples, 
+                                         overlap_percent, quality_threshold):
+    """
+    Generate overlapping windows from current manually-selected windows.
+    Merges nearby manual windows into continuous regions to maximize window generation.
+    
+    Args:
+        current_windows: List of current window configurations
+        df: DataFrame with full dataset
+        window_size_samples: Number of samples per window
+        overlap_percent: Overlap percentage (0-90)
+        quality_threshold: Minimum quality score (0-1)
+    
+    Returns:
+        good_windows: List of high-quality window data
+        flagged_windows: List of low-quality windows
+        stats: Dictionary with statistics
+    """
+    stride = int(window_size_samples * (1 - overlap_percent / 100))
+    good_windows = []
+    flagged_windows = []
+    
+    sensor_cols = [col for col in df.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+    
+    # Sort windows by start time
+    sorted_windows = sorted(current_windows, key=lambda w: w['start_time'])
+    
+    # Merge overlapping or adjacent windows into continuous regions
+    # This allows sliding windows to span across multiple manual selections
+    merged_regions = []
+    if sorted_windows:
+        current_region = {
+            'start_time': sorted_windows[0]['start_time'],
+            'end_time': sorted_windows[0]['end_time'],
+            'window_ids': [sorted_windows[0]['window_id']]
+        }
+        
+        for window in sorted_windows[1:]:
+            # If windows overlap or are within 1 window size of each other, merge them
+            gap = window['start_time'] - current_region['end_time']
+            gap_samples = gap * (1000 / (window_size_samples * 10))  # Approximate samples
+            
+            if gap <= 0 or gap_samples < window_size_samples:
+                # Merge: extend current region
+                current_region['end_time'] = max(current_region['end_time'], window['end_time'])
+                current_region['window_ids'].append(window['window_id'])
+            else:
+                # New separate region
+                merged_regions.append(current_region)
+                current_region = {
+                    'start_time': window['start_time'],
+                    'end_time': window['end_time'],
+                    'window_ids': [window['window_id']]
+                }
+        
+        merged_regions.append(current_region)
+    
+    # Generate sliding windows from each merged region
+    for region in merged_regions:
+        start_time = region['start_time']
+        end_time = region['end_time']
+        
+        # Get the time indices for this region
+        region_mask = (df['Time_seconds'] >= start_time) & (df['Time_seconds'] <= end_time)
+        region_data = df[region_mask].copy()
+        
+        if len(region_data) < window_size_samples:
+            continue
+        
+        # Generate sliding windows within this region
+        region_start_idx = region_data.index[0]
+        
+        for start_idx in range(0, len(region_data) - window_size_samples + 1, stride):
+            end_idx = start_idx + window_size_samples
+            window_df = region_data.iloc[start_idx:end_idx].copy()
+            
+            # Compute quality
+            quality, reasons = compute_window_quality(window_df, sensor_cols)
+            
+            window_info = {
+                'data': window_df,
+                'start_idx': region_start_idx + start_idx,
+                'end_idx': region_start_idx + end_idx,
+                'start_time': window_df['Time_seconds'].iloc[0],
+                'end_time': window_df['Time_seconds'].iloc[-1],
+                'quality': quality,
+                'reasons': reasons,
+                'parent_window': '-'.join(map(str, region['window_ids']))
+            }
+            
+            if quality >= quality_threshold:
+                good_windows.append(window_info)
+            else:
+                flagged_windows.append(window_info)
+    
+    stats = {
+        'total_generated': len(good_windows) + len(flagged_windows),
+        'good_windows': len(good_windows),
+        'flagged_windows': len(flagged_windows),
+        'avg_quality': np.mean([w['quality'] for w in good_windows]) if good_windows else 0,
+        'overlap_percent': overlap_percent,
+        'stride_samples': stride
+    }
+    
+    return good_windows, flagged_windows, stats
 
 
 @callback(
@@ -862,7 +1019,378 @@ def constrain_window_movement(relayout_data, current_figure, current_windows):
 
 
 @callback(
+    Output('overlap-info', 'children'),
+    Input('overlap-percentage-slider', 'value'),
+    State('time-window-span-input', 'value')
+)
+def update_overlap_info(overlap_percent, window_size_ms):
+    """Display information about overlap settings."""
+    if not window_size_ms:
+        return ""
+    
+    # Calculate window parameters
+    sampling_rate = 100  # Hz
+    window_samples = int((window_size_ms / 1000) * sampling_rate)
+    stride = int(window_samples * (1 - overlap_percent / 100))
+    
+    # Estimate multiplication factor
+    if overlap_percent == 0:
+        factor = "1x"
+    else:
+        factor = f"{1 / (1 - overlap_percent / 100):.1f}x"
+    
+    return html.Div([
+        html.Span(f"📊 Stride: {stride} samples | ", style={'color': '#007bff', 'font-weight': 'bold'}),
+        html.Span(f"Sample increase: ~{factor}", style={'color': '#28a745', 'font-weight': 'bold'}),
+        html.Br(),
+        html.Span(f"Example: 10 windows → ~{int(10 * float(factor[:-1]))} windows with {overlap_percent}% overlap", 
+                 style={'font-size': '12px', 'color': '#666', 'font-style': 'italic'})
+    ])
+
+
+@callback(
+    [Output('sliding-windows-preview', 'children'),
+     Output('sliding-windows-data', 'data'),
+     Output('save-sliding-windows-btn', 'disabled')],
+    Input('generate-sliding-windows-btn', 'n_clicks'),
+    [State('dataset-selector_', 'value'),
+     State('current-windows', 'data'),
+     State('time-window-span-input', 'value'),
+     State('overlap-percentage-slider', 'value'),
+     State('quality-threshold-slider', 'value')],
+    prevent_initial_call=True
+)
+def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_size_ms, 
+                            overlap_percent, quality_threshold):
+    """Generate sliding windows from manually selected regions."""
+    if not (dataset_name and current_windows and window_size_ms):
+        return html.Div("⚠️ Please select a dataset and define windows first.", 
+                       style={'color': '#FF9800', 'padding': '20px'}), None, True
+    
+    try:
+        # Load data
+        with open(METADATA_FILE, 'r') as f:
+            metadata = json.load(f)
+        
+        if "cleaned_data_path" in metadata[dataset_name]:
+            file_path = metadata[dataset_name]["cleaned_data_path"]
+        else:
+            file_path = metadata[dataset_name]["path"]
+        
+        if not os.path.exists(file_path):
+            return html.Div("❌ Dataset file not found.", style={'color': '#dc3545'}), None, True
+        
+        df = pd.read_csv(file_path)
+        sampling_rate = metadata.get(dataset_name, {}).get('sampling_rate', 100)
+        
+        # Create time axis if not present
+        if 'Time_seconds' not in df.columns:
+            df['Time_seconds'] = df.index / sampling_rate
+        
+        window_samples = int((window_size_ms / 1000) * sampling_rate)
+        
+        # Generate sliding windows
+        good_windows, flagged_windows, stats = generate_sliding_windows_from_current(
+            current_windows, df, window_samples, overlap_percent, quality_threshold
+        )
+        
+        if not good_windows and not flagged_windows:
+            return html.Div("⚠️ No windows generated. Try reducing quality threshold.", 
+                           style={'color': '#FF9800', 'padding': '20px'}), None, True
+        
+        # Create quality distribution visualization
+        quality_scores = [w['quality'] for w in good_windows + flagged_windows]
+        quality_fig = go.Figure()
+        
+        quality_fig.add_trace(go.Histogram(
+            x=quality_scores,
+            nbinsx=20,
+            marker_color='#007bff',
+            name='Quality Distribution'
+        ))
+        
+        quality_fig.add_vline(
+            x=quality_threshold,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Threshold ({quality_threshold})",
+            annotation_position="top right"
+        )
+        
+        quality_fig.update_layout(
+            title='Window Quality Score Distribution',
+            xaxis_title='Quality Score',
+            yaxis_title='Count',
+            height=300,
+            showlegend=False
+        )
+        
+        # Create a preview visualization of the first few windows
+        preview_sample_count = min(3, len(good_windows))
+        if preview_sample_count > 0:
+            preview_data = pd.concat([good_windows[i]['data'] for i in range(preview_sample_count)], ignore_index=True)
+            sensor_cols = [col for col in preview_data.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+            
+            preview_fig = go.Figure()
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+            
+            for i, col in enumerate(sensor_cols[:6]):
+                preview_fig.add_trace(go.Scatter(
+                    x=preview_data.index,
+                    y=preview_data[col],
+                    mode='lines',
+                    name=col,
+                    line=dict(color=colors[i % len(colors)], width=1.5)
+                ))
+            
+            preview_fig.update_layout(
+                title=f"Preview - First {preview_sample_count} Windows",
+                xaxis_title="Sample Index",
+                yaxis_title="Sensor Values",
+                height=250,
+                hovermode='x unified',
+                margin=dict(t=40, b=40)
+            )
+        else:
+            preview_fig = None
+        
+        # Create preview content
+        preview = html.Div([
+            html.H5("✅ Sliding Windows Generated Successfully!", style={
+                'color': '#28a745', 'margin-bottom': '15px'
+            }),
+            
+            # Statistics cards
+            html.Div([
+                html.Div([
+                    html.H2(str(stats['good_windows']), style={'color': '#28a745', 'margin': '0'}),
+                    html.P("High Quality Windows", style={'color': '#666', 'margin': '5px 0'})
+                ], style={
+                    'display': 'inline-block', 'width': '23%', 'text-align': 'center',
+                    'background': 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)',
+                    'padding': '15px', 'border-radius': '8px', 'margin-right': '2%'
+                }),
+                
+                html.Div([
+                    html.H2(str(stats['flagged_windows']), style={'color': '#ffc107', 'margin': '0'}),
+                    html.P("Flagged (Low Quality)", style={'color': '#666', 'margin': '5px 0'})
+                ], style={
+                    'display': 'inline-block', 'width': '23%', 'text-align': 'center',
+                    'background': 'linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%)',
+                    'padding': '15px', 'border-radius': '8px', 'margin-right': '2%'
+                }),
+                
+                html.Div([
+                    html.H2(f"{stats['avg_quality']:.2f}", style={'color': '#007bff', 'margin': '0'}),
+                    html.P("Average Quality", style={'color': '#666', 'margin': '5px 0'})
+                ], style={
+                    'display': 'inline-block', 'width': '23%', 'text-align': 'center',
+                    'background': 'linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%)',
+                    'padding': '15px', 'border-radius': '8px', 'margin-right': '2%'
+                }),
+                
+                html.Div([
+                    html.H2(f"{stats['overlap_percent']}%", style={'color': '#6c757d', 'margin': '0'}),
+                    html.P("Overlap Used", style={'color': '#666', 'margin': '5px 0'})
+                ], style={
+                    'display': 'inline-block', 'width': '23%', 'text-align': 'center',
+                    'background': 'linear-gradient(135deg, #e2e3e5 0%, #d6d8db 100%)',
+                    'padding': '15px', 'border-radius': '8px'
+                })
+            ], style={'margin-bottom': '20px'}),
+            
+            # Quality distribution chart
+            dcc.Graph(figure=quality_fig, config={'displayModeBar': False}),
+            
+            # Preview graph
+            dcc.Graph(figure=preview_fig, config={'displayModeBar': False}) if preview_fig else html.Div(),
+            
+            # Details
+            html.Div([
+                html.P([
+                    html.Strong("Configuration: "),
+                    f"Window size: {window_size_ms}ms ({window_samples} samples) | ",
+                    f"Stride: {stats['stride_samples']} samples | ",
+                    f"Quality threshold: {quality_threshold}"
+                ], style={'margin-bottom': '10px'}),
+                html.P([
+                    html.Strong("Improvement: "),
+                    f"From {len(current_windows)} manual windows → {stats['good_windows']} high-quality windows ",
+                    f"({stats['good_windows'] / len(current_windows):.1f}x increase)"
+                ], style={'color': '#28a745', 'font-weight': 'bold'}),
+            ], style={
+                'background-color': '#f8f9fa',
+                'padding': '15px',
+                'border-radius': '6px',
+                'margin-top': '15px'
+            }),
+            
+            # Action reminder
+            html.Div([
+                html.P([
+                    html.Strong("📌 Next Step: "),
+                    "Click ",
+                    html.Strong("'💾 Save Generated Windows'"),
+                    " below to save these windows and view them in the Split Results graph."
+                ], style={'margin': '0'})
+            ], style={
+                'background-color': '#d1ecf1',
+                'border-left': '4px solid #17a2b8',
+                'padding': '15px',
+                'border-radius': '6px',
+                'margin-top': '15px'
+            }),
+            
+            # Warning for flagged windows
+            html.Div([
+                html.P([
+                    html.Strong("⚠️ Note: "),
+                    f"{stats['flagged_windows']} windows were flagged for quality issues and excluded. ",
+                    "Lower the quality threshold to include them."
+                ], style={'margin': '0'})
+            ], style={
+                'background-color': '#fff3cd',
+                'border-left': '4px solid #ffc107',
+                'padding': '15px',
+                'border-radius': '6px',
+                'margin-top': '15px'
+            }) if stats['flagged_windows'] > 0 else html.Div()
+        ])
+        
+        # Prepare data for storage
+        window_data = {
+            'good_windows': [
+                {
+                    'data': w['data'].to_dict('records'),
+                    'start_time': w['start_time'],
+                    'end_time': w['end_time'],
+                    'quality': w['quality']
+                }
+                for w in good_windows
+            ],
+            'dataset_name': dataset_name,
+            'window_size_ms': window_size_ms,
+            'overlap_percent': overlap_percent,
+            'stats': stats
+        }
+        
+        return preview, window_data, False
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"ERROR in generate_sliding_windows: {error_details}")
+        return html.Div([
+            html.H5("❌ Error generating windows", style={'color': '#dc3545'}),
+            html.P(str(e))
+        ]), None, True
+
+
+@callback(
     Output('split-samples-graph', 'figure'),
+    Output('sliding-windows-preview', 'children', allow_duplicate=True),
+    Output('sliding-windows-data', 'data', allow_duplicate=True),
+    Input('save-sliding-windows-btn', 'n_clicks'),
+    State('sliding-windows-data', 'data'),
+    State('dataset-selector_', 'value'),
+    prevent_initial_call=True
+)
+def save_sliding_windows(n_clicks, window_data, dataset_name):
+    """Save generated sliding windows to disk."""
+    if not window_data or not dataset_name:
+        return no_update, no_update, no_update
+    
+    try:
+        good_windows = window_data['good_windows']
+        
+        sample_files = []
+        all_selected_data = []
+        
+        # Save each generated window
+        for idx, window_info in enumerate(good_windows):
+            window_df = pd.DataFrame(window_info['data'])
+            
+            # Extract sensor columns
+            sensor_cols = [col for col in window_df.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+            
+            # Generate unique filename
+            window_id = f"sliding_{idx}"
+            sample_file_path = get_window_path(window_id, dataset_name)
+            
+            # Save window data
+            window_df[sensor_cols].to_csv(sample_file_path, index=False, float_format='%.4f')
+            
+            sample_files.append(sample_file_path)
+            all_selected_data.append(window_df)
+        
+        # Update metadata
+        with open(METADATA_FILE, 'r') as f:
+            metadata = json.load(f)
+        
+        if 'dragged_samples' not in metadata[dataset_name]:
+            metadata[dataset_name]['dragged_samples'] = []
+        metadata[dataset_name]['dragged_samples'].extend(sample_files)
+        
+        with open(METADATA_FILE, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        # Create visualization of all windows
+        combined_data = pd.concat(all_selected_data, ignore_index=True)
+        sensor_cols = [col for col in combined_data.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+        available_cols = sensor_cols[:6]
+        
+        fig = go.Figure()
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+        
+        for i, col in enumerate(available_cols):
+            fig.add_trace(go.Scatter(
+                x=combined_data.index,
+                y=combined_data[col],
+                mode='lines',
+                name=col,
+                line=dict(color=colors[i % len(colors)], width=1.5)
+            ))
+        
+        fig.update_layout(
+            title=f"Saved Sliding Windows Preview - {len(good_windows)} Windows",
+            xaxis_title="Sample Index",
+            yaxis_title="Sensor Values",
+            height=500,
+            hovermode='x unified'
+        )
+        
+        success_message = html.Div([
+            html.H5("💾 Windows Saved Successfully!", style={'color': '#28a745', 'margin-bottom': '15px'}),
+            html.P([
+                html.Strong(f"{len(good_windows)} windows"),
+                f" saved to: persistent_data/"
+            ]),
+            html.P([
+                "These windows are now available in the ",
+                html.Strong("Training Data Preparation"),
+                " section below."
+            ], style={'color': '#666', 'font-style': 'italic'})
+        ], style={
+            'background-color': '#d4edda',
+            'border-left': '4px solid #28a745',
+            'padding': '20px',
+            'border-radius': '6px'
+        })
+        
+        return fig, success_message, None
+        
+    except Exception as e:
+        import traceback
+        print(f"ERROR in save_sliding_windows: {traceback.format_exc()}")
+        error_msg = html.Div([
+            html.H5("❌ Error saving windows", style={'color': '#dc3545'}),
+            html.P(str(e))
+        ])
+        return no_update, error_msg, window_data
+
+
+@callback(
+    Output('split-samples-graph', 'figure', allow_duplicate=True),
     Input('split-selected-windows-btn', 'n_clicks'),
     State('dataset-selector_', 'value'),
     State('current-windows', 'data'),

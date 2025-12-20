@@ -380,6 +380,97 @@ layout = html.Div([
             ], style={'width': '35%', 'display': 'inline-block', 'margin-left': '5%', 'vertical-align': 'top'})
         ], style={'margin': '20px 0'}),
 
+        # Sliding Window Generation Section
+        html.Div([
+            html.H5("🔄 Automatic Sliding Window Generation", style={
+                'color': '#495057', 
+                'margin-bottom': '15px',
+                'margin-top': '25px'
+            }),
+            html.P("Generate overlapping windows from selected regions to increase training samples", 
+                   style={'color': '#666', 'margin-bottom': '15px', 'font-size': '14px'}),
+            
+            html.Div([
+                html.Div([
+                    html.Label("Overlap Percentage:", style={'font-weight': 'bold', 'margin-bottom': '5px'}),
+                    dcc.Slider(
+                        id='overlap-percentage-slider',
+                        min=0,
+                        max=90,
+                        step=5,
+                        value=50,
+                        marks={0: '0%', 25: '25%', 50: '50%', 75: '75%', 90: '90%'},
+                        tooltip={"placement": "bottom", "always_visible": True}
+                    ),
+                    html.Div(id='overlap-info', style={'margin-top': '10px', 'font-size': '13px', 'color': '#666'})
+                ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
+                
+                html.Div([
+                    html.Label("Quality Threshold:", style={'font-weight': 'bold', 'margin-bottom': '5px'}),
+                    dcc.Slider(
+                        id='quality-threshold-slider',
+                        min=0.3,
+                        max=1.0,
+                        step=0.05,
+                        value=0.7,
+                        marks={0.3: '0.3', 0.5: '0.5', 0.7: '0.7', 0.9: '0.9', 1.0: '1.0'},
+                        tooltip={"placement": "bottom", "always_visible": True}
+                    ),
+                    html.Div("Higher = stricter quality filtering", 
+                             style={'margin-top': '10px', 'font-size': '12px', 'color': '#999', 'font-style': 'italic'})
+                ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'})
+            ], style={'margin-bottom': '20px'}),
+            
+            html.Div([
+                html.Button(
+                    "🚀 Generate Sliding Windows",
+                    id='generate-sliding-windows-btn',
+                    n_clicks=0,
+                    style={
+                        'background-color': '#007bff',
+                        'color': 'white',
+                        'border': 'none',
+                        'padding': '12px 30px',
+                        'border-radius': '6px',
+                        'cursor': 'pointer',
+                        'font-weight': 'bold',
+                        'font-size': '16px',
+                        'box-shadow': '0 3px 6px rgba(0,0,0,0.15)',
+                        'margin-right': '15px'
+                    }
+                ),
+                html.Button(
+                    "💾 Save Generated Windows",
+                    id='save-sliding-windows-btn',
+                    n_clicks=0,
+                    disabled=True,
+                    style={
+                        'background-color': '#28a745',
+                        'color': 'white',
+                        'border': 'none',
+                        'padding': '12px 30px',
+                        'border-radius': '6px',
+                        'cursor': 'pointer',
+                        'font-weight': 'bold',
+                        'font-size': '16px',
+                        'box-shadow': '0 3px 6px rgba(0,0,0,0.15)'
+                    }
+                )
+            ], style={'margin-bottom': '20px'}),
+            
+            # Preview area
+            html.Div(id='sliding-windows-preview'),
+            
+            # Store for generated windows
+            dcc.Store(id='sliding-windows-data')
+        ], style={
+            'background-color': '#f8f9fa',
+            'padding': '20px',
+            'border-radius': '8px',
+            'border': '2px dashed #007bff',
+            'margin': '20px 0'
+        }),
+
         # Split results graph
         html.Div([
             html.H5("🔍 Window Split Results", style={
