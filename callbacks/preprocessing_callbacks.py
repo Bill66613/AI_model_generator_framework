@@ -32,26 +32,27 @@ def _get_feature_method_label(feature_method):
 def compute_window_quality(window_data, sensor_cols=['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']):
     """
     Calculate quality score for a window.
-    
+
     Args:
         window_data: DataFrame with sensor readings
         sensor_cols: List of sensor column names
-    
+
     Returns:
         quality_score: 0-1 (1 = high quality)
         reasons: List of quality issues
     """
     quality_score = 1.0
     reasons = []
-    
+
     # Check 1: Sufficient variance (not stationary/flat line)
-    available_accel = [col for col in ['aX', 'aY', 'aZ'] if col in window_data.columns]
+    available_accel = [col for col in [
+        'aX', 'aY', 'aZ'] if col in window_data.columns]
     if available_accel:
         variance = window_data[available_accel].var().mean()
         if variance < 0.01:
             quality_score -= 0.3
             reasons.append("Low variance (possibly stationary)")
-    
+
     # Check 2: No extreme outliers
     for col in sensor_cols:
         if col in window_data.columns:
@@ -65,33 +66,33 @@ def compute_window_quality(window_data, sensor_cols=['aX', 'aY', 'aZ', 'gX', 'gY
                 quality_score -= 0.2
                 reasons.append(f"Extreme outliers in {col}")
                 break
-    
+
     # Check 3: No missing data
     if window_data[sensor_cols].isnull().any().any():
         quality_score -= 0.5
         reasons.append("Missing data")
-    
+
     # Check 4: Sufficient data points
     if len(window_data) < 100:  # Less than 1 second @ 100Hz
         quality_score -= 0.3
         reasons.append("Insufficient data points")
-    
+
     return max(0, quality_score), reasons
 
 
-def generate_sliding_windows_from_current(current_windows, df, window_size_samples, 
-                                         overlap_percent, quality_threshold):
+def generate_sliding_windows_from_current(current_windows, df, window_size_samples,
+                                          overlap_percent, quality_threshold):
     """
     Generate overlapping windows from current manually-selected windows.
     Merges nearby manual windows into continuous regions to maximize window generation.
-    
+
     Args:
         current_windows: List of current window configurations
         df: DataFrame with full dataset
         window_size_samples: Number of samples per window
         overlap_percent: Overlap percentage (0-90)
         quality_threshold: Minimum quality score (0-1)
-    
+
     Returns:
         good_windows: List of high-quality window data
         flagged_windows: List of low-quality windows
@@ -100,12 +101,14 @@ def generate_sliding_windows_from_current(current_windows, df, window_size_sampl
     stride = int(window_size_samples * (1 - overlap_percent / 100))
     good_windows = []
     flagged_windows = []
-    
-    sensor_cols = [col for col in df.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
-    
+
+    sensor_cols = [col for col in df.columns if col in [
+        'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+
     # Sort windows by start time (ensure numeric values)
-    sorted_windows = sorted(current_windows, key=lambda w: float(w['start_time']))
-    
+    sorted_windows = sorted(
+        current_windows, key=lambda w: float(w['start_time']))
+
     # Merge overlapping or adjacent windows into continuous regions
     # This allows sliding windows to span across multiple manual selections
     merged_regions = []
@@ -115,15 +118,18 @@ def generate_sliding_windows_from_current(current_windows, df, window_size_sampl
             'end_time': float(sorted_windows[0]['end_time']),
             'window_ids': [sorted_windows[0]['window_id']]
         }
-        
+
         for window in sorted_windows[1:]:
             # If windows overlap or are within 1 window size of each other, merge them
-            gap = float(window['start_time']) - float(current_region['end_time'])
-            gap_samples = gap * (1000 / (window_size_samples * 10))  # Approximate samples
-            
+            gap = float(window['start_time']) - \
+                float(current_region['end_time'])
+            # Approximate samples
+            gap_samples = gap * (1000 / (window_size_samples * 10))
+
             if gap <= 0 or gap_samples < window_size_samples:
                 # Merge: extend current region
-                current_region['end_time'] = max(float(current_region['end_time']), float(window['end_time']))
+                current_region['end_time'] = max(
+                    float(current_region['end_time']), float(window['end_time']))
                 current_region['window_ids'].append(window['window_id'])
             else:
                 # New separate region
@@ -133,31 +139,32 @@ def generate_sliding_windows_from_current(current_windows, df, window_size_sampl
                     'end_time': float(window['end_time']),
                     'window_ids': [window['window_id']]
                 }
-        
+
         merged_regions.append(current_region)
-    
+
     # Generate sliding windows from each merged region
     for region in merged_regions:
         start_time = region['start_time']
         end_time = region['end_time']
-        
+
         # Get the time indices for this region
-        region_mask = (df['Time_seconds'] >= start_time) & (df['Time_seconds'] <= end_time)
+        region_mask = (df['Time_seconds'] >= start_time) & (
+            df['Time_seconds'] <= end_time)
         region_data = df[region_mask].copy()
-        
+
         if len(region_data) < window_size_samples:
             continue
-        
+
         # Generate sliding windows within this region
         region_start_idx = region_data.index[0]
-        
+
         for start_idx in range(0, len(region_data) - window_size_samples + 1, stride):
             end_idx = start_idx + window_size_samples
             window_df = region_data.iloc[start_idx:end_idx].copy()
-            
+
             # Compute quality
             quality, reasons = compute_window_quality(window_df, sensor_cols)
-            
+
             window_info = {
                 'data': window_df,
                 'start_idx': region_start_idx + start_idx,
@@ -168,12 +175,12 @@ def generate_sliding_windows_from_current(current_windows, df, window_size_sampl
                 'reasons': reasons,
                 'parent_window': '-'.join(map(str, region['window_ids']))
             }
-            
+
             if quality >= quality_threshold:
                 good_windows.append(window_info)
             else:
                 flagged_windows.append(window_info)
-    
+
     stats = {
         'total_generated': len(good_windows) + len(flagged_windows),
         'good_windows': len(good_windows),
@@ -182,7 +189,7 @@ def generate_sliding_windows_from_current(current_windows, df, window_size_sampl
         'overlap_percent': overlap_percent,
         'stride_samples': stride
     }
-    
+
     return good_windows, flagged_windows, stats
 
 
@@ -225,7 +232,8 @@ def display_dataset_and_status(dataset_name):
     # Check if training data exists
     train_file = get_training_data_path(dataset_name, 'train')
     test_file = get_training_data_path(dataset_name, 'test')
-    stages['training_ready'] = os.path.exists(train_file) and os.path.exists(test_file)
+    stages['training_ready'] = os.path.exists(
+        train_file) and os.path.exists(test_file)
 
     # Create status display
     status_badges = []
@@ -954,81 +962,146 @@ def update_figure_windows(figure, windows, window_duration, y_range):
 )
 def load_previous_windows(n_clicks, dataset_name, current_figure):
     """Load previously saved window positions from metadata."""
-    if not (dataset_name and current_figure):
+    if not dataset_name:
+        print("Load Previous: No dataset selected")
         return no_update, no_update
-    
+
     try:
         with open(METADATA_FILE, 'r') as f:
             metadata = json.load(f)
-        
+
         if dataset_name not in metadata:
+            print(f"Load Previous: Dataset {dataset_name} not found in metadata")
             return no_update, no_update
-        
+
         # Check for saved window positions (manual windows take priority)
         saved_positions = metadata[dataset_name].get('manual_window_positions', [])
-        
+
         if not saved_positions:
             # Fall back to sliding window positions if no manual windows
             saved_positions = metadata[dataset_name].get('sliding_window_positions', [])
-        
+
         if not saved_positions:
+            print(f"Load Previous: No saved window positions for {dataset_name}")
             return no_update, no_update
+
+        # Get saved window size
+        window_size_ms = metadata[dataset_name].get('window_size_ms', 1500)
         
-        # Get y-axis range from figure
-        y_data = []
-        for trace in current_figure.get('data', []):
-            if 'y' in trace:
-                y_data.extend(trace['y'])
-        
-        if y_data:
-            y_min, y_max = min(y_data), max(y_data)
-            y_range = y_max - y_min
-            y_min -= 0.1 * y_range
-            y_max += 0.1 * y_range
+        # Load the dataset to create the graph
+        if "cleaned_data_path" in metadata[dataset_name]:
+            file_path = metadata[dataset_name]["cleaned_data_path"]
         else:
-            y_min, y_max = -10, 10
+            file_path = metadata[dataset_name]["path"]
+
+        if not os.path.exists(file_path):
+            print(f"Load Previous: Dataset file not found: {file_path}")
+            return no_update, no_update
+
+        df = pd.read_csv(file_path)
+        sampling_rate = metadata.get(dataset_name, {}).get('sampling_rate', 100)
         
+        # Create time axis
+        df['Time_seconds'] = df.index / sampling_rate
+
+        # If we don't have a figure yet, create one
+        if not current_figure or 'data' not in current_figure:
+            # Get sensor columns
+            sensor_cols = [col for col in df.columns if col not in ['Time_seconds', 'Window']]
+            priority_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+            available_cols = [col for col in priority_cols if col in sensor_cols]
+
+            if not available_cols:
+                numerical_cols = df.select_dtypes(include=['float64', 'int64']).columns
+                available_cols = [col for col in numerical_cols if col != 'Time_seconds'][:6]
+
+            # Create the figure
+            fig = go.Figure()
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+
+            for i, col in enumerate(available_cols[:6]):
+                fig.add_trace(go.Scatter(
+                    x=df['Time_seconds'],
+                    y=df[col],
+                    mode='lines',
+                    name=col,
+                    line=dict(color=colors[i % len(colors)], width=1.5)
+                ))
+
+            # Get data range
+            all_values = df[available_cols].values.flatten()
+            y_min, y_max = np.nanmin(all_values), np.nanmax(all_values)
+            y_range = y_max - y_min
+            rect_y_min = y_min - 0.05 * y_range
+            rect_y_max = y_max + 0.05 * y_range
+        else:
+            # Use existing figure
+            fig = current_figure.copy()
+            
+            # Get y-axis range from existing figure or calculate from data
+            if 'layout' in fig and 'yaxis' in fig['layout'] and 'range' in fig['layout']['yaxis']:
+                y_range_data = fig['layout']['yaxis']['range']
+                rect_y_min, rect_y_max = y_range_data[0], y_range_data[1]
+            else:
+                # Calculate from figure data
+                y_data = []
+                for trace in fig.get('data', []):
+                    if 'y' in trace:
+                        y_data.extend(trace['y'])
+                
+                if y_data:
+                    y_min, y_max = min(y_data), max(y_data)
+                    y_range = y_max - y_min
+                    rect_y_min = y_min - 0.1 * y_range
+                    rect_y_max = y_max + 0.1 * y_range
+                else:
+                    rect_y_min, rect_y_max = -10, 10
+
         # Create window data and shapes
         windows = []
         shapes = []
-        
-        for pos in saved_positions:
+
+        for idx, pos in enumerate(saved_positions):
             window = {
-                'window_id': pos['window_id'],
-                'start_time': float(pos['start_time']),  # Ensure numeric
-                'end_time': float(pos['end_time']),      # Ensure numeric
-                'y_min': y_min,
-                'y_max': y_max
+                'window_id': idx,  # Use sequential IDs
+                'start_time': float(pos['start_time']),
+                'end_time': float(pos['end_time']),
+                'y_min': rect_y_min,
+                'y_max': rect_y_max
             }
             windows.append(window)
-            
+
             shape = dict(
                 type="rect",
-                x0=float(pos['start_time']),  # Ensure numeric
-                y0=y_min,
-                x1=float(pos['end_time']),    # Ensure numeric
-                y1=y_max,
+                x0=float(pos['start_time']),
+                y0=rect_y_min,
+                x1=float(pos['end_time']),
+                y1=rect_y_max,
                 fillcolor="rgba(255, 80, 80, 0.35)",
                 line=dict(color="rgb(220, 20, 20)", width=4, dash="solid"),
                 editable=True,
-                name=f"window_{pos['window_id']}",
+                name=f"window_{idx}",
                 layer="above",
                 label=dict(
-                    text=f"W{pos['window_id']}",
+                    text=f"W{idx}",
                     textposition="middle center",
                     font=dict(size=14, color="red", family="Arial Black")
                 )
             )
             shapes.append(shape)
+
+        # Update figure layout
+        if 'layout' not in fig:
+            fig['layout'] = {}
+        fig['layout']['shapes'] = shapes
         
-        # Update figure
-        updated_figure = current_figure.copy()
-        updated_figure['layout']['shapes'] = shapes
-        
-        return updated_figure, windows
-        
+        print(f"Load Previous: Successfully loaded {len(windows)} windows for {dataset_name}")
+        return fig, windows
+
     except Exception as e:
+        import traceback
         print(f"Error loading previous windows: {e}")
+        print(traceback.format_exc())
         return no_update, no_update
 
 
@@ -1063,9 +1136,9 @@ def update_window_positions(relayout_data, current_windows):
                     # Ensure we have this window in our data
                     if shape_idx < len(updated_windows):
                         if coord_type == 'x0':
-                            updated_windows[shape_idx]['start_time'] = value
+                            updated_windows[shape_idx]['start_time'] = float(value)
                         elif coord_type == 'x1':
-                            updated_windows[shape_idx]['end_time'] = value
+                            updated_windows[shape_idx]['end_time'] = float(value)
 
         print(f"Updated window positions: {updated_windows}")
         return updated_windows
@@ -1115,24 +1188,26 @@ def update_overlap_info(overlap_percent, window_size_ms):
     """Display information about overlap settings."""
     if not window_size_ms:
         return ""
-    
+
     # Calculate window parameters
     sampling_rate = 100  # Hz
     window_samples = int((window_size_ms / 1000) * sampling_rate)
     stride = int(window_samples * (1 - overlap_percent / 100))
-    
+
     # Estimate multiplication factor
     if overlap_percent == 0:
         factor = "1x"
     else:
         factor = f"{1 / (1 - overlap_percent / 100):.1f}x"
-    
+
     return html.Div([
-        html.Span(f"📊 Stride: {stride} samples | ", style={'color': '#007bff', 'font-weight': 'bold'}),
-        html.Span(f"Sample increase: ~{factor}", style={'color': '#28a745', 'font-weight': 'bold'}),
+        html.Span(f"📊 Stride: {stride} samples | ", style={
+                  'color': '#007bff', 'font-weight': 'bold'}),
+        html.Span(f"Sample increase: ~{factor}", style={
+                  'color': '#28a745', 'font-weight': 'bold'}),
         html.Br(),
-        html.Span(f"Example: 10 windows → ~{int(10 * float(factor[:-1]))} windows with {overlap_percent}% overlap", 
-                 style={'font-size': '12px', 'color': '#666', 'font-style': 'italic'})
+        html.Span(f"Example: 10 windows → ~{int(10 * float(factor[:-1]))} windows with {overlap_percent}% overlap",
+                  style={'font-size': '12px', 'color': '#666', 'font-style': 'italic'})
     ])
 
 
@@ -1148,12 +1223,22 @@ def update_overlap_info(overlap_percent, window_size_ms):
      State('quality-threshold-slider', 'value')],
     prevent_initial_call=True
 )
-def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_size_ms, 
-                            overlap_percent, quality_threshold):
+def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_size_ms,
+                             overlap_percent, quality_threshold):
     """Generate sliding windows from manually selected regions."""
     if not (dataset_name and current_windows and window_size_ms):
-        return html.Div("⚠️ Please select a dataset and define windows first.", 
-                       style={'color': '#FF9800', 'padding': '20px'}), None, True
+        return html.Div("⚠️ Please select a dataset and define windows first.",
+                        style={'color': '#FF9800', 'padding': '20px'}), None, True
+    
+    # Ensure all window times are floats
+    current_windows = [
+        {
+            **w,
+            'start_time': float(w['start_time']) if not isinstance(w['start_time'], (int, float)) else w['start_time'],
+            'end_time': float(w['end_time']) if not isinstance(w['end_time'], (int, float)) else w['end_time']
+        }
+        for w in current_windows
+    ]
     
     try:
         # Load data
@@ -1164,39 +1249,40 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
             file_path = metadata[dataset_name]["cleaned_data_path"]
         else:
             file_path = metadata[dataset_name]["path"]
-        
+
         if not os.path.exists(file_path):
             return html.Div("❌ Dataset file not found.", style={'color': '#dc3545'}), None, True
-        
+
         df = pd.read_csv(file_path)
-        sampling_rate = metadata.get(dataset_name, {}).get('sampling_rate', 100)
-        
+        sampling_rate = metadata.get(
+            dataset_name, {}).get('sampling_rate', 100)
+
         # Create time axis if not present
         if 'Time_seconds' not in df.columns:
             df['Time_seconds'] = df.index / sampling_rate
-        
+
         window_samples = int((window_size_ms / 1000) * sampling_rate)
-        
+
         # Generate sliding windows
         good_windows, flagged_windows, stats = generate_sliding_windows_from_current(
             current_windows, df, window_samples, overlap_percent, quality_threshold
         )
-        
+
         if not good_windows and not flagged_windows:
-            return html.Div("⚠️ No windows generated. Try reducing quality threshold.", 
-                           style={'color': '#FF9800', 'padding': '20px'}), None, True
-        
+            return html.Div("⚠️ No windows generated. Try reducing quality threshold.",
+                            style={'color': '#FF9800', 'padding': '20px'}), None, True
+
         # Create quality distribution visualization
         quality_scores = [w['quality'] for w in good_windows + flagged_windows]
         quality_fig = go.Figure()
-        
+
         quality_fig.add_trace(go.Histogram(
             x=quality_scores,
             nbinsx=20,
             marker_color='#007bff',
             name='Quality Distribution'
         ))
-        
+
         quality_fig.add_vline(
             x=quality_threshold,
             line_dash="dash",
@@ -1204,7 +1290,7 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
             annotation_text=f"Threshold ({quality_threshold})",
             annotation_position="top right"
         )
-        
+
         quality_fig.update_layout(
             title='Window Quality Score Distribution',
             xaxis_title='Quality Score',
@@ -1212,16 +1298,19 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
             height=300,
             showlegend=False
         )
-        
+
         # Create a preview visualization of the first few windows
         preview_sample_count = min(3, len(good_windows))
         if preview_sample_count > 0:
-            preview_data = pd.concat([good_windows[i]['data'] for i in range(preview_sample_count)], ignore_index=True)
-            sensor_cols = [col for col in preview_data.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
-            
+            preview_data = pd.concat([good_windows[i]['data'] for i in range(
+                preview_sample_count)], ignore_index=True)
+            sensor_cols = [col for col in preview_data.columns if col in [
+                'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+
             preview_fig = go.Figure()
-            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-            
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
+                      '#d62728', '#9467bd', '#8c564b']
+
             for i, col in enumerate(sensor_cols[:6]):
                 preview_fig.add_trace(go.Scatter(
                     x=preview_data.index,
@@ -1230,7 +1319,7 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
                     name=col,
                     line=dict(color=colors[i % len(colors)], width=1.5)
                 ))
-            
+
             preview_fig.update_layout(
                 title=f"Preview - First {preview_sample_count} Windows",
                 xaxis_title="Sample Index",
@@ -1241,58 +1330,67 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
             )
         else:
             preview_fig = None
-        
+
         # Create preview content
         preview = html.Div([
             html.H5("✅ Sliding Windows Generated Successfully!", style={
                 'color': '#28a745', 'margin-bottom': '15px'
             }),
-            
+
             # Statistics cards
             html.Div([
                 html.Div([
-                    html.H2(str(stats['good_windows']), style={'color': '#28a745', 'margin': '0'}),
-                    html.P("High Quality Windows", style={'color': '#666', 'margin': '5px 0'})
+                    html.H2(str(stats['good_windows']), style={
+                            'color': '#28a745', 'margin': '0'}),
+                    html.P("High Quality Windows", style={
+                           'color': '#666', 'margin': '5px 0'})
                 ], style={
                     'display': 'inline-block', 'width': '23%', 'text-align': 'center',
                     'background': 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)',
                     'padding': '15px', 'border-radius': '8px', 'margin-right': '2%'
                 }),
-                
+
                 html.Div([
-                    html.H2(str(stats['flagged_windows']), style={'color': '#ffc107', 'margin': '0'}),
-                    html.P("Flagged (Low Quality)", style={'color': '#666', 'margin': '5px 0'})
+                    html.H2(str(stats['flagged_windows']), style={
+                            'color': '#ffc107', 'margin': '0'}),
+                    html.P("Flagged (Low Quality)", style={
+                           'color': '#666', 'margin': '5px 0'})
                 ], style={
                     'display': 'inline-block', 'width': '23%', 'text-align': 'center',
                     'background': 'linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%)',
                     'padding': '15px', 'border-radius': '8px', 'margin-right': '2%'
                 }),
-                
+
                 html.Div([
-                    html.H2(f"{stats['avg_quality']:.2f}", style={'color': '#007bff', 'margin': '0'}),
-                    html.P("Average Quality", style={'color': '#666', 'margin': '5px 0'})
+                    html.H2(f"{stats['avg_quality']:.2f}", style={
+                            'color': '#007bff', 'margin': '0'}),
+                    html.P("Average Quality", style={
+                           'color': '#666', 'margin': '5px 0'})
                 ], style={
                     'display': 'inline-block', 'width': '23%', 'text-align': 'center',
                     'background': 'linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%)',
                     'padding': '15px', 'border-radius': '8px', 'margin-right': '2%'
                 }),
-                
+
                 html.Div([
-                    html.H2(f"{stats['overlap_percent']}%", style={'color': '#6c757d', 'margin': '0'}),
-                    html.P("Overlap Used", style={'color': '#666', 'margin': '5px 0'})
+                    html.H2(f"{stats['overlap_percent']}%", style={
+                            'color': '#6c757d', 'margin': '0'}),
+                    html.P("Overlap Used", style={
+                           'color': '#666', 'margin': '5px 0'})
                 ], style={
                     'display': 'inline-block', 'width': '23%', 'text-align': 'center',
                     'background': 'linear-gradient(135deg, #e2e3e5 0%, #d6d8db 100%)',
                     'padding': '15px', 'border-radius': '8px'
                 })
             ], style={'margin-bottom': '20px'}),
-            
+
             # Quality distribution chart
             dcc.Graph(figure=quality_fig, config={'displayModeBar': False}),
-            
+
             # Preview graph
-            dcc.Graph(figure=preview_fig, config={'displayModeBar': False}) if preview_fig else html.Div(),
-            
+            dcc.Graph(figure=preview_fig, config={
+                      'displayModeBar': False}) if preview_fig else html.Div(),
+
             # Details
             html.Div([
                 html.P([
@@ -1312,7 +1410,7 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
                 'border-radius': '6px',
                 'margin-top': '15px'
             }),
-            
+
             # Action reminder
             html.Div([
                 html.P([
@@ -1328,7 +1426,7 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
                 'border-radius': '6px',
                 'margin-top': '15px'
             }),
-            
+
             # Warning for flagged windows
             html.Div([
                 html.P([
@@ -1344,7 +1442,7 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
                 'margin-top': '15px'
             }) if stats['flagged_windows'] > 0 else html.Div()
         ])
-        
+
         # Prepare data for storage
         window_data = {
             'good_windows': [
@@ -1361,9 +1459,9 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
             'overlap_percent': overlap_percent,
             'stats': stats
         }
-        
+
         return preview, window_data, False
-        
+
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
@@ -1387,34 +1485,36 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
     """Save generated sliding windows to disk."""
     if not window_data or not dataset_name:
         return no_update, no_update, no_update
-    
+
     try:
         good_windows = window_data['good_windows']
-        
+
         sample_files = []
         all_selected_data = []
-        
+
         # Save each generated window
         for idx, window_info in enumerate(good_windows):
             window_df = pd.DataFrame(window_info['data'])
-            
+
             # Extract sensor columns
-            sensor_cols = [col for col in window_df.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
-            
+            sensor_cols = [col for col in window_df.columns if col in [
+                'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+
             # Generate unique filename
             window_id = f"sliding_{idx}"
             sample_file_path = get_window_path(window_id, dataset_name)
-            
+
             # Save window data
-            window_df[sensor_cols].to_csv(sample_file_path, index=False, float_format='%.4f')
-            
+            window_df[sensor_cols].to_csv(
+                sample_file_path, index=False, float_format='%.4f')
+
             sample_files.append(sample_file_path)
             all_selected_data.append(window_df)
-        
+
         # Update metadata
         with open(METADATA_FILE, 'r') as f:
             metadata = json.load(f)
-        
+
         # Clean up old sliding window files first
         if 'dragged_samples' in metadata[dataset_name]:
             old_files = metadata[dataset_name]['dragged_samples']
@@ -1426,17 +1526,17 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
                         print(f"Removed old sliding window file: {old_file}")
                     except Exception as e:
                         print(f"Could not remove {old_file}: {e}")
-            
+
             # Keep only manual dragged window files in metadata
             metadata[dataset_name]['dragged_samples'] = [
                 f for f in old_files if 'dragged_window_' in f
             ]
         else:
             metadata[dataset_name]['dragged_samples'] = []
-        
+
         # Add new sliding window files
         metadata[dataset_name]['dragged_samples'].extend(sample_files)
-        
+
         # Save sliding window positions for reload
         metadata[dataset_name]['sliding_window_positions'] = [
             {
@@ -1446,18 +1546,20 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
             }
             for idx, w in enumerate(good_windows)
         ]
-        
+
         with open(METADATA_FILE, 'w') as f:
             json.dump(metadata, f, indent=2)
-        
+
         # Create visualization of all windows
         combined_data = pd.concat(all_selected_data, ignore_index=True)
-        sensor_cols = [col for col in combined_data.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+        sensor_cols = [col for col in combined_data.columns if col in [
+            'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
         available_cols = sensor_cols[:6]
-        
+
         fig = go.Figure()
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-        
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
+                  '#d62728', '#9467bd', '#8c564b']
+
         for i, col in enumerate(available_cols):
             fig.add_trace(go.Scatter(
                 x=combined_data.index,
@@ -1466,7 +1568,7 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
                 name=col,
                 line=dict(color=colors[i % len(colors)], width=1.5)
             ))
-        
+
         fig.update_layout(
             title=f"Saved Sliding Windows Preview - {len(good_windows)} Windows",
             xaxis_title="Sample Index",
@@ -1474,9 +1576,10 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
             height=500,
             hovermode='x unified'
         )
-        
+
         success_message = html.Div([
-            html.H5("💾 Windows Saved Successfully!", style={'color': '#28a745', 'margin-bottom': '15px'}),
+            html.H5("💾 Windows Saved Successfully!", style={
+                    'color': '#28a745', 'margin-bottom': '15px'}),
             html.P([
                 html.Strong(f"{len(good_windows)} windows"),
                 f" saved to: persistent_data/"
@@ -1492,9 +1595,9 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
             'padding': '20px',
             'border-radius': '6px'
         })
-        
+
         return fig, success_message, None
-        
+
     except Exception as e:
         import traceback
         print(f"ERROR in save_sliding_windows: {traceback.format_exc()}")
@@ -1639,17 +1742,17 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
                     print(f"Removed old window file: {old_file}")
                 except Exception as e:
                     print(f"Could not remove {old_file}: {e}")
-        
+
         # Keep only sliding window files in metadata
         metadata[dataset_name]['dragged_samples'] = [
             f for f in old_files if 'sliding_' in f
         ]
     else:
         metadata[dataset_name]['dragged_samples'] = []
-    
+
     # Add new manual window files
     metadata[dataset_name]['dragged_samples'].extend(sample_files)
-    
+
     # Save window positions for easy reload
     metadata[dataset_name]['manual_window_positions'] = [
         {
@@ -1659,6 +1762,8 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
         }
         for w in window_ranges
     ]
+    # Save window size for easy reload
+    metadata[dataset_name]['window_size_ms'] = time_window_span
 
     with open(METADATA_FILE, 'w') as f:
         json.dump(metadata, f, indent=2)
@@ -1791,15 +1896,15 @@ def update_split_dataset_selector(split_clicks, dataset_name, split_graph, curre
             if os.path.exists(file_path):
                 filename = os.path.basename(file_path).replace(".csv", "")
                 dataset_base = dataset_name.replace(".csv", "")
-                
+
                 # Extract window info from filename
                 # Handle nested prefix: dragged_window_sliding_X or dragged_window_X
                 temp = filename
-                
+
                 # Remove dataset name suffix first
                 if temp.endswith(f"_{dataset_base}"):
                     temp = temp.replace(f"_{dataset_base}", "")
-                
+
                 # Now check for window type prefixes
                 if temp.startswith("dragged_window_sliding_"):
                     # Nested case: dragged_window_sliding_0 -> 0
@@ -2148,15 +2253,15 @@ def populate_training_dataset_selector(dataset_name, split_graph, split_options)
             if os.path.exists(file_path):
                 filename = os.path.basename(file_path).replace(".csv", "")
                 dataset_base = dataset_name.replace(".csv", "")
-                
+
                 # Extract window info from filename
                 # Handle nested prefix: dragged_window_sliding_X or dragged_window_X
                 temp = filename
-                
+
                 # Remove dataset name suffix first
                 if temp.endswith(f"_{dataset_base}"):
                     temp = temp.replace(f"_{dataset_base}", "")
-                
+
                 # Now check for window type prefixes
                 if temp.startswith("dragged_window_sliding_"):
                     # Nested case: dragged_window_sliding_0 -> 0
@@ -2238,22 +2343,22 @@ def update_split_displays(train_ratio, val_ratio):
     """Update test split display and split ratio information."""
     if train_ratio is None or val_ratio is None:
         return "20%", ""
-    
+
     # Calculate test ratio
     test_ratio = 1.0 - train_ratio - val_ratio
-    
+
     # Ensure valid split (test >= 0.1)
     if test_ratio < 0.1:
         test_ratio = 0.1
         train_ratio = 0.9 - val_ratio
-    
+
     train_percent = int(train_ratio * 100)
     val_percent = int(val_ratio * 100)
     test_percent = int(test_ratio * 100)
-    
+
     # Test display
     test_display = f"{test_percent}%"
-    
+
     # Info message
     if val_percent == 0:
         info_msg = html.Div([
@@ -2262,8 +2367,8 @@ def update_split_displays(train_ratio, val_ratio):
             html.Span(f"🧪 Testing: {test_percent}%", style={
                 'margin-right': '15px', 'color': '#2196F3', 'font-weight': 'bold'}),
             html.Br(),
-            html.Span("⚙️ Validation set is 0% - will use 5-fold cross-validation on training set", 
-                     style={'color': '#FF9800', 'font-style': 'italic', 'font-size': '12px'})
+            html.Span("⚙️ Validation set is 0% - will use 5-fold cross-validation on training set",
+                      style={'color': '#FF9800', 'font-style': 'italic', 'font-size': '12px'})
         ])
     else:
         info_msg = html.Div([
@@ -2274,7 +2379,7 @@ def update_split_displays(train_ratio, val_ratio):
             html.Span(f"🧪 Testing: {test_percent}%", style={
                 'color': '#2196F3', 'font-weight': 'bold'})
         ])
-    
+
     return test_display, info_msg
 
 
@@ -2300,25 +2405,28 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
             if os.path.exists(METADATA_FILE):
                 with open(METADATA_FILE, 'r') as f:
                     metadata = json.load(f)
-                
+
                 dataset_info = metadata.get(dataset_name, {})
                 # Get the actual label from metadata
                 activity_label = dataset_info.get('label', None)
-                
+
                 if activity_label:
-                    print(f"DEBUG: Dataset '{dataset_name}' has label '{activity_label}' from metadata")
+                    print(
+                        f"DEBUG: Dataset '{dataset_name}' has label '{activity_label}' from metadata")
                 else:
-                    print(f"WARNING: No label found in metadata for '{dataset_name}', using fallback")
+                    print(
+                        f"WARNING: No label found in metadata for '{dataset_name}', using fallback")
             else:
                 print(f"WARNING: Metadata file not found at {METADATA_FILE}")
         except Exception as meta_error:
             print(f"WARNING: Error reading metadata: {meta_error}")
-        
+
         # Fallback: extract from dataset name if metadata not available
         if not activity_label:
             activity_label = dataset_name.replace('.csv', '').rsplit('_', 1)[0]
-            print(f"DEBUG: Using fallback label '{activity_label}' from dataset name")
-        
+            print(
+                f"DEBUG: Using fallback label '{activity_label}' from dataset name")
+
         # Load and combine all selected split windows
         all_data = []
         file_info = []
@@ -2353,15 +2461,15 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
         extracted_features_list = []
         labels_list = []
         window_ids_list = []
-        
+
         for df in all_data:
             # Get window-specific data
             window_id = df['Window_ID'].iloc[0]
             activity_label = df['Activity_Label'].iloc[0]
-            
+
             # Remove metadata columns for feature extraction
             window_data = df[sensor_cols]
-            
+
             # Extract features based on selection method
             if feature_method == 'statistical':
                 # Use only raw sensor values (no feature engineering)
@@ -2371,24 +2479,28 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
                 }])
             elif feature_method == 'time_domain':
                 # Extract 90 time-domain features (15 per axis)
-                features_df = extract_time_domain_features(window_data, sensor_cols)
+                features_df = extract_time_domain_features(
+                    window_data, sensor_cols)
             elif feature_method == 'all':
                 # Extract both time-domain (90) and frequency-domain (48) features = 138 total
-                time_features = extract_time_domain_features(window_data, sensor_cols)
-                freq_features = extract_frequency_domain_features(window_data, sensor_cols)
+                time_features = extract_time_domain_features(
+                    window_data, sensor_cols)
+                freq_features = extract_frequency_domain_features(
+                    window_data, sensor_cols)
                 features_df = pd.concat([time_features, freq_features], axis=1)
             else:  # custom
                 # Default to time-domain
-                features_df = extract_time_domain_features(window_data, sensor_cols)
-            
+                features_df = extract_time_domain_features(
+                    window_data, sensor_cols)
+
             extracted_features_list.append(features_df)
             labels_list.append(activity_label)
             window_ids_list.append(window_id)
-        
+
         # Combine all extracted features
         features_df = pd.concat(extracted_features_list, ignore_index=True)
         feature_cols = features_df.columns.tolist()
-        
+
         if not feature_cols:
             return {}, html.Div("❌ No features available for training.", style={'color': '#dc3545'})
 
@@ -2437,8 +2549,10 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
                     html.Span(f"{len(X_scaled)}")
                 ], style={'margin-bottom': '5px'}),
                 html.Div([
-                    html.Span("🎯 Features Extracted: ", style={'font-weight': 'bold'}),
-                    html.Span(f"{len(feature_cols)} features ({_get_feature_method_label(feature_method)})")
+                    html.Span("🎯 Features Extracted: ",
+                              style={'font-weight': 'bold'}),
+                    html.Span(
+                        f"{len(feature_cols)} features ({_get_feature_method_label(feature_method)})")
                 ], style={'margin-bottom': '5px'}),
                 html.Div([
                     html.Span("📏 Normalization: ", style={
@@ -2469,11 +2583,14 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
         error_details = traceback.format_exc()
         print(f"ERROR in preprocess_for_training: {error_details}")
         error_msg = html.Div([
-            html.H5("❌ Error during preprocessing", style={'color': '#dc3545', 'margin-bottom': '10px'}),
+            html.H5("❌ Error during preprocessing", style={
+                    'color': '#dc3545', 'margin-bottom': '10px'}),
             html.P(f"Error: {str(e)}", style={'margin-bottom': '5px'}),
             html.Details([
-                html.Summary("Show technical details", style={'cursor': 'pointer', 'color': '#6c757d'}),
-                html.Pre(error_details, style={'font-size': '11px', 'background-color': '#f8f9fa', 'padding': '10px', 'border-radius': '4px', 'overflow': 'auto'})
+                html.Summary("Show technical details", style={
+                             'cursor': 'pointer', 'color': '#6c757d'}),
+                html.Pre(error_details, style={'font-size': '11px', 'background-color': '#f8f9fa',
+                         'padding': '10px', 'border-radius': '4px', 'overflow': 'auto'})
             ])
         ])
         return {}, error_msg
@@ -2499,7 +2616,7 @@ def perform_enhanced_train_val_test_split(n_clicks, preprocessed_data, train_rat
         X = np.array(preprocessed_data['features'])
         y = np.array(preprocessed_data['labels'])
         feature_names = preprocessed_data['feature_names']
-        
+
         # Calculate test ratio
         test_ratio = 1.0 - train_ratio - val_ratio
         if test_ratio < 0.1:
@@ -2519,7 +2636,7 @@ def perform_enhanced_train_val_test_split(n_clicks, preprocessed_data, train_rat
             X_temp, X_test, y_temp, y_test = train_test_split(
                 X, y, test_size=test_ratio, random_state=random_state, stratify=y
             )
-            
+
             # Second split: separate train and validation from remaining data
             val_size_adjusted = val_ratio / (train_ratio + val_ratio)
             X_train, X_val, y_train, y_val = train_test_split(
@@ -2599,7 +2716,7 @@ def perform_enhanced_train_val_test_split(n_clicks, preprocessed_data, train_rat
             annotation_text="Train | Val" if val_ratio > 0 else "Train | Test",
             annotation_position="top"
         )
-        
+
         if val_ratio > 0:
             fig.add_vline(
                 x=len(X_train) + len(X_val) - 0.5,
@@ -2611,14 +2728,14 @@ def perform_enhanced_train_val_test_split(n_clicks, preprocessed_data, train_rat
         # Update layout
         if val_ratio > 0:
             title_text = (f"Train-Validation-Test Split Visualization<br>"
-                         f"Training: {len(X_train)} samples ({train_ratio:.1%}) | "
-                         f"Validation: {len(X_val)} samples ({val_ratio:.1%}) | "
-                         f"Testing: {len(X_test)} samples ({test_ratio:.1%})")
+                          f"Training: {len(X_train)} samples ({train_ratio:.1%}) | "
+                          f"Validation: {len(X_val)} samples ({val_ratio:.1%}) | "
+                          f"Testing: {len(X_test)} samples ({test_ratio:.1%})")
         else:
             title_text = (f"Train-Test Split Visualization (CV Mode)<br>"
-                         f"Training: {len(X_train)} samples ({train_ratio:.1%}) | "
-                         f"Testing: {len(X_test)} samples ({test_ratio:.1%})")
-        
+                          f"Training: {len(X_train)} samples ({train_ratio:.1%}) | "
+                          f"Testing: {len(X_test)} samples ({test_ratio:.1%})")
+
         fig.update_layout(
             title=title_text,
             xaxis_title="Sample Index",
@@ -2638,17 +2755,17 @@ def perform_enhanced_train_val_test_split(n_clicks, preprocessed_data, train_rat
         # Add summary annotation
         if val_ratio > 0:
             annotation_text = (f"📊 Features Extracted: {len(feature_names)}<br>"
-                             f"🎓 Train: {len(X_train)} samples<br>"
-                             f"📋 Validation: {len(X_val)} samples<br>"
-                             f"🧪 Test: {len(X_test)} samples<br>"
-                             f"🎲 Random State: {random_state}")
+                               f"🎓 Train: {len(X_train)} samples<br>"
+                               f"📋 Validation: {len(X_val)} samples<br>"
+                               f"🧪 Test: {len(X_test)} samples<br>"
+                               f"🎲 Random State: {random_state}")
         else:
             annotation_text = (f"📊 Features Extracted: {len(feature_names)}<br>"
-                             f"🎓 Train: {len(X_train)} samples<br>"
-                             f"🧪 Test: {len(X_test)} samples<br>"
-                             f"⚙️ Using 5-fold CV<br>"
-                             f"🎲 Random State: {random_state}")
-        
+                               f"🎓 Train: {len(X_train)} samples<br>"
+                               f"🧪 Test: {len(X_test)} samples<br>"
+                               f"⚙️ Using 5-fold CV<br>"
+                               f"🎲 Random State: {random_state}")
+
         fig.add_annotation(
             text=annotation_text,
             xref="paper", yref="paper",
@@ -2683,7 +2800,7 @@ def save_preprocessed_training_data(n_clicks, split_data, dataset_name):
 
     try:
         from config.config import get_training_data_path
-        
+
         # Save training and test data
         train_df = pd.DataFrame(
             split_data['X_train'], columns=split_data['feature_names'])
@@ -2704,12 +2821,12 @@ def save_preprocessed_training_data(n_clicks, split_data, dataset_name):
         has_validation = split_data.get('has_validation', False)
         val_file = None
         val_samples = 0
-        
+
         if has_validation and split_data.get('X_val'):
             val_df = pd.DataFrame(
                 split_data['X_val'], columns=split_data['feature_names'])
             val_df['label'] = split_data['y_val']
-            
+
             val_file = get_training_data_path(dataset_name, 'val')
             val_df.to_csv(val_file, index=False)
             val_samples = len(split_data['X_val'])
@@ -2740,24 +2857,29 @@ def save_preprocessed_training_data(n_clicks, split_data, dataset_name):
         file_list = [
             html.Div([
                 html.Span("📁 Training File: ", style={'font-weight': 'bold'}),
-                html.Span(os.path.basename(train_file), style={'font-family': 'monospace'})
+                html.Span(os.path.basename(train_file),
+                          style={'font-family': 'monospace'})
             ], style={'margin-bottom': '5px'})
         ]
-        
+
         if has_validation:
             file_list.append(html.Div([
-                html.Span("📁 Validation File: ", style={'font-weight': 'bold'}),
-                html.Span(os.path.basename(val_file), style={'font-family': 'monospace'})
+                html.Span("📁 Validation File: ", style={
+                          'font-weight': 'bold'}),
+                html.Span(os.path.basename(val_file), style={
+                          'font-family': 'monospace'})
             ], style={'margin-bottom': '5px'}))
-        
+
         file_list.extend([
             html.Div([
                 html.Span("📁 Test File: ", style={'font-weight': 'bold'}),
-                html.Span(os.path.basename(test_file), style={'font-family': 'monospace'})
+                html.Span(os.path.basename(test_file),
+                          style={'font-family': 'monospace'})
             ], style={'margin-bottom': '5px'}),
             html.Div([
                 html.Span("📄 Metadata: ", style={'font-weight': 'bold'}),
-                html.Span(os.path.basename(metadata_file), style={'font-family': 'monospace'})
+                html.Span(os.path.basename(metadata_file),
+                          style={'font-family': 'monospace'})
             ], style={'margin-bottom': '10px'}),
             html.P("✅ Data is ready for model training!", style={
                 'color': '#4CAF50', 'font-weight': 'bold'})
