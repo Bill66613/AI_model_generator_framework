@@ -351,6 +351,21 @@ layout = html.Div([
                                 'color': 'white',
                                 'border': 'none',
                                 'padding': '10px 20px',
+                                'margin-right': '10px',
+                                'border-radius': '4px',
+                                'cursor': 'pointer',
+                                'font-weight': 'bold'
+                            }
+                        ),
+                        html.Button(
+                            "📂 Load Previous",
+                            id='load-previous-windows-btn',
+                            n_clicks=0,
+                            style={
+                                'background-color': '#17a2b8',
+                                'color': 'white',
+                                'border': 'none',
+                                'padding': '10px 20px',
                                 'border-radius': '4px',
                                 'cursor': 'pointer',
                                 'font-weight': 'bold'

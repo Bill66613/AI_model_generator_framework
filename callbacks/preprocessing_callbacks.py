@@ -103,34 +103,34 @@ def generate_sliding_windows_from_current(current_windows, df, window_size_sampl
     
     sensor_cols = [col for col in df.columns if col in ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
     
-    # Sort windows by start time
-    sorted_windows = sorted(current_windows, key=lambda w: w['start_time'])
+    # Sort windows by start time (ensure numeric values)
+    sorted_windows = sorted(current_windows, key=lambda w: float(w['start_time']))
     
     # Merge overlapping or adjacent windows into continuous regions
     # This allows sliding windows to span across multiple manual selections
     merged_regions = []
     if sorted_windows:
         current_region = {
-            'start_time': sorted_windows[0]['start_time'],
-            'end_time': sorted_windows[0]['end_time'],
+            'start_time': float(sorted_windows[0]['start_time']),
+            'end_time': float(sorted_windows[0]['end_time']),
             'window_ids': [sorted_windows[0]['window_id']]
         }
         
         for window in sorted_windows[1:]:
             # If windows overlap or are within 1 window size of each other, merge them
-            gap = window['start_time'] - current_region['end_time']
+            gap = float(window['start_time']) - float(current_region['end_time'])
             gap_samples = gap * (1000 / (window_size_samples * 10))  # Approximate samples
             
             if gap <= 0 or gap_samples < window_size_samples:
                 # Merge: extend current region
-                current_region['end_time'] = max(current_region['end_time'], window['end_time'])
+                current_region['end_time'] = max(float(current_region['end_time']), float(window['end_time']))
                 current_region['window_ids'].append(window['window_id'])
             else:
                 # New separate region
                 merged_regions.append(current_region)
                 current_region = {
-                    'start_time': window['start_time'],
-                    'end_time': window['end_time'],
+                    'start_time': float(window['start_time']),
+                    'end_time': float(window['end_time']),
                     'window_ids': [window['window_id']]
                 }
         
@@ -945,6 +945,94 @@ def update_figure_windows(figure, windows, window_duration, y_range):
 
 
 @callback(
+    [Output('interactive-sample-graph', 'figure', allow_duplicate=True),
+     Output('current-windows', 'data', allow_duplicate=True)],
+    Input('load-previous-windows-btn', 'n_clicks'),
+    [State('dataset-selector_', 'value'),
+     State('interactive-sample-graph', 'figure')],
+    prevent_initial_call=True
+)
+def load_previous_windows(n_clicks, dataset_name, current_figure):
+    """Load previously saved window positions from metadata."""
+    if not (dataset_name and current_figure):
+        return no_update, no_update
+    
+    try:
+        with open(METADATA_FILE, 'r') as f:
+            metadata = json.load(f)
+        
+        if dataset_name not in metadata:
+            return no_update, no_update
+        
+        # Check for saved window positions (manual windows take priority)
+        saved_positions = metadata[dataset_name].get('manual_window_positions', [])
+        
+        if not saved_positions:
+            # Fall back to sliding window positions if no manual windows
+            saved_positions = metadata[dataset_name].get('sliding_window_positions', [])
+        
+        if not saved_positions:
+            return no_update, no_update
+        
+        # Get y-axis range from figure
+        y_data = []
+        for trace in current_figure.get('data', []):
+            if 'y' in trace:
+                y_data.extend(trace['y'])
+        
+        if y_data:
+            y_min, y_max = min(y_data), max(y_data)
+            y_range = y_max - y_min
+            y_min -= 0.1 * y_range
+            y_max += 0.1 * y_range
+        else:
+            y_min, y_max = -10, 10
+        
+        # Create window data and shapes
+        windows = []
+        shapes = []
+        
+        for pos in saved_positions:
+            window = {
+                'window_id': pos['window_id'],
+                'start_time': float(pos['start_time']),  # Ensure numeric
+                'end_time': float(pos['end_time']),      # Ensure numeric
+                'y_min': y_min,
+                'y_max': y_max
+            }
+            windows.append(window)
+            
+            shape = dict(
+                type="rect",
+                x0=float(pos['start_time']),  # Ensure numeric
+                y0=y_min,
+                x1=float(pos['end_time']),    # Ensure numeric
+                y1=y_max,
+                fillcolor="rgba(255, 80, 80, 0.35)",
+                line=dict(color="rgb(220, 20, 20)", width=4, dash="solid"),
+                editable=True,
+                name=f"window_{pos['window_id']}",
+                layer="above",
+                label=dict(
+                    text=f"W{pos['window_id']}",
+                    textposition="middle center",
+                    font=dict(size=14, color="red", family="Arial Black")
+                )
+            )
+            shapes.append(shape)
+        
+        # Update figure
+        updated_figure = current_figure.copy()
+        updated_figure['layout']['shapes'] = shapes
+        
+        return updated_figure, windows
+        
+    except Exception as e:
+        print(f"Error loading previous windows: {e}")
+        return no_update, no_update
+
+
+@callback(
     Output('current-windows', 'data', allow_duplicate=True),
     Input('interactive-sample-graph', 'relayoutData'),
     State('current-windows', 'data'),
@@ -1327,9 +1415,37 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
         with open(METADATA_FILE, 'r') as f:
             metadata = json.load(f)
         
-        if 'dragged_samples' not in metadata[dataset_name]:
+        # Clean up old sliding window files first
+        if 'dragged_samples' in metadata[dataset_name]:
+            old_files = metadata[dataset_name]['dragged_samples']
+            for old_file in old_files:
+                # Only remove sliding windows, not manual dragged windows
+                if 'sliding_' in old_file and os.path.exists(old_file):
+                    try:
+                        os.remove(old_file)
+                        print(f"Removed old sliding window file: {old_file}")
+                    except Exception as e:
+                        print(f"Could not remove {old_file}: {e}")
+            
+            # Keep only manual dragged window files in metadata
+            metadata[dataset_name]['dragged_samples'] = [
+                f for f in old_files if 'dragged_window_' in f
+            ]
+        else:
             metadata[dataset_name]['dragged_samples'] = []
+        
+        # Add new sliding window files
         metadata[dataset_name]['dragged_samples'].extend(sample_files)
+        
+        # Save sliding window positions for reload
+        metadata[dataset_name]['sliding_window_positions'] = [
+            {
+                'window_id': f"sliding_{idx}",
+                'start_time': w['start_time'],
+                'end_time': w['end_time']
+            }
+            for idx, w in enumerate(good_windows)
+        ]
         
         with open(METADATA_FILE, 'w') as f:
             json.dump(metadata, f, indent=2)
@@ -1511,13 +1627,41 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
     # Combine all selected data for visualization
     combined_data = pd.concat(all_selected_data, ignore_index=True)
 
-    # Update metadata
-    if 'dragged_samples' not in metadata[dataset_name]:
+    # Update metadata - clean up old manual windows first
+    if 'dragged_samples' in metadata[dataset_name]:
+        # Remove old dragged window files (but keep sliding windows)
+        old_files = metadata[dataset_name]['dragged_samples']
+        for old_file in old_files:
+            # Only remove manual dragged windows, not sliding windows
+            if 'dragged_window_' in old_file and os.path.exists(old_file):
+                try:
+                    os.remove(old_file)
+                    print(f"Removed old window file: {old_file}")
+                except Exception as e:
+                    print(f"Could not remove {old_file}: {e}")
+        
+        # Keep only sliding window files in metadata
+        metadata[dataset_name]['dragged_samples'] = [
+            f for f in old_files if 'sliding_' in f
+        ]
+    else:
         metadata[dataset_name]['dragged_samples'] = []
+    
+    # Add new manual window files
     metadata[dataset_name]['dragged_samples'].extend(sample_files)
+    
+    # Save window positions for easy reload
+    metadata[dataset_name]['manual_window_positions'] = [
+        {
+            'window_id': w['window_id'],
+            'start_time': w['start_time'],
+            'end_time': w['end_time']
+        }
+        for w in window_ranges
+    ]
 
     with open(METADATA_FILE, 'w') as f:
-        json.dump(metadata, f)
+        json.dump(metadata, f, indent=2)
 
     # Create visualization of selected samples
     fig = go.Figure()
@@ -1645,18 +1789,41 @@ def update_split_dataset_selector(split_clicks, dataset_name, split_graph, curre
         options = []
         for file_path in all_files:
             if os.path.exists(file_path):
-                filename = os.path.basename(file_path)
+                filename = os.path.basename(file_path).replace(".csv", "")
+                dataset_base = dataset_name.replace(".csv", "")
+                
                 # Extract window info from filename
-                parts = filename.replace(f"_{dataset_name}", "").replace(
-                    "dragged_window_", "")
-                window_id = parts.split("_")[0] if "_" in parts else parts
+                # Handle nested prefix: dragged_window_sliding_X or dragged_window_X
+                temp = filename
+                
+                # Remove dataset name suffix first
+                if temp.endswith(f"_{dataset_base}"):
+                    temp = temp.replace(f"_{dataset_base}", "")
+                
+                # Now check for window type prefixes
+                if temp.startswith("dragged_window_sliding_"):
+                    # Nested case: dragged_window_sliding_0 -> 0
+                    window_id = temp.replace("dragged_window_sliding_", "")
+                    window_type = "Sliding"
+                elif temp.startswith("dragged_window_"):
+                    # Manual case: dragged_window_0 -> 0
+                    window_id = temp.replace("dragged_window_", "")
+                    window_type = "Manual"
+                elif temp.startswith("sliding_"):
+                    # Direct sliding case: sliding_0 -> 0
+                    window_id = temp.replace("sliding_", "")
+                    window_type = "Sliding"
+                else:
+                    # Fallback
+                    window_id = temp
+                    window_type = "Window"
 
                 # Get file stats
                 df = pd.read_csv(file_path)
                 samples = len(df)
                 duration_est = samples / 100  # Assuming 100Hz sampling rate
 
-                display_name = f"Window {window_id} ({samples} samples, ~{duration_est:.1f}s)"
+                display_name = f"{window_type} {window_id} ({samples} samples, ~{duration_est:.1f}s)"
                 options.append({'label': display_name, 'value': file_path})
 
         # Sort options by window ID
@@ -1979,11 +2146,34 @@ def populate_training_dataset_selector(dataset_name, split_graph, split_options)
 
         for file_path in split_files:
             if os.path.exists(file_path):
-                filename = os.path.basename(file_path)
+                filename = os.path.basename(file_path).replace(".csv", "")
+                dataset_base = dataset_name.replace(".csv", "")
+                
                 # Extract window info from filename
-                parts = filename.replace(f"_{dataset_name}", "").replace(
-                    "dragged_window_", "")
-                window_id = parts.split("_")[0] if "_" in parts else parts
+                # Handle nested prefix: dragged_window_sliding_X or dragged_window_X
+                temp = filename
+                
+                # Remove dataset name suffix first
+                if temp.endswith(f"_{dataset_base}"):
+                    temp = temp.replace(f"_{dataset_base}", "")
+                
+                # Now check for window type prefixes
+                if temp.startswith("dragged_window_sliding_"):
+                    # Nested case: dragged_window_sliding_0 -> 0
+                    window_id = temp.replace("dragged_window_sliding_", "")
+                    window_type = "Sliding"
+                elif temp.startswith("dragged_window_"):
+                    # Manual case: dragged_window_0 -> 0
+                    window_id = temp.replace("dragged_window_", "")
+                    window_type = "Manual"
+                elif temp.startswith("sliding_"):
+                    # Direct sliding case: sliding_0 -> 0
+                    window_id = temp.replace("sliding_", "")
+                    window_type = "Sliding"
+                else:
+                    # Fallback
+                    window_id = temp
+                    window_type = "Window"
 
                 # Get file stats
                 df = pd.read_csv(file_path)
@@ -1991,7 +2181,7 @@ def populate_training_dataset_selector(dataset_name, split_graph, split_options)
                 duration_est = samples / 100  # Assuming 100Hz sampling rate
                 total_samples += samples
 
-                display_name = f"Window {window_id} ({samples} samples, ~{duration_est:.1f}s)"
+                display_name = f"{window_type} {window_id} ({samples} samples, ~{duration_est:.1f}s)"
                 options.append({'label': display_name, 'value': file_path})
 
         # Sort options by window ID
