@@ -2119,7 +2119,7 @@ def clear_remove_model_alert(model_value):
 
 @callback(
     Output('deployment-output', 'children'),
-    [Input('generate-code-btn', 'n_clicks'),
+    [Input('training-generate-code-btn', 'n_clicks'),
      Input('resource-analysis-btn', 'n_clicks')],
     [State('trained-model-selector', 'value'),
      State('deployment-platform', 'value'),
@@ -2213,7 +2213,7 @@ def handle_deployment_actions(generate_clicks, resource_clicks, model_filename, 
             'model_object': model  # Pass the actual model object for parameter extraction
         }
 
-        if button_id == 'generate-code-btn':
+        if button_id == 'training-generate-code-btn':
             return generate_deployment_code_display(model_data, platform, optimization, model_filename)
         elif button_id == 'resource-analysis-btn':
             return generate_resource_analysis_display(model_data, model_info, model_filename)
