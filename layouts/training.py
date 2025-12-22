@@ -40,7 +40,7 @@ layout = html.Div([
                     ],
                     placeholder="Select a machine learning model",
                     value='random_forest',
-                    disabled=True,
+                    disabled=False,
                     style={'margin-bottom': '15px'}
                 )
             ], style={'width': '100%', 'margin-bottom': '20px'}),

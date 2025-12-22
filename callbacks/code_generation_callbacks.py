@@ -6,12 +6,15 @@ Handles model code generation, compilation, and flashing to embedded devices
 from dash import callback, Input, Output, State, no_update, html, ctx
 import json
 import os
+import glob
 import subprocess
 import serial.tools.list_ports
 from pathlib import Path
 import traceback
 
-from config.config import MODELS_DIR, PERSISTENT_DIR
+from config.config import MODELS_DIR, PERSISTENT_DIR, get_model_path, get_models_metadata_path
+from utils.model_training import EdgeMLModel
+from deployment import generate_deployment_code, generate_and_save_deployment_code
 
 
 def compile_with_arduino_cli(code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose):
@@ -193,6 +196,12 @@ def generate_platformio_config(target_board, model_filename, board_name):
             'board': 'genericSTM32F407VET6',
             'framework': 'arduino',
             'lib_deps': []
+        },
+        'seeed:nrf52:xiaonRF52840Sense': {
+            'platform': 'nordicnrf52',
+            'board': 'xiaonRF52840Sense',
+            'framework': 'arduino',
+            'lib_deps': ['sparkfun/SparkFun LSM6DS3 Breakout']
         }
     }
 
@@ -226,18 +235,29 @@ upload_speed = 921600
 
 @callback(
     Output('deployment-model-selector', 'options'),
-    Input('tabs', 'value')
+    Input('tabs', 'value'),
+    State('working-directory-store', 'data'),
+    prevent_initial_call=False
 )
-def populate_model_selector(tab):
+def populate_model_selector(tab, base_dir):
     """
     Populate model selector with available trained models from trained_models.json.
+    Uses the working directory from the store.
     """
+    # Only populate when on the code generation tab to avoid unnecessary loads
+    if tab != 'tab-5':  # Code Generation tab
+        return no_update
+    
     try:
-        models_metadata_file = os.path.join(MODELS_DIR, 'trained_models.json')
+        # Use stored base directory or default to PERSISTENT_DIR
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        
+        models_dir = os.path.join(base_dir, 'models')
+        models_metadata_file = os.path.join(models_dir, 'trained_models.json')
 
         if not os.path.exists(models_metadata_file):
-            print(
-                f"WARNING: trained_models.json not found at {models_metadata_file}")
+            print(f"WARNING: trained_models.json not found at {models_metadata_file}")
             return []
 
         with open(models_metadata_file, 'r') as f:
@@ -257,7 +277,7 @@ def populate_model_selector(tab):
         # Sort by test accuracy (descending)
         options.sort(key=lambda x: x['label'], reverse=True)
 
-        print(f"Loaded {len(options)} models from trained_models.json")
+        print(f"Loaded {len(options)} models from {models_metadata_file}")
         return options
 
     except Exception as e:
@@ -270,11 +290,13 @@ def populate_model_selector(tab):
 @callback(
     [Output('model-info-display', 'children'),
      Output('model-parameters-display', 'children')],
-    Input('deployment-model-selector', 'value')
+    Input('deployment-model-selector', 'value'),
+    State('working-directory-store', 'data')
 )
-def display_model_info(model_filename):
+def display_model_info(model_filename, base_dir):
     """
     Display information about the selected model and auto-populate parameters from metadata.
+    Uses the working directory from the store.
     """
     if not model_filename:
         no_model_msg = html.Div("No model selected", style={
@@ -282,8 +304,12 @@ def display_model_info(model_filename):
         return no_model_msg, "Select a model to view parameters"
 
     try:
-        # Load metadata from trained_models.json
-        models_metadata_file = os.path.join(MODELS_DIR, 'trained_models.json')
+        # Use stored base directory or default to PERSISTENT_DIR
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        
+        models_dir = os.path.join(base_dir, 'models')
+        models_metadata_file = os.path.join(models_dir, 'trained_models.json')
 
         if not os.path.exists(models_metadata_file):
             error_msg = html.Div("Metadata file not found",
@@ -470,21 +496,28 @@ def refresh_serial_ports(n_clicks, tab):
      State('target-board-selector', 'value'),
      State('code-generator-selector', 'value'),
      State('optimization-level', 'value'),
-     State('deployment-stride', 'value')],
+     State('deployment-stride', 'value'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
-def generate_embedded_code(n_clicks, model_filename, target_board, generator_type, optimization, stride):
+def generate_embedded_code(n_clicks, model_filename, target_board, generator_type, optimization, stride, base_dir):
     """
     Generate embedded C/C++ code from the trained model using actual metadata.
     Parameters are loaded from model metadata to ensure consistency.
+    Uses the working directory from the store.
     """
     if not model_filename:
         return no_update, html.Div("⚠️ Please select a model first",
                                    style={'color': '#ff9800', 'padding': '10px'}), {'display': 'none'}, {}, True, True, no_update, no_update
 
     try:
-        # Load metadata from trained_models.json
-        models_metadata_file = os.path.join(MODELS_DIR, 'trained_models.json')
+        # Use stored base directory or default to PERSISTENT_DIR
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        
+        models_dir = os.path.join(base_dir, 'models')
+        models_metadata_file = os.path.join(models_dir, 'trained_models.json')
+        
         with open(models_metadata_file, 'r') as f:
             models_metadata = json.load(f)
 
@@ -506,164 +539,111 @@ def generate_embedded_code(n_clicks, model_filename, target_board, generator_typ
         stride_samples = int((stride_percent / 100.0) * window_size_samples)
         stride_samples = max(1, stride_samples)  # Ensure at least 1 sample
 
-        # TODO: Integrate with deployment/code_generator_factory.py for real code generation
-        # For now, generate template code with actual parameters
-
-        # Board-specific configuration
-        board_configs = {
-            'm5stack:esp32:m5stick_c': {
-                'name': 'M5StickC Plus2',
-                'includes': '#include <M5StickCPlus2.h>\\n#include <Wire.h>',
-                'imu_init': '  M5.begin();\\n  M5.IMU.Init();',
-                'read_sensors': '  float ax, ay, az, gx, gy, gz;\\n  M5.IMU.getAccelData(&ax, &ay, &az);\\n  M5.IMU.getGyroData(&gx, &gy, &gz);'
-            },
-            'esp32:esp32:esp32': {
-                'name': 'ESP32',
-                'includes': '#include <Wire.h>',
-                'imu_init': '  // Initialize IMU sensor (MPU6050/MPU6886)',
-                'read_sensors': '  // Read IMU sensor data\\n  float ax, ay, az, gx, gy, gz;'
-            }
+        # Load the trained model to get actual parameters
+        model_path = get_model_path(model_filename, base_dir)
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+        
+        model = EdgeMLModel.load_model(model_path)
+        
+        # Get feature names from model or training metadata
+        feature_names = model.feature_names
+        if not feature_names:
+            # Try to get from training metadata
+            training_dir = os.path.join(base_dir, 'training')
+            metadata_files = glob.glob(os.path.join(training_dir, '*_metadata.json'))
+            if metadata_files:
+                with open(metadata_files[0], 'r') as f:
+                    training_metadata = json.load(f)
+                    feature_names = training_metadata.get('feature_names', [])
+        
+        if not feature_names:
+            # Last resort: load from training CSV
+            train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
+            if train_files:
+                import pandas as pd
+                temp_df = pd.read_csv(train_files[0])
+                feature_names = [col for col in temp_df.columns if col != 'label']
+        
+        # Get class names
+        classes = list(model.label_encoder.classes_) if model.label_encoder else ['activity_1', 'activity_2']
+        
+        # Map target board to platform string for code generator
+        platform_mapping = {
+            'arduino:avr:uno': 'arduino',
+            'arduino:avr:nano': 'arduino',
+            'esp32:esp32:esp32': 'esp32',
+            'esp32:esp32:esp32s3': 'esp32',
+            'm5stack:esp32:m5stick_c': 'esp32',
+            'seeed:nrf52:xiaonRF52840Sense': 'seeed_xiao',
+            'STM32:stm32:GenF4': 'arm_cortex_m'
         }
-
-        board_config = board_configs.get(target_board, {
-            'name': 'Generic Board',
-            'includes': '#include <Arduino.h>',
-            'imu_init': '  // Initialize IMU sensor',
-            'read_sensors': '  // Read sensor data'
-        })
-
-        # Generate code
-        generated_code = f"""/*
- * Auto-generated HAR Model
- * Model: {model_filename.split('.')[0]}
- * Type: {model_type.upper()}
- * Generator: {generator_type}
- * Target: {board_config['name']}
- * Optimization: {optimization.upper()}
- * 
- * CRITICAL: These parameters MUST match training data
- * Sampling Rate: {sampling_rate} Hz (from training)
- * Window Size: {window_size_ms} ms ({window_size_samples} samples)
- * Overlap: {overlap_percent}% (stride: {stride_samples} samples)
- * Features: {features}
- * Classes: {classes}
- */
-
-{board_config['includes']}
-
-// Model configuration (AUTO-POPULATED from training metadata)
-#define SAMPLING_RATE {sampling_rate}
-#define WINDOW_SIZE_MS {window_size_ms}
-#define WINDOW_SIZE {window_size_samples}
-#define STRIDE {stride_samples}
-#define NUM_FEATURES {features}
-#define NUM_CLASSES {classes}
-
-// Optimization level: {optimization.upper()}
-#define OPT_{optimization.upper()}
-
-// Feature buffer
-float features[NUM_FEATURES];
-float sensorBuffer[WINDOW_SIZE * 6];  // aX, aY, aZ, gX, gY, gZ
-int bufferIndex = 0;
-
-// Activity labels (TODO: Load from metadata)
-const char* activities[NUM_CLASSES] = {{
-    "Activity_0", "Activity_1", "Activity_2", "Activity_3", "Activity_4", "Activity_5"
-}};
-
-// Model weights (TODO: Export from trained model)
-// float model_weights[...];
-
-void setup() {{
-  Serial.begin(115200);
-  Serial.println("========================================");
-  Serial.println("HAR Model Initialized");
-  Serial.println("========================================");
-  Serial.printf("Model: {model_filename.split('.')[0]}\\n");
-  Serial.printf("Sampling: %d Hz\\n", SAMPLING_RATE);
-  Serial.printf("Window: %d ms (%d samples)\\n", WINDOW_SIZE_MS, WINDOW_SIZE);
-  Serial.printf("Stride: %d samples\\n", STRIDE);
-  Serial.printf("Features: %d\\n", NUM_FEATURES);
-  Serial.printf("Classes: %d\\n", NUM_CLASSES);
-  Serial.printf("Optimization: {optimization.upper()}\\n");
-  Serial.println("========================================");
-  
-{board_config['imu_init']}
-  
-  Serial.println("Ready to classify!");
-}}
-
-void loop() {{
-  // Read sensor data at SAMPLING_RATE
-  static unsigned long lastSampleTime = 0;
-  unsigned long currentTime = millis();
-  
-  if (currentTime - lastSampleTime >= (1000 / SAMPLING_RATE)) {{
-    lastSampleTime = currentTime;
-    
-{board_config['read_sensors']}
-    
-    // Store in buffer
-    sensorBuffer[bufferIndex * 6 + 0] = ax;
-    sensorBuffer[bufferIndex * 6 + 1] = ay;
-    sensorBuffer[bufferIndex * 6 + 2] = az;
-    sensorBuffer[bufferIndex * 6 + 3] = gx;
-    sensorBuffer[bufferIndex * 6 + 4] = gy;
-    sensorBuffer[bufferIndex * 6 + 5] = gz;
-    
-    bufferIndex++;
-    
-    // When window is full, extract features and classify
-    if (bufferIndex >= WINDOW_SIZE) {{
-      // Extract features (MUST match training exactly)
-      extractFeatures(sensorBuffer, features);
-      
-      // Run inference
-      int predicted_class = runInference(features);
-      
-      Serial.printf("Prediction: %s\\n", activities[predicted_class]);
-      
-      // Slide window by STRIDE samples
-      if (STRIDE < WINDOW_SIZE) {{
-        // Shift buffer
-        memmove(sensorBuffer, &sensorBuffer[STRIDE * 6], (WINDOW_SIZE - STRIDE) * 6 * sizeof(float));
-        bufferIndex = WINDOW_SIZE - STRIDE;
-      }} else {{
-        bufferIndex = 0;
-      }}
-    }}
-  }}
-}}
-
-void extractFeatures(float* buffer, float* features) {{
-  // TODO: Implement feature extraction (time + freq domain)
-  // CRITICAL: Must match training feature engineering exactly
-  // - Time domain: mean, std, min, max, etc.
-  // - Frequency domain: FFT, spectral features
-}}
-
-int runInference(float* features) {{
-  // TODO: Implement model inference
-  // - Load model weights
-  // - Run forward pass
-  // - Return predicted class
-  return 0;  // Placeholder
-}}
-"""
+        platform = platform_mapping.get(target_board, 'arduino')
+        
+        # Prepare model data for code generation
+        model_data = {
+            'model_type': model_type,
+            'feature_names': feature_names or [],
+            'classes': classes,
+            'model_params': model_params,
+            'model_object': model  # Pass actual model for parameter extraction
+        }
+        
+        # Generate code using proper code generators
+        generated_code_files = generate_deployment_code(
+            model_type, model_data, platform, optimization
+        )
+        
+        # Also save to working directory in organized structure
+        output_dir = os.path.join(base_dir, 'generated')
+        saved_files = generate_and_save_deployment_code(
+            model_type, model_data, platform, output_dir, optimization
+        )
+        
+        # Get the first generated file for preview (typically the sketch/example)
+        # Priority: sketch > source > header
+        sketch_file = None
+        source_file = None
+        header_file = None
+        
+        for filename, code in generated_code_files.items():
+            if '.ino' in filename or 'example' in filename.lower():
+                sketch_file = (filename, code)
+            elif '.cpp' in filename or '.c' in filename:
+                source_file = (filename, code)
+            elif '.h' in filename:
+                header_file = (filename, code)
+        
+        # Show sketch first, then source, then header
+        preview_file = sketch_file or source_file or header_file or list(generated_code_files.items())[0]
+        preview_code = preview_file[1]
+        preview_filename = preview_file[0]
 
         status = html.Div([
             html.H5("✅ Code Generated Successfully!",
                     style={'color': '#28a745'}),
-            html.P(
-                f"Generator: {generator_type} | Target: {board_config['name']} | Optimization: {optimization.upper()}"),
+            html.P(f"Generator: {generator_type} | Platform: {platform} | Optimization: {optimization.upper()}"),
             html.Div([
-                html.Strong("⚠️ Critical: "),
-                html.Span(
-                    f"Code uses parameters from training: {sampling_rate} Hz, {window_size_ms} ms window, {features} features")
+                html.Strong("📁 Generated Files: "),
+                html.Ul([
+                    html.Li(filename, style={'font-family': 'monospace'})
+                    for filename in generated_code_files.keys()
+                ])
+            ], style={'margin-top': '10px', 'padding': '10px', 'background': '#e8f5e9', 'border-radius': '4px', 'font-size': '13px'}),
+            html.Div([
+                html.Strong("💾 Saved to: "),
+                html.Code(output_dir, style={'background': '#f8f9fa', 'padding': '2px 8px', 'border-radius': '3px'}),
+                html.Ul([
+                    html.Li(os.path.relpath(filepath, base_dir), style={'font-family': 'monospace', 'font-size': '12px'})
+                    for filepath in saved_files.keys()
+                ], style={'margin-top': '5px'})
+            ], style={'margin-top': '10px', 'padding': '10px', 'background': '#d1ecf1', 'border-radius': '4px', 'font-size': '13px'}),
+            html.Div([
+                html.Strong("⚠️ Note: "),
+                html.Span(f"Showing preview of {preview_filename}. All files will be included in download.")
             ], style={'margin-top': '10px', 'padding': '10px', 'background': '#fff3cd', 'border-radius': '4px', 'font-size': '13px'}),
             html.Div([
-                html.Span(f"Overlap: {overlap_percent}% (stride: {stride_samples} samples)", style={
+                html.Span(f"Model uses: {sampling_rate} Hz, {window_size_ms} ms window, {len(feature_names)} features", style={
                           'font-size': '12px', 'color': '#666'})
             ], style={'margin-top': '8px'})
         ], style={'background': '#d4edda', 'padding': '15px', 'border-radius': '5px'})
@@ -692,18 +672,32 @@ int runInference(float* features) {{
             'opacity': '1'
         }
 
+        # Get board name for display
+        board_names = {
+            'arduino:avr:uno': 'Arduino Uno',
+            'arduino:avr:nano': 'Arduino Nano',
+            'esp32:esp32:esp32': 'ESP32',
+            'esp32:esp32:esp32s3': 'ESP32-S3',
+            'm5stack:esp32:m5stick_c': 'M5StickC Plus2',
+            'seeed:nrf52:xiaonRF52840Sense': 'XIAO nRF52840 Sense',
+            'STM32:stm32:GenF4': 'STM32F4'
+        }
+        board_name = board_names.get(target_board, 'Unknown Board')
+
         # Generate PlatformIO configuration
         platformio_ini = generate_platformio_config(
-            target_board, model_filename, board_config['name'])
+            target_board, model_filename, board_name)
 
+        # Store all generated files
         code_data = {
-            'code': generated_code,
-            'filename': f'{model_filename.split(".")[0]}_{generator_type}.ino',
+            'code': preview_code,  # Main code for compilation
+            'filename': preview_filename,
             'board': target_board,
-            'platformio_ini': platformio_ini
+            'platformio_ini': platformio_ini,
+            'all_files': generated_code_files  # Store all generated files
         }
 
-        return generated_code, status, {'display': 'block'}, code_data, False, False, compile_btn_style, flash_btn_style
+        return preview_code, status, {'display': 'block'}, code_data, False, False, compile_btn_style, flash_btn_style
 
     except Exception as e:
         print(f"Error generating code: {e}")
@@ -833,19 +827,26 @@ def copy_to_clipboard(n_clicks, code):
     Input('resource-analysis-btn', 'n_clicks'),
     [State('deployment-model-selector', 'value'),
      State('target-board-selector', 'value'),
-     State('optimization-level', 'value')],
+     State('optimization-level', 'value'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
-def analyze_resources(n_clicks, model_filename, target_board, optimization):
+def analyze_resources(n_clicks, model_filename, target_board, optimization, base_dir):
     """
     Analyze and display resource requirements for deploying the model to target board.
+    Uses the working directory from the store.
     """
     if not model_filename:
         return html.Div("⚠️ Please select a model first", style={'color': '#ff9800', 'padding': '10px'})
 
     try:
-        # Load metadata
-        models_metadata_file = os.path.join(MODELS_DIR, 'trained_models.json')
+        # Use stored base directory or default to PERSISTENT_DIR
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        
+        models_dir = os.path.join(base_dir, 'models')
+        models_metadata_file = os.path.join(models_dir, 'trained_models.json')
+        
         with open(models_metadata_file, 'r') as f:
             models_metadata = json.load(f)
 
@@ -867,6 +868,7 @@ def analyze_resources(n_clicks, model_filename, target_board, optimization):
             'esp32:esp32:esp32': {'name': 'ESP32', 'ram': 520, 'flash': 4096, 'speed': 240},
             'esp32:esp32:esp32s3': {'name': 'ESP32-S3', 'ram': 512, 'flash': 8192, 'speed': 240},
             'm5stack:esp32:m5stick_c': {'name': 'M5StickC Plus2', 'ram': 320, 'flash': 8192, 'speed': 240},
+            'seeed:nrf52:xiaonRF52840Sense': {'name': 'XIAO nRF52840 Sense', 'ram': 256, 'flash': 1024, 'speed': 64},
             'STM32:stm32:GenF4': {'name': 'STM32F4', 'ram': 192, 'flash': 1024, 'speed': 168}
         }
 

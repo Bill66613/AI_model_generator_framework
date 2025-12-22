@@ -195,28 +195,39 @@ def generate_sliding_windows_from_current(current_windows, df, window_size_sampl
 
 @callback(
     Output('dataset-selector_', 'options'),
-    Input('tabs', 'value')
+    Input('tabs', 'value'),
+    Input('working-directory-store', 'data')
 )
-def populate_dataset_selector(tab):
+def populate_dataset_selector(tab, base_dir):
     """Populate the dataset selector with available datasets."""
     if tab == 'tab-2':
-        with open(METADATA_FILE, 'r') as f:
-            metadata = json.load(f)
-        return [{'label': filename, 'value': filename} for filename in metadata.keys()]
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            return [{'label': filename, 'value': filename} for filename in metadata.keys()]
+        return []
     return []
 
 
 @callback(
     Output('preprocessed-graph', 'figure'),
     Output('dataset-status-display', 'children'),
-    Input('dataset-selector_', 'value')
+    Input('dataset-selector_', 'value'),
+    State('working-directory-store', 'data')
 )
-def display_dataset_and_status(dataset_name):
+def display_dataset_and_status(dataset_name, base_dir):
     """Displays selected dataset as a chart and comprehensive status."""
     if not dataset_name:
         return {}, html.Div("Select a dataset to view status", style={'color': '#6c757d', 'font-style': 'italic'})
 
-    with open(METADATA_FILE, 'r') as f:
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    metadata_file = os.path.join(base_dir, 'metadata.json')
+    
+    with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
     dataset_info = metadata.get(dataset_name, {})
@@ -230,8 +241,8 @@ def display_dataset_and_status(dataset_name):
     }
 
     # Check if training data exists
-    train_file = get_training_data_path(dataset_name, 'train')
-    test_file = get_training_data_path(dataset_name, 'test')
+    train_file = get_training_data_path(dataset_name, 'train', base_dir)
+    test_file = get_training_data_path(dataset_name, 'test', base_dir)
     stages['training_ready'] = os.path.exists(
         train_file) and os.path.exists(test_file)
 
@@ -418,14 +429,19 @@ def display_dataset_and_status(dataset_name):
     Output('stored-datasets', 'data', allow_duplicate=True),
     Input('clean-smooth-btn', 'n_clicks'),
     State('dataset-selector_', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def clean_and_smooth_data(n_clicks, dataset_name):
+def clean_and_smooth_data(n_clicks, dataset_name, base_dir):
     """Clean and smooth the selected dataset and display it in a graph."""
     if not dataset_name:
         return no_update, no_update
 
-    file_path = os.path.join(PERSISTENT_DIR, dataset_name)
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    datasets_dir = os.path.join(base_dir, 'datasets')
+    
+    file_path = os.path.join(datasets_dir, dataset_name)
     if not os.path.exists(file_path):
         return no_update, no_update
 
@@ -484,21 +500,26 @@ def clean_and_smooth_data(n_clicks, dataset_name):
     State('dataset-selector_', 'value'),
     State('stored-datasets', 'data'),
     State('preprocessed-graph', 'figure'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, processed_figure):
+def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, processed_figure, base_dir):
     """Save the cleaned and smoothed dataset to a new file and update metadata."""
     if not (dataset_name and processed_figure):
         return {}
 
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    datasets_dir = os.path.join(base_dir, 'datasets')
+    
     df = pd.DataFrame(cleaned_smoothed)
     cleaned_smoothed_file_path = os.path.join(
-        PERSISTENT_DIR, f"cleaned_smoothed_{dataset_name}")
+        datasets_dir, f"cleaned_smoothed_{dataset_name}")
     # Use 4 decimal places precision for sensor data readability
     df.to_csv(cleaned_smoothed_file_path, index=False, float_format='%.4f')
 
     # Update metadata
-    metadata_file = os.path.join(PERSISTENT_DIR, "metadata.json")
+    metadata_file = os.path.join(base_dir, "metadata.json")
     if os.path.exists(metadata_file):
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
@@ -519,14 +540,19 @@ def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, process
     Input('apply-time-window-btn', 'n_clicks'),
     State('dataset-selector_', 'value'),
     State('time-window-span-input', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def apply_time_window(n_clicks, dataset_name, time_window_span):
+def apply_time_window(n_clicks, dataset_name, time_window_span, base_dir):
     """Apply the time window span and display the dataset with draggable windows."""
     if not (dataset_name and time_window_span):
         return {}, []
 
-    with open(METADATA_FILE, 'r') as f:
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    metadata_file = os.path.join(base_dir, 'metadata.json')
+    
+    with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
     # Get the correct file path
@@ -598,7 +624,7 @@ def apply_time_window(n_clicks, dataset_name, time_window_span):
         window_start = window_idx * window_duration
         window_end = min(window_start + window_duration, total_time)
         initial_windows.append({
-            'window_id': window_idx,
+            'window_id': window_idx + 1,
             'start_time': window_start,
             'end_time': window_end,
             'y_min': rect_y_min,
@@ -624,11 +650,11 @@ def apply_time_window(n_clicks, dataset_name, time_window_span):
                 dash="solid"
             ),
             editable=True,
-            name=f"window_{window_idx}",
+            name=f"window_{window_idx + 1}",
             layer="above",  # Ensure rectangles are above data lines
             # Enhanced label configuration for better visibility
             label=dict(
-                text=f"W{window_idx}",
+                text=f"W{window_idx + 1}",
                 textposition="middle center",
                 font=dict(size=14, color="red", family="Arial Black")
             )
@@ -783,9 +809,10 @@ def apply_time_window(n_clicks, dataset_name, time_window_span):
     State('dataset-selector_', 'value'),
     State('time-window-span-input', 'value'),
     State('interactive-sample-graph', 'figure'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def manage_windows(add_clicks, remove_clicks, reset_clicks, current_windows, dataset_name, time_window_span, current_figure):
+def manage_windows(add_clicks, remove_clicks, reset_clicks, current_windows, dataset_name, time_window_span, current_figure, base_dir):
     """Manage adding, removing, and resetting windows."""
     from dash import ctx
 
@@ -801,7 +828,11 @@ def manage_windows(add_clicks, remove_clicks, reset_clicks, current_windows, dat
         current_windows = []
 
     # Load dataset info for window calculations
-    with open(METADATA_FILE, 'r') as f:
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    metadata_file = os.path.join(base_dir, 'metadata.json')
+    
+    with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
     if "cleaned_data_path" in metadata[dataset_name]:
@@ -866,7 +897,7 @@ def manage_windows(add_clicks, remove_clicks, reset_clicks, current_windows, dat
 
         new_end = min(new_start + window_duration, total_time)
         new_window = {
-            'window_id': len(current_windows),
+            'window_id': len(current_windows) + 1,
             'start_time': new_start,
             'end_time': new_end,
             'y_min': rect_y_min,
@@ -887,7 +918,7 @@ def manage_windows(add_clicks, remove_clicks, reset_clicks, current_windows, dat
             window_start = window_idx * window_duration
             window_end = min(window_start + window_duration, total_time)
             current_windows.append({
-                'window_id': window_idx,
+                'window_id': window_idx + 1,
                 'start_time': window_start,
                 'end_time': window_end,
                 'y_min': rect_y_min,
@@ -957,17 +988,22 @@ def update_figure_windows(figure, windows, window_duration, y_range):
      Output('current-windows', 'data', allow_duplicate=True)],
     Input('load-previous-windows-btn', 'n_clicks'),
     [State('dataset-selector_', 'value'),
-     State('interactive-sample-graph', 'figure')],
+     State('interactive-sample-graph', 'figure'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
-def load_previous_windows(n_clicks, dataset_name, current_figure):
+def load_previous_windows(n_clicks, dataset_name, current_figure, base_dir):
     """Load previously saved window positions from metadata."""
     if not dataset_name:
         print("Load Previous: No dataset selected")
         return no_update, no_update
 
     try:
-        with open(METADATA_FILE, 'r') as f:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         if dataset_name not in metadata:
@@ -1220,11 +1256,12 @@ def update_overlap_info(overlap_percent, window_size_ms):
      State('current-windows', 'data'),
      State('time-window-span-input', 'value'),
      State('overlap-percentage-slider', 'value'),
-     State('quality-threshold-slider', 'value')],
+     State('quality-threshold-slider', 'value'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
 def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_size_ms,
-                             overlap_percent, quality_threshold):
+                             overlap_percent, quality_threshold, base_dir):
     """Generate sliding windows from manually selected regions."""
     if not (dataset_name and current_windows and window_size_ms):
         return html.Div("⚠️ Please select a dataset and define windows first.",
@@ -1242,7 +1279,11 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
     
     try:
         # Load data
-        with open(METADATA_FILE, 'r') as f:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
         
         if "cleaned_data_path" in metadata[dataset_name]:
@@ -1479,9 +1520,10 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
     Input('save-sliding-windows-btn', 'n_clicks'),
     State('sliding-windows-data', 'data'),
     State('dataset-selector_', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def save_sliding_windows(n_clicks, window_data, dataset_name):
+def save_sliding_windows(n_clicks, window_data, dataset_name, base_dir):
     """Save generated sliding windows to disk."""
     if not window_data or not dataset_name:
         return no_update, no_update, no_update
@@ -1512,7 +1554,11 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
             all_selected_data.append(window_df)
 
         # Update metadata
-        with open(METADATA_FILE, 'r') as f:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         # Clean up old sliding window files first
@@ -1547,7 +1593,7 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
             for idx, w in enumerate(good_windows)
         ]
 
-        with open(METADATA_FILE, 'w') as f:
+        with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
 
         # Create visualization of all windows
@@ -1615,9 +1661,10 @@ def save_sliding_windows(n_clicks, window_data, dataset_name):
     State('current-windows', 'data'),
     State('interactive-sample-graph', 'figure'),
     State('time-window-span-input', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def split_selected_windows(n_clicks, dataset_name, current_windows, current_figure, time_window_span):
+def split_selected_windows(n_clicks, dataset_name, current_windows, current_figure, time_window_span, base_dir):
     """Split the dataset into samples based on current window positions."""
     if not (dataset_name and time_window_span):
         print("No dataset selected or time window span not specified.")
@@ -1625,7 +1672,11 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
 
     print("Current windows:", current_windows)
 
-    with open(METADATA_FILE, 'r') as f:
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    metadata_file = os.path.join(base_dir, 'metadata.json')
+    
+    with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
     # Get the correct file path
@@ -1707,7 +1758,10 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
             window_data['Time_seconds'] = df[mask]['Time_seconds']
             all_selected_data.append(window_data)
 
-            sample_file_path = get_window_path(window_id, dataset_name)
+            # Use working directory for window storage
+            windows_dir = os.path.join(base_dir, 'windows')
+            os.makedirs(windows_dir, exist_ok=True)
+            sample_file_path = os.path.join(windows_dir, f"dragged_window_{window_id}_{dataset_name}")
             # Use 4 decimal places precision for sensor data readability
             window_data[available_cols].to_csv(
                 sample_file_path, index=False, float_format='%.4f')
@@ -1765,7 +1819,7 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
     # Save window size for easy reload
     metadata[dataset_name]['window_size_ms'] = time_window_span
 
-    with open(METADATA_FILE, 'w') as f:
+    with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
 
     # Create visualization of selected samples
@@ -1867,15 +1921,20 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
     # Add this to trigger update when split completes
     Input('split-samples-graph', 'figure'),
     State('split-dataset-selector', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=False
 )
-def update_split_dataset_selector(split_clicks, dataset_name, split_graph, current_value):
+def update_split_dataset_selector(split_clicks, dataset_name, split_graph, current_value, base_dir):
     """Update the dropdown options for split datasets."""
     if not dataset_name:
         return [], None
 
     try:
-        with open(METADATA_FILE, 'r') as f:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         # Get all split window files for the current dataset
@@ -2071,33 +2130,64 @@ def display_selected_split_window(selected_file_path):
     Input('delete-split-window-btn', 'n_clicks'),
     State('split-dataset-selector', 'value'),
     State('dataset-selector_', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def delete_split_window(n_clicks, selected_file_path, dataset_name):
+def delete_split_window(n_clicks, selected_file_path, dataset_name, base_dir):
     """Delete the selected split window file and update metadata."""
     if not selected_file_path or not os.path.exists(selected_file_path):
         return no_update, no_update
 
     try:
+        # Extract window_id from filename - handle both manual and sliding windows
+        filename = os.path.basename(selected_file_path)
+        # Remove dataset name and base prefix
+        temp = filename.replace(f"_{dataset_name}", "").replace("dragged_window_", "").replace(".csv", "")
+        
+        # Determine if it's a sliding window or manual window
+        if temp.startswith("sliding_"):
+            # Sliding window: dragged_window_sliding_79_dataset.csv -> sliding_79 -> 79
+            deleted_window_id = int(temp.replace("sliding_", ""))
+            is_sliding = True
+        else:
+            # Manual window: dragged_window_5_dataset.csv -> 5
+            deleted_window_id = int(temp)
+            is_sliding = False
+        
         # Delete the file
         os.remove(selected_file_path)
-        print(f"Deleted split window file: {selected_file_path}")
+        print(f"Deleted {'sliding' if is_sliding else 'manual'} window file: {selected_file_path}")
 
         # Update metadata
-        with open(METADATA_FILE, 'r') as f:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
-        if dataset_name in metadata and 'dragged_samples' in metadata[dataset_name]:
-            if selected_file_path in metadata[dataset_name]['dragged_samples']:
-                metadata[dataset_name]['dragged_samples'].remove(
-                    selected_file_path)
+        if dataset_name in metadata:
+            # Remove from dragged_samples
+            if 'dragged_samples' in metadata[dataset_name]:
+                if selected_file_path in metadata[dataset_name]['dragged_samples']:
+                    metadata[dataset_name]['dragged_samples'].remove(selected_file_path)
+            
+            # Only remove from manual_window_positions if it's a manual window
+            # Sliding windows don't have entries in manual_window_positions
+            if not is_sliding and 'manual_window_positions' in metadata[dataset_name]:
+                metadata[dataset_name]['manual_window_positions'] = [
+                    pos for pos in metadata[dataset_name]['manual_window_positions']
+                    if pos['window_id'] != deleted_window_id
+                ]
+                print(f"Removed window position for manual window_id {deleted_window_id}")
 
-        with open(METADATA_FILE, 'w') as f:
-            json.dump(metadata, f)
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
 
-        # Get updated options
+        # Get updated options using working directory
         import glob
-        pattern = get_window_pattern(dataset_name)
+        windows_dir = os.path.join(base_dir, 'windows')
+        pattern = os.path.join(windows_dir, f"dragged_window_*_{dataset_name}")
         existing_files = glob.glob(pattern)
 
         options = []
@@ -2106,7 +2196,7 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name):
                 filename = os.path.basename(file_path)
                 parts = filename.replace(f"_{dataset_name}", "").replace(
                     "dragged_window_", "")
-                window_id = parts.split("_")[0] if "_" in parts else parts
+                window_id = parts.split("_")[0] if "_" in parts else parts.replace(".csv", "")
 
                 df = pd.read_csv(file_path)
                 samples = len(df)
@@ -2122,6 +2212,8 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name):
 
     except Exception as e:
         print(f"Error deleting split window: {e}")
+        import traceback
+        traceback.print_exc()
         return no_update, no_update
 
 
@@ -2135,9 +2227,10 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name):
     Output('split-window-stats-table', 'data', allow_duplicate=True),
     Input('clean-generated-data-btn', 'n_clicks'),
     State('dataset-selector_', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def clean_all_generated_data(n_clicks, dataset_name):
+def clean_all_generated_data(n_clicks, dataset_name, base_dir):
     """Clean all generated split window data for the current dataset."""
     if not dataset_name:
         return [], None, {}, {}, "No dataset selected.", [], []
@@ -2165,7 +2258,11 @@ def clean_all_generated_data(n_clicks, dataset_name):
                 print(f"Deleted: {file_path}")
 
         # Update metadata to remove references to deleted files
-        with open(METADATA_FILE, 'r') as f:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         if dataset_name in metadata:
@@ -2182,7 +2279,7 @@ def clean_all_generated_data(n_clicks, dataset_name):
                     del metadata[dataset_name][key]
 
         # Save updated metadata
-        with open(METADATA_FILE, 'w') as f:
+        with open(metadata_file, 'w') as f:
             json.dump(metadata, f)
 
         print(
@@ -2391,9 +2488,10 @@ def update_split_displays(train_ratio, val_ratio):
     State('normalization-method', 'value'),
     State('feature-selection-method', 'value'),
     State('dataset-selector_', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def preprocess_for_training(n_clicks, selected_files, norm_method, feature_method, dataset_name):
+def preprocess_for_training(n_clicks, selected_files, norm_method, feature_method, dataset_name, base_dir):
     """Preprocess selected split windows for model training."""
     if not (selected_files and norm_method and feature_method):
         return {}, html.Div("⚠️ Please select datasets and preprocessing options.", style={'color': '#FF9800'})
@@ -2402,8 +2500,12 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
         # Get the correct label from metadata.json
         activity_label = None
         try:
-            if os.path.exists(METADATA_FILE):
-                with open(METADATA_FILE, 'r') as f:
+            if not base_dir:
+                base_dir = PERSISTENT_DIR
+            metadata_file = os.path.join(base_dir, 'metadata.json')
+            
+            if os.path.exists(metadata_file):
+                with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
 
                 dataset_info = metadata.get(dataset_name, {})
@@ -2786,126 +2888,18 @@ def perform_enhanced_train_val_test_split(n_clicks, preprocessed_data, train_rat
         return {}, {}
 
 
-@callback(
-    Output('preprocessing-results', 'children', allow_duplicate=True),
-    Input('save-preprocessed-training-btn', 'n_clicks'),
-    State('train-test-data', 'data'),
-    State('dataset-selector_', 'value'),
-    prevent_initial_call=True
-)
-def save_preprocessed_training_data(n_clicks, split_data, dataset_name):
-    """Save preprocessed training data to files (supports 2-way and 3-way splits)."""
-    if not (split_data and dataset_name):
-        return html.Div("⚠️ No preprocessed data to save.", style={'color': '#FF9800'})
-
-    try:
-        from config.config import get_training_data_path
-
-        # Save training and test data
-        train_df = pd.DataFrame(
-            split_data['X_train'], columns=split_data['feature_names'])
-        train_df['label'] = split_data['y_train']
-
-        test_df = pd.DataFrame(
-            split_data['X_test'], columns=split_data['feature_names'])
-        test_df['label'] = split_data['y_test']
-
-        # Save files using helper functions
-        train_file = get_training_data_path(dataset_name, 'train')
-        test_file = get_training_data_path(dataset_name, 'test')
-
-        train_df.to_csv(train_file, index=False)
-        test_df.to_csv(test_file, index=False)
-
-        # Check if validation data exists
-        has_validation = split_data.get('has_validation', False)
-        val_file = None
-        val_samples = 0
-
-        if has_validation and split_data.get('X_val'):
-            val_df = pd.DataFrame(
-                split_data['X_val'], columns=split_data['feature_names'])
-            val_df['label'] = split_data['y_val']
-
-            val_file = get_training_data_path(dataset_name, 'val')
-            val_df.to_csv(val_file, index=False)
-            val_samples = len(split_data['X_val'])
-
-        # Save metadata
-        metadata_file = get_training_data_path(dataset_name, 'metadata')
-        metadata = {
-            'dataset_name': dataset_name,
-            'feature_names': split_data['feature_names'],
-            'train_ratio': split_data.get('train_ratio', split_data.get('split_ratio', 0.8)),
-            'val_ratio': split_data.get('val_ratio', 0.0),
-            'test_ratio': split_data.get('test_ratio', 1.0 - split_data.get('train_ratio', 0.8)),
-            'random_state': split_data['random_state'],
-            'train_samples': len(split_data['X_train']),
-            'val_samples': val_samples,
-            'test_samples': len(split_data['X_test']),
-            'has_validation': has_validation,
-            'train_file': train_file,
-            'val_file': val_file,
-            'test_file': test_file,
-            'created_at': pd.Timestamp.now().isoformat()
-        }
-
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
-
-        # Build success message
-        file_list = [
-            html.Div([
-                html.Span("📁 Training File: ", style={'font-weight': 'bold'}),
-                html.Span(os.path.basename(train_file),
-                          style={'font-family': 'monospace'})
-            ], style={'margin-bottom': '5px'})
-        ]
-
-        if has_validation:
-            file_list.append(html.Div([
-                html.Span("📁 Validation File: ", style={
-                          'font-weight': 'bold'}),
-                html.Span(os.path.basename(val_file), style={
-                          'font-family': 'monospace'})
-            ], style={'margin-bottom': '5px'}))
-
-        file_list.extend([
-            html.Div([
-                html.Span("📁 Test File: ", style={'font-weight': 'bold'}),
-                html.Span(os.path.basename(test_file),
-                          style={'font-family': 'monospace'})
-            ], style={'margin-bottom': '5px'}),
-            html.Div([
-                html.Span("📄 Metadata: ", style={'font-weight': 'bold'}),
-                html.Span(os.path.basename(metadata_file),
-                          style={'font-family': 'monospace'})
-            ], style={'margin-bottom': '10px'}),
-            html.P("✅ Data is ready for model training!", style={
-                'color': '#4CAF50', 'font-weight': 'bold'})
-        ])
-
-        return html.Div([
-            html.H5("💾 Training Data Saved Successfully", style={
-                'color': '#4CAF50', 'margin': '0 0 15px 0'}),
-            html.Div(file_list)
-        ])
-
-    except Exception as e:
-        error_msg = f"❌ Error saving preprocessed data: {str(e)}"
-        return html.Div(error_msg, style={'color': '#dc3545'})
-
-
-@callback(
-    Output('preprocessed-training-data', 'data', allow_duplicate=True),
-    Output('train-test-data', 'data', allow_duplicate=True),
-    Output('train-test-split-graph', 'figure', allow_duplicate=True),
-    Output('preprocessing-results', 'children', allow_duplicate=True),
-    Input('clear-training-data-btn', 'n_clicks'),
-    State('dataset-selector_', 'value'),
-    prevent_initial_call=True
-)
-def clear_training_data(n_clicks, dataset_name):
+# Callback disabled - clear-training-data-btn button doesn't exist in layout
+# @callback(
+#     Output('preprocessed-training-data', 'data', allow_duplicate=True),
+#     Output('train-test-data', 'data', allow_duplicate=True),
+#     Output('train-test-split-graph', 'figure', allow_duplicate=True),
+#     Output('preprocessing-results', 'children', allow_duplicate=True),
+#     Input('clear-training-data-btn', 'n_clicks'),
+#     State('dataset-selector_', 'value'),
+#     State('working-directory-store', 'data'),
+#     prevent_initial_call=True
+# )
+# def clear_training_data(n_clicks, dataset_name, base_dir):
     """Clear all preprocessed training data and associated files."""
     if not dataset_name:
         return {}, {}, {}, html.Div("⚠️ No dataset selected.", style={'color': '#FF9800'})
@@ -2913,7 +2907,9 @@ def clear_training_data(n_clicks, dataset_name):
     deleted_files = []
     try:
         # Clear training data directory for this dataset
-        training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        training_dir = os.path.join(base_dir, 'training_data')
 
         if os.path.exists(training_dir):
             # Remove files related to current dataset
@@ -2958,18 +2954,21 @@ def clear_training_data(n_clicks, dataset_name):
     Output('dataset-status-display', 'children', allow_duplicate=True),
     Input('save-cleaned-smoothed-btn', 'n_clicks'),
     Input('split-selected-windows-btn', 'n_clicks'),
-    Input('save-preprocessed-training-btn', 'n_clicks'),
-    Input('clear-training-data-btn', 'n_clicks'),
     State('dataset-selector_', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks, clear_clicks, dataset_name):
+def update_dataset_status_on_operations(clean_clicks, split_clicks, dataset_name, base_dir):
     """Update dataset status when any processing operation completes."""
     if not dataset_name:
         return no_update
 
     try:
-        with open(METADATA_FILE, 'r') as f:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         dataset_info = metadata.get(dataset_name, {})
@@ -2981,7 +2980,7 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
             if len(existing_files) != len(dataset_info['dragged_samples']):
                 # Update metadata to remove stale references
                 metadata[dataset_name]['dragged_samples'] = existing_files
-                with open(METADATA_FILE, 'w') as f:
+                with open(metadata_file, 'w') as f:
                     json.dump(metadata, f, indent=2)
                 print(
                     f"Cleaned metadata for {dataset_name}: removed {len(dataset_info['dragged_samples']) - len(existing_files)} stale references")
@@ -2996,7 +2995,7 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, save_clicks,
         }
 
         # Check if training data exists
-        training_dir = os.path.join(PERSISTENT_DIR, 'training_data')
+        training_dir = os.path.join(base_dir, 'training_data')
         train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
         test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
         stages['training_ready'] = os.path.exists(

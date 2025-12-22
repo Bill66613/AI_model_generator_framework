@@ -69,23 +69,27 @@ layout = html.Div([
                 html.Div([
                     html.Label("Target Board:", style={
                                'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
-                    dcc.RadioItems(
+                    dcc.Dropdown(
                         id='target-board-selector',
                         options=[
-                            {'label': ' Arduino Uno (ATmega328P)',
+                            {'label': '🔷 Arduino Uno (ATmega328P)',
                              'value': 'arduino:avr:uno'},
-                            {'label': ' Arduino Nano', 'value': 'arduino:avr:nano'},
-                            {'label': ' ESP32 DevKit', 'value': 'esp32:esp32:esp32'},
-                            {'label': ' ESP32-S3', 'value': 'esp32:esp32:esp32s3'},
-                            {'label': ' M5StickC Plus2 (ESP32-PICO-V3-02)',
+                            {'label': '🔷 Arduino Nano',
+                             'value': 'arduino:avr:nano'},
+                            {'label': '📡 ESP32 DevKit',
+                             'value': 'esp32:esp32:esp32'},
+                            {'label': '📡 ESP32-S3',
+                             'value': 'esp32:esp32:esp32s3'},
+                            {'label': '📱 M5StickC Plus2 (ESP32-PICO-V3-02)',
                              'value': 'm5stack:esp32:m5stick_c'},
-                            {'label': ' STM32 (ARM Cortex-M)',
+                            {'label': '🔋 XIAO nRF52840 Sense (BLE + IMU)',
+                             'value': 'seeed:nrf52:xiaonRF52840Sense'},
+                            {'label': '⚡ STM32F4 (ARM Cortex-M4)',
                              'value': 'STM32:stm32:GenF4'},
                         ],
                         value='esp32:esp32:esp32',
-                        style={'margin-bottom': '15px'},
-                        labelStyle={'display': 'block',
-                                    'margin-bottom': '10px'}
+                        placeholder='Select target board',
+                        style={'margin-bottom': '15px'}
                     )
                 ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
 

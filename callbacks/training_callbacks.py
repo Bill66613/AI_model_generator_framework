@@ -26,7 +26,7 @@ import tempfile
 
 from config.config import (
     PERSISTENT_DIR, METADATA_FILE, MODELS_DIR,
-    get_model_path, get_models_metadata_path
+    get_model_path, get_models_metadata_path, get_training_data_path
 )
 from utils.model_training import EdgeMLModel, prepare_training_data, create_feature_vector
 from deployment import generate_deployment_code, analyze_resource_requirements, generate_and_save_deployment_code
@@ -39,25 +39,38 @@ from deployment import generate_deployment_code, analyze_resource_requirements, 
      Output('cross-validate-btn', 'disabled'),
      Output('trained-model-selector', 'options'),
      Output('training-data-summary', 'children')],
-    Input('tabs', 'value')
+    Input('tabs', 'value'),
+    State('working-directory-store', 'data')
 )
-def enable_training_components(tab):
+def enable_training_components(tab, base_dir):
     """Enable training components when training tab is active and load trained models."""
+    # Use stored base directory or default to PERSISTENT_DIR
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    
     # Load available trained models using helper function
-    model_options = load_trained_model_options()
+    model_options = load_trained_model_options(base_dir)
 
     # Load training data summary
-    data_summary = load_training_data_summary()
+    data_summary = load_training_data_summary(base_dir)
 
-    if tab == 'tab-3':
+    if tab == 'tab-4':  # Model Training tab
         return False, False, False, False, model_options, data_summary
     return True, True, True, True, model_options, data_summary
 
 
 # Utility functions
-def save_model_metadata(model_filename, model_info):
+def save_model_metadata(model_filename, model_info, base_dir=None):
     """Save model metadata to the models database."""
-    model_metadata_file = get_models_metadata_path()
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    
+    models_dir = os.path.join(base_dir, 'models')
+    # Ensure models directory exists
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir)
+    
+    model_metadata_file = os.path.join(models_dir, 'trained_models.json')
 
     if os.path.exists(model_metadata_file):
         with open(model_metadata_file, 'r') as f:
@@ -71,11 +84,16 @@ def save_model_metadata(model_filename, model_info):
         json.dump(models_metadata, f, indent=2)
 
 
-def load_trained_model_options():
+def load_trained_model_options(base_dir=None):
     """Load available trained model options for dropdown."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    
     model_options = []
     try:
-        model_metadata_file = get_models_metadata_path()
+        models_dir = os.path.join(base_dir, 'models')
+        model_metadata_file = os.path.join(models_dir, 'trained_models.json')
+        
         if os.path.exists(model_metadata_file):
             with open(model_metadata_file, 'r') as f:
                 models_metadata = json.load(f)
@@ -90,27 +108,30 @@ def load_trained_model_options():
     return model_options
 
 
-def load_training_data_summary():
+def load_training_data_summary(base_dir=None):
     """Load and display summary of available training data."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    
     try:
-        from config.config import get_training_data_path
-
-        training_dir = os.path.join(PERSISTENT_DIR, 'training')
+        training_dir = os.path.join(base_dir, 'training')
         if not os.path.exists(training_dir):
-            return html.P(
-                "⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
-                style={'text-align': 'center', 'color': '#856404',
-                       'font-style': 'italic', 'margin': '0'}
-            )
+            return html.Div([
+                html.P("⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
+                       style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic'}),
+                html.P(f"Looking in: {training_dir}",
+                       style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
+            ])
 
         # Find available datasets
         train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
         if not train_files:
-            return html.P(
-                "⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
-                style={'text-align': 'center', 'color': '#856404',
-                       'font-style': 'italic', 'margin': '0'}
-            )
+            return html.Div([
+                html.P("⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
+                       style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic'}),
+                html.P(f"Looking in: {training_dir}",
+                       style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
+            ])
 
         # Collect data statistics
         all_train_dfs = []
@@ -122,8 +143,8 @@ def load_training_data_summary():
         for train_file in train_files:
             dataset_name = os.path.basename(
                 train_file).replace('_train.csv', '')
-            test_file = get_training_data_path(dataset_name, 'test')
-            val_file = get_training_data_path(dataset_name, 'val')
+            test_file = get_training_data_path(dataset_name, 'test', base_dir)
+            val_file = get_training_data_path(dataset_name, 'val', base_dir)
 
             if os.path.exists(train_file) and os.path.exists(test_file):
                 train_df = pd.read_csv(train_file)
@@ -616,10 +637,11 @@ def create_training_results_display(model_info, evaluation_results, y_test, mode
     [Input('start-training-btn', 'n_clicks'),
      Input('optimize-hyperparams-btn', 'n_clicks'),
      Input('cross-validate-btn', 'n_clicks')],
-    [State('model-type-selector', 'value')],
+    [State('model-type-selector', 'value'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
-def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type):
+def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type, base_dir):
     """Handle different training actions based on which button was clicked."""
     if not ctx.triggered:
         return no_update, no_update
@@ -632,11 +654,14 @@ def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type
                     style={'color': 'orange'})
         ]), no_update)
 
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+
     try:
         from config.config import get_training_data_path
 
         # Get list of available training datasets
-        training_dir = os.path.join(PERSISTENT_DIR, 'training')
+        training_dir = os.path.join(base_dir, 'training')
         if not os.path.exists(training_dir):
             return (html.Div([
                 html.H4("❌ No training data found.", style={'color': 'red'}),
@@ -673,8 +698,8 @@ def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type
         for train_file in train_files:
             dataset_name = os.path.basename(
                 train_file).replace('_train.csv', '')
-            test_file = get_training_data_path(dataset_name, 'test')
-            val_file = get_training_data_path(dataset_name, 'val')
+            test_file = get_training_data_path(dataset_name, 'test', base_dir)
+            val_file = get_training_data_path(dataset_name, 'val', base_dir)
 
             if os.path.exists(train_file) and os.path.exists(test_file):
                 # Load and clean labels
@@ -806,12 +831,12 @@ def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type
         model = EdgeMLModel(model_type)
 
         if button_id == 'start-training-btn':
-            return perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val)
+            return perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val, base_dir)
         elif button_id == 'optimize-hyperparams-btn':
-            return perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val)
+            return perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val, base_dir)
         elif button_id == 'cross-validate-btn':
             # CV doesn't use validation set
-            return perform_cross_validation(model, X_train, y_train, model_type)
+            return perform_cross_validation(model, X_train, y_train, model_type, base_dir)
 
     except Exception as e:
         import traceback
@@ -824,8 +849,11 @@ def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type
         ]), no_update)
 
 
-def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None):
+def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None, base_dir=None):
     """Perform basic model training with optional validation set."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+        
     start_time = time.time()
 
     # Training - use CV only if no validation set provided
@@ -857,7 +885,7 @@ def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, 
     # Save trained model
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_filename = f"{model_type}_har_model_{timestamp}.joblib"
-    model_path = get_model_path(model_filename)
+    model_path = get_model_path(model_filename, base_dir)
     model.save_model(model_path)
 
     # Update metadata with model info
@@ -883,17 +911,20 @@ def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, 
     }
 
     # Store model metadata
-    save_model_metadata(model_filename, model_info)
+    save_model_metadata(model_filename, model_info, base_dir)
 
     # Create results summary
     training_output = create_training_results_display(
         model_info, evaluation_results, y_test, model_type, training_time)
-    updated_options = load_trained_model_options()
+    updated_options = load_trained_model_options(base_dir)
     return training_output, updated_options
 
 
-def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None):
+def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None, base_dir=None):
     """Perform hyperparameter optimization with optional validation set."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+        
     start_time = time.time()
 
     # Hyperparameter optimization - uses validation set if available, otherwise CV
@@ -921,7 +952,7 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
     # Save optimized model
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_filename = f"{model_type}_optimized_{timestamp}.joblib"
-    model_path = get_model_path(model_filename)
+    model_path = get_model_path(model_filename, base_dir)
     model.save_model(model_path)
 
     # Build performance metrics for detailed evaluation
@@ -959,7 +990,7 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
         'optimized': True
     }
 
-    save_model_metadata(model_filename, model_info)
+    save_model_metadata(model_filename, model_info, base_dir)
 
     # Determine optimization method used
     opt_method = optimization_results.get('method', 'cross_validation')
@@ -1138,12 +1169,15 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
                 evaluation_results, y_test, model_type, model_info)
         )
     ])
-    updated_options = load_trained_model_options()
+    updated_options = load_trained_model_options(base_dir)
     return optimization_output, updated_options
 
 
-def perform_cross_validation(model, X_train, y_train, model_type):
+def perform_cross_validation(model, X_train, y_train, model_type, base_dir=None):
     """Perform cross-validation analysis and optionally save the trained model."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+        
     start_time = time.time()
 
     # Perform training with cross-validation
@@ -1169,7 +1203,7 @@ def perform_cross_validation(model, X_train, y_train, model_type):
     # Save the trained model with full evaluation data
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_filename = f"{model_type}_cv_{timestamp}.joblib"
-    model_path = get_model_path(model_filename)
+    model_path = get_model_path(model_filename, base_dir)
     model.save_model(model_path)
 
     # Build performance metrics for detailed evaluation
@@ -1203,7 +1237,7 @@ def perform_cross_validation(model, X_train, y_train, model_type):
         'cv_std_accuracy': training_results.get('cv_std_accuracy', 0)
     }
 
-    save_model_metadata(model_filename, model_info)
+    save_model_metadata(model_filename, model_info, base_dir)
 
     # Create cross-validation visualization
     cv_results = training_results
@@ -1233,7 +1267,7 @@ def perform_cross_validation(model, X_train, y_train, model_type):
     ])
 
     # Return updated model options since we saved a model
-    updated_options = load_trained_model_options()
+    updated_options = load_trained_model_options(base_dir)
     return cv_output, updated_options
 
 
@@ -1452,10 +1486,11 @@ def create_training_results_visualization(evaluation_results, y_test, model_type
      Output('detailed-evaluation-results', 'children')],
     [Input('evaluate-model-btn', 'n_clicks'),
      Input('feature-importance-btn', 'n_clicks')],
-    State('trained-model-selector', 'value'),
+    [State('trained-model-selector', 'value'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
-def evaluate_trained_model(eval_clicks, feature_clicks, model_filename):
+def evaluate_trained_model(eval_clicks, feature_clicks, model_filename, base_dir):
     """Evaluate a trained model and show detailed performance metrics."""
     if not model_filename:
         return {}, html.Div()
@@ -1466,7 +1501,7 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename):
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
     try:
-        model_path = get_model_path(model_filename)
+        model_path = get_model_path(model_filename, base_dir)
         if not os.path.exists(model_path):
             return {}, html.Div()
 
@@ -1475,7 +1510,7 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename):
 
         if button_id == 'evaluate-model-btn':
             # Load model metadata with all performance metrics
-            model_metadata_file = get_models_metadata_path()
+            model_metadata_file = get_models_metadata_path(base_dir)
             model_info = {}
 
             if os.path.exists(model_metadata_file):
@@ -1488,7 +1523,7 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename):
             print(
                 f"DEBUG: Has performance_metrics: {'performance_metrics' in model_info}")
 
-            graph = create_model_evaluation_plot(model, model_filename)
+            graph = create_model_evaluation_plot(model, model_filename, base_dir)
             detailed_results = create_detailed_evaluation_display(
                 model_info, model_filename)
 
@@ -1498,7 +1533,7 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename):
             return graph, detailed_results
 
         elif button_id == 'feature-importance-btn':
-            graph = create_feature_importance_plot(model, model_filename)
+            graph = create_feature_importance_plot(model, model_filename, base_dir)
             return graph, html.Div()
 
         return {}, html.Div()
@@ -1514,10 +1549,10 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename):
         ])
 
 
-def create_model_evaluation_plot(model, model_filename):
+def create_model_evaluation_plot(model, model_filename, base_dir=None):
     """Create comprehensive model evaluation visualization."""
     # Load model metadata
-    model_metadata_file = get_models_metadata_path()
+    model_metadata_file = get_models_metadata_path(base_dir)
     model_info = {}
 
     if os.path.exists(model_metadata_file):
@@ -1635,7 +1670,7 @@ def create_model_evaluation_plot(model, model_filename):
     return fig
 
 
-def create_feature_importance_plot(model, model_filename):
+def create_feature_importance_plot(model, model_filename, base_dir=None):
     """Create feature importance visualization."""
     feature_importance = model.get_feature_importance()
 
@@ -1975,23 +2010,24 @@ def show_remove_confirmation(n_clicks, model_filename):
      Output('trained-model-selector', 'value', allow_duplicate=True),
      Output('trained-model-selector', 'options', allow_duplicate=True)],
     Input('confirm-remove-model', 'submit_n_clicks'),
-    State('trained-model-selector', 'value'),
+    [State('trained-model-selector', 'value'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
-def remove_trained_model(submit_n_clicks, model_filename):
+def remove_trained_model(submit_n_clicks, model_filename, base_dir):
     """Remove a trained model and update the UI."""
     if not submit_n_clicks or not model_filename:
         return no_update, no_update, no_update
 
     try:
         # Remove model file
-        model_path = get_model_path(model_filename)
+        model_path = get_model_path(model_filename, base_dir)
         if os.path.exists(model_path):
             os.remove(model_path)
             print(f"DEBUG: Removed model file: {model_path}")
 
         # Update metadata
-        model_metadata_file = get_models_metadata_path()
+        model_metadata_file = get_models_metadata_path(base_dir)
         if os.path.exists(model_metadata_file):
             with open(model_metadata_file, 'r') as f:
                 models_metadata = json.load(f)
@@ -2084,10 +2120,10 @@ def remove_trained_model(submit_n_clicks, model_filename):
         return error_alert, {'margin-bottom': '20px', 'display': 'block'}, no_update, no_update
 
 
-def remove_model_metadata(model_filename):
+def remove_model_metadata(model_filename, base_dir=None):
     """Remove model from metadata file."""
     try:
-        model_metadata_file = get_models_metadata_path()
+        model_metadata_file = get_models_metadata_path(base_dir)
 
         if os.path.exists(model_metadata_file):
             with open(model_metadata_file, 'r') as f:
@@ -2123,10 +2159,11 @@ def clear_remove_model_alert(model_value):
      Input('resource-analysis-btn', 'n_clicks')],
     [State('trained-model-selector', 'value'),
      State('deployment-platform', 'value'),
-     State('optimization-level', 'value')],
+     State('optimization-level', 'value'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
-def handle_deployment_actions(generate_clicks, resource_clicks, model_filename, platform, optimization):
+def handle_deployment_actions(generate_clicks, resource_clicks, model_filename, platform, optimization, base_dir):
     """Handle deployment actions including code generation and resource analysis."""
     print(
         f"DEBUG: Deployment callback triggered - clicks: {generate_clicks}, {resource_clicks}")
@@ -2156,7 +2193,7 @@ def handle_deployment_actions(generate_clicks, resource_clicks, model_filename, 
 
     try:
         # Load model and metadata
-        model_path = get_model_path(model_filename)
+        model_path = get_model_path(model_filename, base_dir)
         if not os.path.exists(model_path):
             print(f"DEBUG: Model path not found: {model_path}")
             error_msg = html.Div([
@@ -2427,16 +2464,17 @@ def create_compatibility_badge(platform, compatible):
 @callback(
     Output('session-stats', 'children'),
     Input('tabs', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def update_training_statistics(tab):
+def update_training_statistics(tab, base_dir):
     """Update training session statistics display."""
-    if tab != 'tab-3':
+    if tab != 'tab-4':
         return no_update
 
     try:
         # Load training session statistics
-        stats = get_training_session_stats()
+        stats = get_training_session_stats(base_dir)
 
         return html.Div([
             html.Div([
@@ -2485,11 +2523,15 @@ def update_training_statistics(tab):
         return html.P("Error loading statistics", style={'text-align': 'center', 'color': 'red'})
 
 
-def get_training_session_stats():
+def get_training_session_stats(base_dir=None):
     """Get current training session statistics."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    
     try:
         # Load trained models metadata
-        model_metadata_file = get_models_metadata_path()
+        models_dir = os.path.join(base_dir, 'models')
+        model_metadata_file = os.path.join(models_dir, 'trained_models.json')
 
         if not os.path.exists(model_metadata_file):
             return {
@@ -2558,9 +2600,9 @@ def get_training_session_stats():
 
 
 # Additional utility functions for training callbacks
-def load_available_models():
+def load_available_models(base_dir=None):
     """Load list of available trained models."""
-    model_metadata_file = get_models_metadata_path()
+    model_metadata_file = get_models_metadata_path(base_dir)
     if os.path.exists(model_metadata_file):
         with open(model_metadata_file, 'r') as f:
             return json.load(f)

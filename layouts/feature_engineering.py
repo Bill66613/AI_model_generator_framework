@@ -110,7 +110,7 @@ layout = html.Div([
                             {'label': '🌊 Frequency-Domain Only (48 features)', 'value': 'frequency_domain'},
                             {'label': '📊 Raw Sensor Axes Only (6 features)', 'value': 'raw'}
                         ],
-                        value='all',
+                        value='time_domain',
                         placeholder="Select feature extraction method",
                         clearable=False,
                         style={'margin-bottom': '20px'}
@@ -150,17 +150,17 @@ layout = html.Div([
                 html.H5("⚙️ Window Configuration", style={'color': '#495057', 'margin-bottom': '15px'}),
                 
                 html.Div([
-                    html.Label("Target Window Size (samples):", style={
+                    html.Label("Target Window Size (ms):", style={
                         'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Input(
                         id='global-window-size',
                         type='number',
-                        value=150,
+                        value=1500,
                         min=1,
-                        placeholder="Number of samples per window",
+                        placeholder="Window duration in milliseconds",
                         style={'width': '100%', 'padding': '8px', 'border': '1px solid #ddd', 'border-radius': '4px'}
                     ),
-                    html.Div("💡 Windows smaller than this will be zero-padded", 
+                    html.Div("💡 Windows smaller than this will be zero-padded (1500ms = 150 samples @ 100Hz)", 
                             style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic'})
                 ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
                 

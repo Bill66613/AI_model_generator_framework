@@ -24,18 +24,25 @@ from utils.model_training import extract_time_domain_features, extract_frequency
 
 @callback(
     Output('activity-labels-selector', 'options'),
-    Input('tabs', 'value')
+    Input('tabs', 'value'),
+    State('working-directory-store', 'data')
 )
-def populate_activity_labels(tab):
+def populate_activity_labels(tab, base_dir):
     """
     Populate the activity labels dropdown with all available datasets
     that have split windows ready for feature engineering.
+    Uses the working directory from the store.
     """
-    if not os.path.exists(METADATA_FILE):
+    # Use stored base directory or default to PERSISTENT_DIR
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    
+    metadata_file = os.path.join(base_dir, 'metadata.json')
+    if not os.path.exists(metadata_file):
         return []
     
     try:
-        with open(METADATA_FILE, 'r') as f:
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
         
         # Find all unique activity labels that have dragged_samples (windows)
@@ -61,20 +68,27 @@ def populate_activity_labels(tab):
 
 @callback(
     Output('windows-per-label-display', 'children'),
-    Input('activity-labels-selector', 'value')
+    Input('activity-labels-selector', 'value'),
+    State('working-directory-store', 'data')
 )
-def update_windows_per_label(selected_labels):
+def update_windows_per_label(selected_labels, base_dir):
     """
     Display the number of windows available for each selected label.
+    Uses the working directory from the store.
     """
     if not selected_labels:
         return html.Div("No labels selected", style={'color': '#999', 'font-style': 'italic'})
     
-    if not os.path.exists(METADATA_FILE):
+    # Use stored base directory or default to PERSISTENT_DIR
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    
+    metadata_file = os.path.join(base_dir, 'metadata.json')
+    if not os.path.exists(metadata_file):
         return html.Div("No metadata found", style={'color': '#ff0000'})
     
     try:
-        with open(METADATA_FILE, 'r') as f:
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
         
         # Count windows per label
@@ -199,12 +213,13 @@ def calculate_test_split(train_ratio, val_ratio):
      State('global-sampling-rate', 'value'),
      State('global-train-split', 'value'),
      State('global-val-split', 'value'),
-     State('global-random-state', 'value')],
+     State('global-random-state', 'value'),
+     State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
 def execute_feature_engineering(n_clicks, selected_labels, feature_method, 
                                 normalization_method, target_window_size, sampling_rate,
-                                train_ratio, val_ratio, random_state):
+                                train_ratio, val_ratio, random_state, base_dir):
     """
     Main feature engineering executor.
     Applies consistent settings across all selected activity labels.
@@ -225,8 +240,14 @@ def execute_feature_engineering(n_clicks, selected_labels, feature_method,
                        style={'color': '#ff9800', 'padding': '15px'}), "", {}
     
     try:
+        # Use stored base directory or default to PERSISTENT_DIR
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
         # Load metadata
-        with open(METADATA_FILE, 'r') as f:
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
         
         # Step 1: Load all windows from all selected labels
@@ -250,23 +271,26 @@ def execute_feature_engineering(n_clicks, selected_labels, feature_method,
             return html.Div("⚠️ No windows found for selected labels", 
                            style={'color': '#dc3545', 'padding': '15px'}), "", {}
         
-        # Step 2: Zero-pad windows to target size if needed
+        # Step 2: Convert target window size from ms to samples
+        target_window_samples = int((target_window_size / 1000) * sampling_rate)
+        
+        # Step 3: Zero-pad windows to target size if needed
         sensor_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
         padded_windows = []
         padding_stats = {'padded': 0, 'original_size': 0}
         
         for df_window in all_windows:
             current_size = len(df_window)
-            if current_size < target_window_size:
+            if current_size < target_window_samples:
                 # Zero-pad
-                padding_needed = target_window_size - current_size
+                padding_needed = target_window_samples - current_size
                 padding_df = pd.DataFrame(0, index=range(padding_needed), columns=df_window.columns)
                 df_padded = pd.concat([df_window, padding_df], ignore_index=True)
                 padded_windows.append(df_padded)
                 padding_stats['padded'] += 1
-            elif current_size > target_window_size:
+            elif current_size > target_window_samples:
                 # Truncate
-                df_truncated = df_window.iloc[:target_window_size]
+                df_truncated = df_window.iloc[:target_window_samples]
                 padded_windows.append(df_truncated)
             else:
                 # Exact size
@@ -346,7 +370,39 @@ def execute_feature_engineering(n_clicks, selected_labels, feature_method,
             X_train, y_train = X_trainval, y_trainval
             X_val, y_val = np.array([]), np.array([])
         
-        # Step 5: Save results
+        # Step 5: Save results to files
+        # Create training directory if it doesn't exist
+        training_dir = os.path.join(base_dir, 'training')
+        os.makedirs(training_dir, exist_ok=True)
+        
+        # Create DataFrames with feature names
+        df_train = pd.DataFrame(X_train, columns=feature_names)
+        df_train['label'] = y_train
+        
+        df_test = pd.DataFrame(X_test, columns=feature_names)
+        df_test['label'] = y_test
+        
+        if len(X_val) > 0:
+            df_val = pd.DataFrame(X_val, columns=feature_names)
+            df_val['label'] = y_val
+        
+        # Create a combined dataset name from selected labels
+        dataset_name = '_'.join(sorted(selected_labels)[:3])  # Use up to 3 labels
+        if len(selected_labels) > 3:
+            dataset_name += f"_and_{len(selected_labels)-3}_more"
+        
+        # Save to CSV files
+        train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
+        test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
+        
+        df_train.to_csv(train_file, index=False)
+        df_test.to_csv(test_file, index=False)
+        
+        if len(X_val) > 0:
+            val_file = os.path.join(training_dir, f"{dataset_name}_val.csv")
+            df_val.to_csv(val_file, index=False)
+        
+        # Also save to engineered-dataset-store for backwards compatibility
         engineered_data = {
             'train': {'X': X_train.tolist(), 'y': y_train.tolist()},
             'val': {'X': X_val.tolist(), 'y': y_val.tolist()},
@@ -403,12 +459,13 @@ def execute_feature_engineering(n_clicks, selected_labels, feature_method,
             html.H4("✅ Feature Engineering Complete!", style={'color': '#28a745'}),
             html.P(f"Successfully processed {total_all} windows from {len(selected_labels)} activity labels"),
             html.Ul([
-                html.Li(f"Target window size: {target_window_size} samples ({target_window_size/sampling_rate*1000:.0f}ms @ {sampling_rate}Hz)"),
+                html.Li(f"Target window size: {target_window_size}ms ({target_window_samples} samples @ {sampling_rate}Hz)"),
                 html.Li(f"Zero-padded windows: {padding_stats['padded']} / {total_all}"),
                 html.Li(f"Features extracted: {len(feature_names)} features using '{feature_method}' method"),
                 html.Li(f"Normalization: {normalization_method.title() if normalization_method != 'none' else 'None'}"),
                 html.Li(f"Train/Val/Test split: {train_ratio*100:.0f}% / {val_ratio*100:.0f}% / {test_ratio*100:.0f}%"),
-                html.Li(f"Random state: {random_state}")
+                html.Li(f"Random state: {random_state}"),
+                html.Li([html.Strong("💾 Saved to: "), f"{training_dir}/"])
             ])
         ], style={'padding': '15px', 'background-color': '#d4edda', 'border-radius': '5px'})
         

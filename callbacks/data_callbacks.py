@@ -24,45 +24,53 @@ def parse_contents(contents, filename):
     Output('dataset-selector', 'options', True),
     Input('upload-data', 'contents'),
     State('upload-data', 'filename'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def upload_files(contents, filenames):
-    """Save uploaded files to the persistent directory."""
+def upload_files(contents, filenames, base_dir):
+    """Save uploaded files to the datasets subdirectory of the persistent directory."""
     if not contents:
         return "No file uploaded.", []
+
+    # Use stored base directory or default to PERSISTENT_DIR
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+    
+    # Files should be saved to datasets subdirectory
+    datasets_dir = os.path.join(base_dir, 'datasets')
+    os.makedirs(datasets_dir, exist_ok=True)
 
     # Ensure contents and filenames are lists
     if isinstance(contents, str):
         contents = [contents]
         filenames = [filenames]
 
+    # Track actual saved filenames (in case of renames)
+    saved_filenames = []
+
     # Process each file
     for content, filename in zip(contents, filenames):
         try:
-            # If persistent directory does not exist, create it
-            if not os.path.exists(PERSISTENT_DIR):
-                os.makedirs(PERSISTENT_DIR)
-
+            original_filename = filename
             # If file name already exists, rename the new file
-            file_path = os.path.join(PERSISTENT_DIR, filename)
+            file_path = os.path.join(datasets_dir, filename)
             if os.path.exists(file_path):
                 base, ext = os.path.splitext(filename)
                 count = 1
                 while os.path.exists(file_path):
                     filename = f"{base}_{count}{ext}"
-                    file_path = os.path.join(PERSISTENT_DIR, filename)
+                    file_path = os.path.join(datasets_dir, filename)
                     count += 1
-            # Update filenames list with new filename if renamed
-            if file_path != os.path.join(PERSISTENT_DIR, filename):
-                filenames[contents.index(content)] = filename
 
-            df = parse_contents(content, filename)
+            df = parse_contents(content, original_filename)
             if df.empty:
                 raise ValueError("The uploaded file is empty.")
 
-            # Save the file to the server
-            file_path = os.path.join(PERSISTENT_DIR, filename)
+            # Save the file to the datasets directory
             df.to_csv(file_path, index=False)
+            
+            # Track the actual saved filename
+            saved_filenames.append(filename)
 
         except ValueError as ve:
             return f"⚠ {str(ve)}", no_update
@@ -70,24 +78,30 @@ def upload_files(contents, filenames):
             return f"⚠ Error processing {filename}: {str(e)}", no_update
 
     # Update metadata
-    with open(METADATA_FILE, 'r') as f:
-        metadata = json.load(f)
+    # Use base_dir to get the correct metadata file path
+    metadata_file = os.path.join(base_dir, 'metadata.json')
+    if os.path.exists(metadata_file):
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+    else:
+        metadata = {}
 
-    for filename in filenames:
-        file_path = os.path.join(PERSISTENT_DIR, filename)
+    # Use saved_filenames (which includes renamed files) instead of original filenames
+    for filename in saved_filenames:
+        file_path = os.path.join(datasets_dir, filename)
         metadata[filename] = {
             "path": file_path,
             "label": filename.replace('.csv', ''),
             'sampling_rate': 100
         }
 
-    with open(METADATA_FILE, 'w') as f:
-        json.dump(metadata, f)
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
 
     # Update dropdown options
     options = [{'label': filename, 'value': filename}
                for filename in metadata.keys()]
-    return f"✅ Successfully uploaded {len(filenames)} file(s)", options
+    return f"✅ Successfully uploaded {len(saved_filenames)} file(s) to {datasets_dir}", options
 
 
 @callback(
@@ -95,17 +109,22 @@ def upload_files(contents, filenames):
     Input('save-sampling-rate-btn', 'n_clicks'),
     State('dataset-selector', 'value'),
     State('sampling-rate-input', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def save_sampling_rate(n_clicks, dataset_name, sampling_rate):
+def save_sampling_rate(n_clicks, dataset_name, sampling_rate, base_dir):
     """Save the sampling rate to the metadata file."""
     if not (dataset_name and sampling_rate):
         return "⚠ Please select a dataset and enter a valid sampling rate."
 
     try:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
         # Load existing metadata
-        if os.path.exists(METADATA_FILE):
-            with open(METADATA_FILE, 'r') as f:
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
         else:
             metadata = {}
@@ -117,7 +136,7 @@ def save_sampling_rate(n_clicks, dataset_name, sampling_rate):
             metadata[dataset_name] = {'sampling_rate': sampling_rate}
 
         # Save updated metadata
-        with open(METADATA_FILE, 'w') as f:
+        with open(metadata_file, 'w') as f:
             json.dump(metadata, f)
 
         return f"✅ Sampling rate for '{dataset_name}' updated to {sampling_rate} Hz."
@@ -128,13 +147,18 @@ def save_sampling_rate(n_clicks, dataset_name, sampling_rate):
 
 @callback(
     Output('dataset-selector', 'options'),
-    Input('tabs', 'value')
+    Input('tabs', 'value'),
+    Input('working-directory-store', 'data')
 )
-def data_selector_options(tab):
+def data_selector_options(tab, base_dir):
     """Update the dataset selector options."""
     try:
-        if os.path.exists(METADATA_FILE):
-            with open(METADATA_FILE, 'r') as f:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
             return [{'label': filename, 'value': filename} for filename in metadata.keys()]
         return []
@@ -148,17 +172,22 @@ def data_selector_options(tab):
     Input('save-label-btn', 'n_clicks'),
     State('dataset-selector', 'value'),
     State('dataset-label', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def save_label(n_clicks, dataset_name, label):
+def save_label(n_clicks, dataset_name, label, base_dir):
     """Save the label assigned to a dataset."""
     if not (dataset_name and label):
         return "⚠ Please select a dataset and enter a label."
 
     try:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
         # Load existing metadata
-        if os.path.exists(METADATA_FILE):
-            with open(METADATA_FILE, 'r') as f:
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
         else:
             metadata = {}
@@ -169,7 +198,7 @@ def save_label(n_clicks, dataset_name, label):
         metadata[dataset_name]["label"] = label
 
         # Save updated metadata
-        with open(METADATA_FILE, 'w') as f:
+        with open(metadata_file, 'w') as f:
             json.dump(metadata, f)
 
         return f"✅ Label '{label}' saved for dataset '{dataset_name}'."
@@ -201,19 +230,26 @@ def clear_data(n_clicks):
 @callback(
     Output('data-preview', 'figure', True),
     Input('dataset-selector', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def filter_and_display_data(dataset_name):
+def filter_and_display_data(dataset_name, base_dir):
     """Filters the dataset and displays it as a chart."""
     if dataset_name:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
         # Load existing metadata
-        with open(METADATA_FILE, 'r') as f:
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         sampling_rate = metadata.get(
             dataset_name, {}).get("sampling_rate", 100)
 
-        file_path = os.path.join(PERSISTENT_DIR, dataset_name)
+        file_path = metadata[dataset_name].get("path")
+        if not file_path:
+            file_path = os.path.join(base_dir, 'datasets', dataset_name)
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
 
@@ -243,31 +279,47 @@ def filter_and_display_data(dataset_name):
 
 @callback(
     Output('assigned-label', 'value'),
-    Input('dataset-selector', 'value')
+    Input('dataset-selector', 'value'),
+    State('working-directory-store', 'data')
 )
-def display_label(dataset_name):
+def display_label(dataset_name, base_dir):
     """Displays the label assigned to a dataset."""
     if dataset_name:
-        with open(METADATA_FILE, 'r') as f:
-            metadata = json.load(f)
-        return metadata.get(dataset_name, {}).get("label", "")
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            return metadata.get(dataset_name, {}).get("label", "")
     return ""
 
 
 @callback(
     Output('data-preview', 'figure'),
-    Input('dataset-selector', 'value')
+    Input('dataset-selector', 'value'),
+    State('working-directory-store', 'data')
 )
-def display_dataset(dataset_name):
+def display_dataset(dataset_name, base_dir):
     """Displays selected dataset as a chart."""
     if dataset_name:
-        with open(METADATA_FILE, 'r') as f:
-            metadata = json.load(f)
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+        else:
+            return {}
 
         sampling_rate = metadata.get(
             dataset_name, {}).get("sampling_rate", 100)
 
-        file_path = metadata[dataset_name]["path"]
+        file_path = metadata[dataset_name].get("path")
+        if not file_path:
+            file_path = os.path.join(base_dir, 'datasets', dataset_name)
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
             # Add a time axis based on the sampling rate
@@ -300,16 +352,21 @@ def display_dataset(dataset_name):
     Output('dataset-selector', 'options', allow_duplicate=True),
     Input('delete-dataset-btn', 'n_clicks'),
     State('dataset-selector', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def delete_specific_dataset(n_clicks, dataset_name):
+def delete_specific_dataset(n_clicks, dataset_name, base_dir):
     """Delete a specific dataset and update metadata."""
     if not dataset_name:
         return "⚠️ Please select a dataset to delete.", no_update
 
     try:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
         # Load existing metadata
-        with open(METADATA_FILE, 'r') as f:
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         if dataset_name not in metadata:
@@ -337,7 +394,7 @@ def delete_specific_dataset(n_clicks, dataset_name):
         del metadata[dataset_name]
 
         # Save updated metadata
-        with open(METADATA_FILE, 'w') as f:
+        with open(metadata_file, 'w') as f:
             json.dump(metadata, f)
 
         # Update dropdown options
@@ -353,17 +410,25 @@ def delete_specific_dataset(n_clicks, dataset_name):
 @callback(
     Output('dataset-info-table', 'children'),
     Input('dataset-selector', 'value'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=False
 )
-def update_dataset_info_table(dataset_name):
+def update_dataset_info_table(dataset_name, base_dir):
     """Update the dataset information table."""
     if not dataset_name:
         return html.Div("Select a dataset to view information", style={'color': '#666', 'font-style': 'italic'})
 
     try:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
         # Load metadata
-        with open(METADATA_FILE, 'r') as f:
-            metadata = json.load(f)
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+        else:
+            return html.Div("Metadata not found", style={'color': '#dc3545'})
 
         if dataset_name not in metadata:
             return html.Div("Dataset not found in metadata", style={'color': '#dc3545'})
@@ -447,20 +512,25 @@ def update_dataset_info_table(dataset_name):
 @callback(
     Output('upload-output', 'children', allow_duplicate=True),
     Input('export-metadata-btn', 'n_clicks'),
+    State('working-directory-store', 'data'),
     prevent_initial_call=True
 )
-def export_metadata(n_clicks):
+def export_metadata(n_clicks, base_dir):
     """Export metadata to a downloadable JSON file."""
     try:
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        
         # Load metadata
-        with open(METADATA_FILE, 'r') as f:
+        with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         # Create export filename
         import datetime
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         export_filename = f"HAR_metadata_export_{timestamp}.json"
-        export_path = os.path.join(PERSISTENT_DIR, export_filename)
+        export_path = os.path.join(base_dir, export_filename)
 
         # Add export timestamp to metadata
         export_data = {
