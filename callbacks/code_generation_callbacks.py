@@ -494,15 +494,15 @@ def refresh_serial_ports(n_clicks, tab):
     Input('generate-code-btn', 'n_clicks'),
     [State('deployment-model-selector', 'value'),
      State('target-board-selector', 'value'),
-     State('code-generator-selector', 'value'),
      State('optimization-level', 'value'),
      State('deployment-stride', 'value'),
      State('working-directory-store', 'data')],
     prevent_initial_call=True
 )
-def generate_embedded_code(n_clicks, model_filename, target_board, generator_type, optimization, stride, base_dir):
+def generate_embedded_code(n_clicks, model_filename, target_board, optimization, stride, base_dir):
     """
     Generate embedded C/C++ code from the trained model using actual metadata.
+    Model type is automatically detected from the selected model.
     Parameters are loaded from model metadata to ensure consistency.
     Uses the working directory from the store.
     """
@@ -532,9 +532,10 @@ def generate_embedded_code(n_clicks, model_filename, target_board, generator_typ
         window_size_ms = model_params.get('window_size_ms', 1500)
         window_size_samples = int((window_size_ms / 1000) * sampling_rate)
 
-        # Convert overlap percentage to stride samples
+        # Convert overlap percentage to stride samples and fraction
         overlap_percent = stride if stride is not None else 0  # Default: 0% overlap
         overlap_percent = max(0, min(99, overlap_percent))  # Clamp to 0-99%
+        overlap_fraction = overlap_percent / 100.0  # Convert to 0.0-0.99 range for generator
         stride_percent = 100 - overlap_percent  # Convert overlap to stride
         stride_samples = int((stride_percent / 100.0) * window_size_samples)
         stride_samples = max(1, stride_samples)  # Ensure at least 1 sample
@@ -591,13 +592,13 @@ def generate_embedded_code(n_clicks, model_filename, target_board, generator_typ
         
         # Generate code using proper code generators
         generated_code_files = generate_deployment_code(
-            model_type, model_data, platform, optimization
+            model_type, model_data, platform, optimization, overlap_fraction
         )
         
         # Also save to working directory in organized structure
         output_dir = os.path.join(base_dir, 'generated')
         saved_files = generate_and_save_deployment_code(
-            model_type, model_data, platform, output_dir, optimization
+            model_type, model_data, platform, output_dir, optimization, overlap_fraction
         )
         
         # Get the first generated file for preview (typically the sketch/example)
@@ -622,7 +623,7 @@ def generate_embedded_code(n_clicks, model_filename, target_board, generator_typ
         status = html.Div([
             html.H5("✅ Code Generated Successfully!",
                     style={'color': '#28a745'}),
-            html.P(f"Generator: {generator_type} | Platform: {platform} | Optimization: {optimization.upper()}"),
+            html.P(f"Model Type: {model_type.upper()} | Platform: {platform} | Optimization: {optimization.upper()}"),
             html.Div([
                 html.Strong("📁 Generated Files: "),
                 html.Ul([

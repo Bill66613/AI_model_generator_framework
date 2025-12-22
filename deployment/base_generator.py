@@ -25,7 +25,7 @@ class OptimizationError(ValidationError):
 class BaseCodeGenerator(ABC):
     """Abstract base class for all code generators."""
 
-    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino', optimization: str = 'balanced'):
+    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5):
         # Validate inputs before proceeding
         self._validate_model_data(model_data)
         self._validate_optimization(optimization)
@@ -37,6 +37,7 @@ class BaseCodeGenerator(ABC):
         self.classes = model_data.get('classes', [])
         self.platform = platform
         self.optimization = optimization
+        self.overlap = max(0.0, min(0.99, overlap))  # Clamp between 0-99%
 
         # Extract common parameters
         self.feature_means = model_data.get(
@@ -583,16 +584,8 @@ const float feature_stds[NUM_FEATURES] = {{
 
         reading_interval = 1000 // self.sampling_rate
 
-        debug_code = ""
-        if self.debug_enabled:
-            debug_code = """
-        // Debug output (enabled for accuracy optimization)
-        Serial.print("Sample features: ");
-        for (int i = 0; i < 5; i++) {
-            Serial.print(features[i], 3);
-            Serial.print(" ");
-        }
-        Serial.println();"""
+        # Platform-specific IMU initialization code
+        platform_code = self._get_platform_specific_code()
 
         sketch_code = f"""/*
  * HAR Model Example Sketch
@@ -604,9 +597,9 @@ const float feature_stds[NUM_FEATURES] = {{
 
 #include "{header_include}"
 
-// IMU sensor pins (adjust for your hardware)
-#define IMU_SDA_PIN A4
-#define IMU_SCL_PIN A5
+{platform_code['includes']}
+
+{platform_code['defines']}
 
 // Data collection variables
 float sensor_buffer[WINDOW_SIZE][6];  // aX, aY, aZ, gX, gY, gZ
@@ -615,25 +608,32 @@ float features[NUM_FEATURES];
 unsigned long last_reading = 0;
 const unsigned long READING_INTERVAL = {reading_interval}; // ms between readings
 
+{platform_code['overlap_defines']}
+
 void setup() {{
     Serial.begin(115200);
-    delay(1000); // Simple delay for Serial initialization
+    while (!Serial)
+        delay(10);
 
     // Print optimization info
     Serial.println("HAR Model - {self.optimization.title()} Optimization");
     Serial.println("========================================");
     Serial.println("Configuration:");
-    Serial.print("  Sampling Rate: "); Serial.print(SAMPLING_RATE); Serial.println(" Hz");
-    Serial.print("  Window Size: "); Serial.print(WINDOW_SIZE); Serial.println(" samples");
-    Serial.print("  Features: "); Serial.println(NUM_FEATURES);
-    Serial.print("  Optimization: "); Serial.println("{self.optimization.title()}");
+    Serial.print("  Sampling Rate: ");
+    Serial.print(SAMPLING_RATE);
+    Serial.println(" Hz");
+    Serial.print("  Window Size: ");
+    Serial.print(WINDOW_SIZE);
+    Serial.println(" samples");
+    Serial.print("  Features: ");
+    Serial.println(NUM_FEATURES);
+    Serial.print("  Optimization: ");
+    Serial.println("{self.optimization.title()}");
 
     // Initialize HAR model
     har_init();
 
-    // Initialize IMU (example - adapt for your sensor)
-    Serial.println("Initializing IMU sensor...");
-    // Your IMU initialization code here
+{platform_code['imu_init']}
 
     Serial.println("HAR Model Ready!");
     Serial.println("Collecting sensor data...");
@@ -646,13 +646,7 @@ void loop() {{
     if (current_time - last_reading >= READING_INTERVAL) {{
         last_reading = current_time;
 
-        // Read sensor data (example - replace with your IMU reading code)
-        float aX = random(-20, 20) / 10.0f;  // Replace with actual accelerometer X
-        float aY = random(-20, 20) / 10.0f;  // Replace with actual accelerometer Y
-        float aZ = random(-20, 20) / 10.0f;  // Replace with actual accelerometer Z
-        float gX = random(-500, 500) / 100.0f;  // Replace with actual gyroscope X
-        float gY = random(-500, 500) / 100.0f;  // Replace with actual gyroscope Y
-        float gZ = random(-500, 500) / 100.0f;  // Replace with actual gyroscope Z
+{platform_code['sensor_read']}
 
         // Store in buffer
         sensor_buffer[buffer_index][0] = aX;
@@ -666,14 +660,15 @@ void loop() {{
 
         // When buffer is full, extract features and predict
         if (buffer_index >= WINDOW_SIZE) {{
-            // Use 50% overlap for smoother predictions
-            // Shift buffer: move second half to first half
+            // Use overlap for smoother predictions
             for (int i = 0; i < WINDOW_SIZE / 2; i++) {{
                 for (int axis = 0; axis < 6; axis++) {{
                     sensor_buffer[i][axis] = sensor_buffer[i + WINDOW_SIZE / 2][axis];
                 }}
             }}
-            buffer_index = WINDOW_SIZE / 2;  // Continue from halfway point
+            buffer_index = (int)buffer_index_shift;
+
+{platform_code['motion_stats']}
 
             // Extract features
             extract_features(sensor_buffer, WINDOW_SIZE, features);
@@ -682,12 +677,7 @@ void loop() {{
             int predicted_class = har_predict(features);
             const char* activity_name = get_activity_name(predicted_class);
 
-            // Print result
-            Serial.print("Predicted Activity: ");
-            Serial.print(activity_name);
-            Serial.print(" (Class ");
-            Serial.print(predicted_class);
-            Serial.println(")");{debug_code}
+{platform_code['print_result']}
         }}
     }}
 
@@ -695,6 +685,159 @@ void loop() {{
 }}"""
 
         return sketch_code
+
+    def _get_platform_specific_code(self) -> dict:
+        """Get platform-specific code snippets for IMU initialization and sensor reading."""
+        
+        if self.platform == 'seeed_xiao':
+            return {
+                'includes': """#include <LSM6DS3.h>
+#include <Wire.h>
+
+//Create a instance of class LSM6DS3
+LSM6DS3 myIMU(I2C_MODE, 0x6A);  //I2C device address 0x6A""",
+                'defines': """/* Constant defines -------------------------------------------------------- */
+#define CONVERT_G_TO_MS2 9.80665f
+#define MAX_ACCEPTED_RANGE 2.0f  // starting 03/2022, models are generated setting range to +-2, but this example use Arudino library which set range to +-4g. If you are using an older model, ignore this value and use 4.0f instead""",
+                'overlap_defines': f"""#define OVERLAP {self.overlap:.2f}  // {int(self.overlap * 100)}% overlap
+const float buffer_index_shift = WINDOW_SIZE * (1 - OVERLAP);""",
+                'imu_init': """    // Initialize I2C bus first
+    Wire.begin();
+    delay(100);  // Give I2C time to stabilize
+
+    // Initialize IMU sensor
+    Serial.println("Initializing IMU sensor...");
+
+    // LSM6DS3 begin() returns 0 on SUCCESS, non-zero on failure
+    if (myIMU.begin() != 0) {
+        Serial.println("❌ Failed to initialize IMU!");
+        Serial.println("Trying alternate I2C address 0x6B...");
+
+        // Try alternate address
+        LSM6DS3 myIMU_alt(I2C_MODE, 0x6B);
+        if (myIMU_alt.begin() != 0) {
+            Serial.println("❌ IMU not found at 0x6A or 0x6B");
+            Serial.println("Check I2C connections and power");
+            while (1) {
+                delay(100);  // Halt - cannot continue without IMU
+            }
+        } else {
+            Serial.println("✅ IMU found at address 0x6B!");
+            // Note: You'll need to update the global myIMU object address
+        }
+    } else {
+        Serial.println("✅ IMU initialized successfully at 0x6A!");
+    }
+
+    // Print IMU settings
+    Serial.print("Accelerometer range: ±");
+    Serial.print(MAX_ACCEPTED_RANGE);
+    Serial.println("g");""",
+                'sensor_read': """        // Read sensor data from IMU
+        float aX = myIMU.readFloatAccelX() * CONVERT_G_TO_MS2;
+        float aY = myIMU.readFloatAccelY() * CONVERT_G_TO_MS2;
+        float aZ = myIMU.readFloatAccelZ() * CONVERT_G_TO_MS2;
+        float gX = myIMU.readFloatGyroX();
+        float gY = myIMU.readFloatGyroY();
+        float gZ = myIMU.readFloatGyroZ();""",
+                'motion_stats': """            // Calculate motion statistics for debugging
+            float acc_mag_sum = 0, gyro_mag_sum = 0;
+            for (int i = 0; i < WINDOW_SIZE; i++) {
+                float acc_mag = sqrt(sensor_buffer[i][0] * sensor_buffer[i][0] +
+                                     sensor_buffer[i][1] * sensor_buffer[i][1] +
+                                     sensor_buffer[i][2] * sensor_buffer[i][2]);
+                float gyro_mag = sqrt(sensor_buffer[i][3] * sensor_buffer[i][3] +
+                                      sensor_buffer[i][4] * sensor_buffer[i][4] +
+                                      sensor_buffer[i][5] * sensor_buffer[i][5]);
+                acc_mag_sum += acc_mag;
+                gyro_mag_sum += gyro_mag;
+            }
+            float avg_acc_mag = acc_mag_sum / WINDOW_SIZE;
+            float avg_gyro_mag = gyro_mag_sum / WINDOW_SIZE;""",
+                'print_result': """            // Print result with motion statistics
+            Serial.print("Motion: acc=");
+            Serial.print(avg_acc_mag, 2);
+            Serial.print(" gyro=");
+            Serial.print(avg_gyro_mag, 2);
+            Serial.print(" => Predicted: ");
+            Serial.print(activity_name);
+            Serial.print(" (Class ");
+            Serial.print(predicted_class);
+            Serial.println(")");"""
+            }
+        
+        elif self.platform == 'esp32':
+            # ESP32 with MPU6050/MPU6886
+            return {
+                'includes': """#include <Wire.h>
+#include "MPU6886.h"  // or MPU6050.h depending on your sensor
+
+MPU6886 IMU;  // Create IMU instance""",
+                'defines': """#define CONVERT_G_TO_MS2 9.80665f""",
+                'overlap_defines': f"""#define OVERLAP {self.overlap:.2f}  // {int(self.overlap * 100)}% overlap
+const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
+                'imu_init': """    // Initialize I2C
+    Wire.begin();
+    
+    // Initialize IMU sensor
+    Serial.println("Initializing IMU sensor...");
+    if (IMU.Init() != 0) {
+        Serial.println("❌ Failed to initialize IMU!");
+        while (1) delay(100);
+    }
+    Serial.println("✅ IMU initialized successfully!");""",
+                'sensor_read': """        // Read sensor data
+        float aX, aY, aZ, gX, gY, gZ;
+        IMU.getAccelData(&aX, &aY, &aZ);
+        IMU.getGyroData(&gX, &gY, &gZ);
+        
+        // Convert to m/s²
+        aX *= CONVERT_G_TO_MS2;
+        aY *= CONVERT_G_TO_MS2;
+        aZ *= CONVERT_G_TO_MS2;""",
+                'motion_stats': """            // Optional: Calculate motion magnitude for debugging
+            float acc_mag = sqrt(sensor_buffer[WINDOW_SIZE-1][0] * sensor_buffer[WINDOW_SIZE-1][0] +
+                               sensor_buffer[WINDOW_SIZE-1][1] * sensor_buffer[WINDOW_SIZE-1][1] +
+                               sensor_buffer[WINDOW_SIZE-1][2] * sensor_buffer[WINDOW_SIZE-1][2]);""",
+                'print_result': """            // Print result
+            Serial.print("Predicted: ");
+            Serial.print(activity_name);
+            Serial.print(" (Class ");
+            Serial.print(predicted_class);
+            Serial.println(")");"""
+            }
+        
+        else:  # Generic Arduino
+            return {
+                'includes': """// Include your IMU library here
+// #include <Adafruit_MPU6050.h>
+// #include <Adafruit_Sensor.h>
+#include <Wire.h>""",
+                'defines': """#define CONVERT_G_TO_MS2 9.80665f""",
+                'overlap_defines': f"""#define OVERLAP {self.overlap:.2f}  // {int(self.overlap * 100)}% overlap
+const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
+                'imu_init': """    // Initialize I2C
+    Wire.begin();
+    
+    // Initialize IMU sensor
+    Serial.println("Initializing IMU sensor...");
+    // Add your IMU initialization code here
+    Serial.println("✅ IMU initialized!");""",
+                'sensor_read': """        // Read sensor data (replace with your IMU library calls)
+        float aX = 0.0f;  // Replace with actual accelerometer X
+        float aY = 0.0f;  // Replace with actual accelerometer Y
+        float aZ = 9.8f;  // Replace with actual accelerometer Z
+        float gX = 0.0f;  // Replace with actual gyroscope X
+        float gY = 0.0f;  // Replace with actual gyroscope Y
+        float gZ = 0.0f;  // Replace with actual gyroscope Z""",
+                'motion_stats': """            // Optional: Add motion statistics here""",
+                'print_result': """            // Print result
+            Serial.print("Predicted: ");
+            Serial.print(activity_name);
+            Serial.print(" (Class ");
+            Serial.print(predicted_class);
+            Serial.println(")");"""
+            }
 
     def _set_optimization_parameters(self):
         """Set parameters based on optimization strategy and model complexity."""

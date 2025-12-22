@@ -223,7 +223,7 @@ class CodeGeneratorFactory:
 
     @classmethod
     def create_generator(cls, model_type: str, model_data: Dict[str, Any],
-                         platform: str = 'arduino', optimization: str = 'balanced') -> BaseCodeGenerator:
+                         platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5) -> BaseCodeGenerator:
         """
         Create appropriate code generator based on model type and platform.
 
@@ -232,6 +232,7 @@ class CodeGeneratorFactory:
             model_data: Dictionary containing model parameters and data
             platform: Target platform ('arduino', 'arm_cortex_m', etc.)
             optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
+            overlap: Window overlap fraction (0.0 to 0.99)
 
         Returns:
             Appropriate code generator instance
@@ -248,7 +249,7 @@ class CodeGeneratorFactory:
 
             # For ARM Cortex-M platform, use specialized generator
             if platform == 'arm_cortex_m':
-                return cls._generators['arm_cortex_m'](model_data, platform, optimization)
+                return cls._generators['arm_cortex_m'](model_data, platform, optimization, overlap)
 
             # For other platforms, use model-specific generators
             if model_type not in cls._generators:
@@ -258,7 +259,7 @@ class CodeGeneratorFactory:
                                  f"Supported types: {available_types}")
 
             generator_class = cls._generators[model_type]
-            return generator_class(model_data, platform, optimization)
+            return generator_class(model_data, platform, optimization, overlap)
 
         except (ValidationError, ModelDataError, OptimizationError) as e:
             # Re-raise validation errors with context
@@ -295,7 +296,7 @@ class CodeGeneratorFactory:
 
 
 def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
-                             platform: str = 'arduino', optimization: str = 'balanced') -> Dict[str, str]:
+                             platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5) -> Dict[str, str]:
     """
     Convenience function to generate deployment code with organized naming.
 
@@ -304,6 +305,7 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         model_data: Model parameters and data
         platform: Target platform
         optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
+        overlap: Window overlap percentage (0.0 to 0.99)
 
     Returns:
         Dictionary with descriptive filename as key and code content as value
@@ -320,7 +322,7 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
             model_data = extract_real_model_parameters(model_data)
 
         generator = CodeGeneratorFactory.create_generator(
-            model_type, model_data, platform, optimization)
+            model_type, model_data, platform, optimization, overlap)
 
         # Create organized filenames
         if platform == 'arm_cortex_m':
@@ -382,7 +384,8 @@ def generate_deployment_code_files(model_type: str, model_data: Dict[str, Any],
 def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any],
                                       platform: str = 'arduino',
                                       output_dir: str = 'generated_code',
-                                      optimization: str = 'balanced') -> Dict[str, str]:
+                                      optimization: str = 'balanced',
+                                      overlap: float = 0.5) -> Dict[str, str]:
     """
     Generate deployment code and save to organized folder structure.
 
@@ -392,6 +395,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
         platform: Target platform
         output_dir: Base output directory for generated files
         optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
+        overlap: Window overlap percentage (0.0 to 0.99)
 
     Returns:
         Dictionary with full file paths as keys and success messages as values
@@ -407,7 +411,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
 
     # Generate code with organized naming and optimization
     generated_code = generate_deployment_code(
-        model_type, model_data, platform, optimization)
+        model_type, model_data, platform, optimization, overlap)
 
     # Save files and return file paths
     saved_files = {}

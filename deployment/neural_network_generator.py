@@ -10,8 +10,8 @@ from .base_generator import BaseCodeGenerator
 class NeuralNetworkCodeGenerator(BaseCodeGenerator):
     """Code generator specifically for Neural Network models."""
 
-    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino', optimization: str = 'balanced'):
-        super().__init__(model_data, platform, optimization)
+    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5):
+        super().__init__(model_data, platform, optimization, overlap)
         self.weights = model_data.get('weights', {})
         self.hidden_size = self.weights.get('hidden_size', 50)
 

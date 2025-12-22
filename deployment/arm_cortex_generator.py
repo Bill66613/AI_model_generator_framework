@@ -10,8 +10,8 @@ from .base_generator import BaseCodeGenerator
 class ARMCortexMCodeGenerator(BaseCodeGenerator):
     """Code generator specifically optimized for ARM Cortex-M microcontrollers."""
 
-    def __init__(self, model_data: Dict[str, Any], platform: str = 'arm_cortex_m', optimization: str = 'balanced'):
-        super().__init__(model_data, platform, optimization)
+    def __init__(self, model_data: Dict[str, Any], platform: str = 'arm_cortex_m', optimization: str = 'balanced', overlap: float = 0.5):
+        super().__init__(model_data, platform, optimization, overlap)
         self.optimization_level = optimization  # Use the optimization parameter
 
     def _get_model_specific_declarations(self) -> str:

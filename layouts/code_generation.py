@@ -93,28 +93,8 @@ layout = html.Div([
                     )
                 ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
 
-                # Code generator selection
+                # Model parameters display (moved up since code generator removed)
                 html.Div([
-                    html.Label("Code Generator:", style={
-                               'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
-                    dcc.Dropdown(
-                        id='code-generator-selector',
-                        options=[
-                            {'label': '🧠 Neural Network',
-                                'value': 'neural_network'},
-                            {'label': '🌳 Random Forest', 'value': 'random_forest'},
-                            {'label': '📊 SVM (Support Vector Machine)',
-                             'value': 'svm'},
-                            {'label': '⚡ ARM Cortex-M Optimized',
-                                'value': 'arm_cortex'},
-                        ],
-                        value='neural_network',
-                        placeholder="Auto-select based on model type",
-                        style={'margin-bottom': '15px'}
-                    ),
-                    html.Div("💡 Tip: Generator should match your model type. ARM Cortex-M provides hardware optimizations for ARM chips.",
-                             style={'font-size': '11px', 'color': '#666', 'font-style': 'italic', 'margin-bottom': '15px'}),
-
                     html.Div([
                         html.H5("⚙️ Model Parameters (from training)", style={
                             'font-size': '14px', 'color': '#495057', 'margin-bottom': '10px', 'margin-top': '15px'
