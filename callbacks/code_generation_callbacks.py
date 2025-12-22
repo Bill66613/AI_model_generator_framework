@@ -14,6 +14,216 @@ import traceback
 from config.config import MODELS_DIR, PERSISTENT_DIR
 
 
+def compile_with_arduino_cli(code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose):
+    """
+    Compile using Arduino CLI.
+    """
+    try:
+        # Create sketch directory
+        sketch_name = code_data.get(
+            'filename', 'sketch.ino').replace('.ino', '')
+        sketch_dir = os.path.join(temp_dir, sketch_name)
+        os.makedirs(sketch_dir, exist_ok=True)
+
+        # Save .ino file
+        sketch_path = os.path.join(sketch_dir, f"{sketch_name}.ino")
+        with open(sketch_path, 'w') as f:
+            f.write(code_data['code'])
+
+        # Compile
+        compile_cmd = ['arduino-cli', 'compile', '--fqbn', board_fqbn]
+        if verbose:
+            compile_cmd.append('--verbose')
+        compile_cmd.append(sketch_dir)
+
+        result = subprocess.run(
+            compile_cmd, capture_output=True, text=True, timeout=120)
+        output = f"""Arduino CLI Compilation
+{'='*50}
+
+Sketch: {sketch_name}.ino
+Board: {board_fqbn}
+
+{result.stdout}
+{result.stderr}
+"""
+
+        if result.returncode != 0:
+            return f"{output}\n\n❌ Compilation failed!", False
+
+        # Upload if requested
+        if should_upload:
+            upload_cmd = ['arduino-cli', 'upload', '-p',
+                          serial_port, '--fqbn', board_fqbn, sketch_dir]
+            if verbose:
+                upload_cmd.insert(2, '--verbose')
+
+            upload_result = subprocess.run(
+                upload_cmd, capture_output=True, text=True, timeout=60)
+            output += f"\n\n{'='*50}\nUpload to {serial_port}\n{'='*50}\n\n{upload_result.stdout}\n{upload_result.stderr}"
+
+            if upload_result.returncode != 0:
+                return f"{output}\n\n❌ Upload failed!", False
+
+            output += "\n\n✅ Compile & Flash successful!"
+        else:
+            output += "\n\n✅ Compilation successful!"
+
+        return output, True
+
+    except subprocess.TimeoutExpired:
+        return "❌ Compilation timeout (>120s)", False
+    except FileNotFoundError:
+        return "❌ Arduino CLI not found. Please install from https://arduino.github.io/arduino-cli/", False
+    except Exception as e:
+        return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}", False
+
+
+def compile_with_platformio(code_data, temp_dir, serial_port, should_upload, verbose):
+    """
+    Compile using PlatformIO.
+    """
+    try:
+        # Create PlatformIO project structure
+        src_dir = os.path.join(temp_dir, 'src')
+        os.makedirs(src_dir, exist_ok=True)
+
+        # Save main.cpp (rename .ino to .cpp for PlatformIO)
+        sketch_name = code_data.get(
+            'filename', 'sketch.ino').replace('.ino', '')
+        main_path = os.path.join(src_dir, 'main.cpp')
+        with open(main_path, 'w') as f:
+            f.write(code_data['code'])
+
+        # Save platformio.ini
+        ini_path = os.path.join(temp_dir, 'platformio.ini')
+        platformio_config = code_data.get('platformio_ini', '')
+        if serial_port:
+            # Add upload port to config
+            platformio_config += f"\nupload_port = {serial_port}\nmonitor_port = {serial_port}\n"
+
+        with open(ini_path, 'w') as f:
+            f.write(platformio_config)
+
+        # Compile
+        compile_cmd = ['pio', 'run', '-d', temp_dir]
+        if verbose:
+            compile_cmd.append('-v')
+
+        result = subprocess.run(
+            compile_cmd, capture_output=True, text=True, timeout=180)
+        output = f"""PlatformIO Compilation
+{'='*50}
+
+Project: {sketch_name}
+Directory: {temp_dir}
+
+{result.stdout}
+{result.stderr}
+"""
+
+        if result.returncode != 0:
+            return f"{output}\n\n❌ Compilation failed!", False
+
+        # Upload if requested
+        if should_upload:
+            upload_cmd = ['pio', 'run', '-d', temp_dir, '--target', 'upload']
+            if verbose:
+                upload_cmd.append('-v')
+
+            upload_result = subprocess.run(
+                upload_cmd, capture_output=True, text=True, timeout=60)
+            output += f"\n\n{'='*50}\nUpload to {serial_port}\n{'='*50}\n\n{upload_result.stdout}\n{upload_result.stderr}"
+
+            if upload_result.returncode != 0:
+                return f"{output}\n\n❌ Upload failed!", False
+
+            output += "\n\n✅ Compile & Flash successful!"
+        else:
+            output += "\n\n✅ Compilation successful!"
+
+        return output, True
+
+    except subprocess.TimeoutExpired:
+        return "❌ Compilation timeout (>180s)", False
+    except FileNotFoundError:
+        return "❌ PlatformIO CLI not found. Please install from https://platformio.org/install", False
+    except Exception as e:
+        return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}", False
+
+
+def generate_platformio_config(target_board, model_filename, board_name):
+    """
+    Generate platformio.ini configuration for the selected board.
+    """
+    # Map Arduino FQBNs to PlatformIO boards
+    board_mapping = {
+        'm5stack:esp32:m5stick_c': {
+            'platform': 'espressif32',
+            'board': 'm5stick-c',
+            'framework': 'arduino',
+            'lib_deps': ['m5stack/M5StickCPlus2']
+        },
+        'esp32:esp32:esp32': {
+            'platform': 'espressif32',
+            'board': 'esp32dev',
+            'framework': 'arduino',
+            'lib_deps': []
+        },
+        'esp32:esp32:esp32s3': {
+            'platform': 'espressif32',
+            'board': 'esp32-s3-devkitc-1',
+            'framework': 'arduino',
+            'lib_deps': []
+        },
+        'arduino:avr:uno': {
+            'platform': 'atmelavr',
+            'board': 'uno',
+            'framework': 'arduino',
+            'lib_deps': []
+        },
+        'arduino:avr:nano': {
+            'platform': 'atmelavr',
+            'board': 'nanoatmega328',
+            'framework': 'arduino',
+            'lib_deps': []
+        },
+        'STM32:stm32:GenF4': {
+            'platform': 'ststm32',
+            'board': 'genericSTM32F407VET6',
+            'framework': 'arduino',
+            'lib_deps': []
+        }
+    }
+
+    config = board_mapping.get(target_board, {
+        'platform': 'unknown',
+        'board': 'unknown',
+        'framework': 'arduino',
+        'lib_deps': []
+    })
+
+    lib_deps_str = '\n    '.join(
+        config['lib_deps']) if config['lib_deps'] else ''
+    lib_deps_section = f"lib_deps = \n    {lib_deps_str}" if lib_deps_str else ""
+
+    return f"""; PlatformIO Project Configuration File for {board_name}
+; Auto-generated for HAR Model: {model_filename.split('.')[0]}
+;
+; Build: pio run
+; Upload: pio run --target upload
+; Monitor: pio device monitor
+
+[env:har_model]
+platform = {config['platform']}
+board = {config['board']}
+framework = {config['framework']}
+monitor_speed = 115200
+upload_speed = 921600
+{lib_deps_section}
+"""
+
+
 @callback(
     Output('deployment-model-selector', 'options'),
     Input('tabs', 'value')
@@ -24,14 +234,15 @@ def populate_model_selector(tab):
     """
     try:
         models_metadata_file = os.path.join(MODELS_DIR, 'trained_models.json')
-        
+
         if not os.path.exists(models_metadata_file):
-            print(f"WARNING: trained_models.json not found at {models_metadata_file}")
+            print(
+                f"WARNING: trained_models.json not found at {models_metadata_file}")
             return []
-        
+
         with open(models_metadata_file, 'r') as f:
             models_metadata = json.load(f)
-        
+
         options = []
         for model_filename, metadata in models_metadata.items():
             # Create readable label with model type and accuracy
@@ -39,16 +250,16 @@ def populate_model_selector(tab):
             test_acc = metadata.get('test_accuracy', 0) * 100
             val_acc = metadata.get('val_accuracy', 0) * 100
             classes = metadata.get('classes', 0)
-            
+
             label = f"{model_type.upper()} | Test: {test_acc:.1f}% | Val: {val_acc:.1f}% | {classes} classes"
             options.append({'label': label, 'value': model_filename})
-        
+
         # Sort by test accuracy (descending)
         options.sort(key=lambda x: x['label'], reverse=True)
-        
+
         print(f"Loaded {len(options)} models from trained_models.json")
         return options
-    
+
     except Exception as e:
         print(f"Error loading models: {e}")
         import traceback
@@ -66,22 +277,24 @@ def display_model_info(model_filename):
     Display information about the selected model and auto-populate parameters from metadata.
     """
     if not model_filename:
-        no_model_msg = html.Div("No model selected", style={'color': '#999', 'font-style': 'italic'})
+        no_model_msg = html.Div("No model selected", style={
+                                'color': '#999', 'font-style': 'italic'})
         return no_model_msg, "Select a model to view parameters"
-    
+
     try:
         # Load metadata from trained_models.json
         models_metadata_file = os.path.join(MODELS_DIR, 'trained_models.json')
-        
+
         if not os.path.exists(models_metadata_file):
-            error_msg = html.Div("Metadata file not found", style={'color': '#dc3545'})
+            error_msg = html.Div("Metadata file not found",
+                                 style={'color': '#dc3545'})
             return error_msg, "Cannot load parameters"
-        
+
         with open(models_metadata_file, 'r') as f:
             models_metadata = json.load(f)
-        
+
         metadata = models_metadata.get(model_filename, {})
-        
+
         # Extract key information
         model_type = metadata.get('model_type', 'unknown').upper()
         train_acc = metadata.get('train_accuracy', 0) * 100
@@ -89,48 +302,121 @@ def display_model_info(model_filename):
         test_acc = metadata.get('test_accuracy', 0) * 100
         features = metadata.get('features', 0)
         classes = metadata.get('classes', 0)
-        
+
         # Get training parameters from model_params (stored during training)
         model_params = metadata.get('model_params', {})
-        sampling_rate = model_params.get('sampling_rate', 100)  # Default 100 Hz
-        window_size_ms = model_params.get('window_size_ms', 1500)  # Default 1500 ms
-        
+        sampling_rate = model_params.get(
+            'sampling_rate', 100)  # Default 100 Hz
+        window_size_ms = model_params.get(
+            'window_size_ms', 1500)  # Default 1500 ms
+
         # Build info display
         info = html.Div([
-            html.Div(f"📊 Model: {model_filename.split('.')[0]}", style={'font-weight': 'bold', 'margin-bottom': '5px', 'font-size': '13px'}),
+            html.Div(f"📊 Model: {model_filename.split('.')[0]}", style={
+                     'font-weight': 'bold', 'margin-bottom': '5px', 'font-size': '13px'}),
             html.Div(f"Type: {model_type}", style={'margin-bottom': '5px'}),
-            html.Div(f"Accuracy: Train {train_acc:.1f}% | Val {val_acc:.1f}% | Test {test_acc:.1f}%", style={'margin-bottom': '5px'}),
+            html.Div(f"Accuracy: Train {train_acc:.1f}% | Val {val_acc:.1f}% | Test {test_acc:.1f}%", style={
+                     'margin-bottom': '5px'}),
             html.Div(f"Features: {features}", style={'margin-bottom': '5px'}),
-            html.Div(f"Classes: {classes} activities", style={'color': '#28a745'})
+            html.Div(f"Classes: {classes} activities",
+                     style={'color': '#28a745'})
         ])
-        
+
         # Build parameters display (critical for deployment)
         params = html.Div([
             html.Div([
                 html.Span("📏 Sampling Rate: ", style={'font-weight': 'bold'}),
                 html.Span(f"{sampling_rate} Hz", style={'color': '#2E86AB'}),
-                html.Span(" (from training)", style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
+                html.Span(" (from training)", style={
+                          'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
             ], style={'margin-bottom': '8px'}),
             html.Div([
                 html.Span("⏱️ Window Size: ", style={'font-weight': 'bold'}),
                 html.Span(f"{window_size_ms} ms", style={'color': '#2E86AB'}),
-                html.Span(f" ({int((window_size_ms / 1000) * sampling_rate)} samples @ {sampling_rate} Hz)", style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
+                html.Span(f" ({int((window_size_ms / 1000) * sampling_rate)} samples @ {sampling_rate} Hz)",
+                          style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
             ], style={'margin-bottom': '8px'}),
             html.Div([
                 html.Span("🎯 Feature Count: ", style={'font-weight': 'bold'}),
                 html.Span(f"{features} features", style={'color': '#2E86AB'}),
-                html.Span(" (time + freq domain)", style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
+                html.Span(" (time + freq domain)",
+                          style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
             ])
         ])
-        
+
         return info, params
-    
+
     except Exception as e:
         print(f"Error displaying model info: {e}")
         import traceback
         traceback.print_exc()
-        error_msg = html.Div(f"Error loading model: {str(e)}", style={'color': '#dc3545'})
+        error_msg = html.Div(f"Error loading model: {str(e)}", style={
+                             'color': '#dc3545'})
         return error_msg, "Cannot load parameters"
+
+
+@callback(
+    Output('toolchain-status', 'children'),
+    Input('toolchain-selector', 'value')
+)
+def check_toolchain_status(toolchain):
+    """
+    Check if selected toolchain is installed and display status.
+    """
+    try:
+        if toolchain == 'arduino':
+            # Check Arduino CLI
+            result = subprocess.run(['arduino-cli', 'version'],
+                                    capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                version = result.stdout.strip().split('\n')[0]
+                return html.Div([
+                    html.Span("✅ Arduino CLI detected: ", style={
+                              'font-weight': 'bold', 'color': '#155724'}),
+                    html.Span(version)
+                ])
+            else:
+                return html.Div([
+                    html.Span("⚠️ Arduino CLI not found. ", style={
+                              'font-weight': 'bold', 'color': '#856404'}),
+                    html.A("Download here", href="https://arduino.github.io/arduino-cli/",
+                           target="_blank", style={'color': '#007bff'})
+                ])
+        elif toolchain == 'platformio':
+            # Check PlatformIO
+            result = subprocess.run(['pio', '--version'],
+                                    capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                version = result.stdout.strip().split('\n')[0]
+                return html.Div([
+                    html.Span("✅ PlatformIO detected: ", style={
+                              'font-weight': 'bold', 'color': '#155724'}),
+                    html.Span(version)
+                ])
+            else:
+                return html.Div([
+                    html.Span("⚠️ PlatformIO not found. ", style={
+                              'font-weight': 'bold', 'color': '#856404'}),
+                    html.A("Install via VS Code Extension or CLI", href="https://platformio.org/install",
+                           target="_blank", style={'color': '#007bff'})
+                ])
+    except FileNotFoundError:
+        if toolchain == 'arduino':
+            return html.Div([
+                html.Span("❌ Arduino CLI not installed. ", style={
+                          'font-weight': 'bold', 'color': '#721c24'}),
+                html.A("Download here", href="https://arduino.github.io/arduino-cli/",
+                       target="_blank", style={'color': '#007bff'})
+            ])
+        else:
+            return html.Div([
+                html.Span("❌ PlatformIO not installed. ", style={
+                          'font-weight': 'bold', 'color': '#721c24'}),
+                html.A("Install here", href="https://platformio.org/install",
+                       target="_blank", style={'color': '#007bff'})
+            ])
+    except Exception as e:
+        return html.Div(f"⚠️ Error checking toolchain: {str(e)}", style={'color': '#856404'})
 
 
 @callback(
@@ -149,21 +435,23 @@ def refresh_serial_ports(n_clicks, tab):
             {'label': f'{port.device} - {port.description}', 'value': port.device}
             for port in ports
         ]
-        
+
         if not options:
             info = html.Div([
-                html.Span("⚠️ No serial ports detected. ", style={'color': '#856404'}),
+                html.Span("⚠️ No serial ports detected. ",
+                          style={'color': '#856404'}),
                 html.Span("Please connect your device and click Refresh.")
             ])
             return [], info
-        
+
         info = html.Div([
-            html.Span(f"✅ Found {len(ports)} port(s). ", style={'color': '#155724'}),
+            html.Span(f"✅ Found {len(ports)} port(s). ",
+                      style={'color': '#155724'}),
             html.Span("Select a port to continue.")
         ])
-        
+
         return options, info
-    
+
     except Exception as e:
         return [], html.Div(f"❌ Error detecting ports: {str(e)}", style={'color': '#721c24'})
 
@@ -191,36 +479,36 @@ def generate_embedded_code(n_clicks, model_filename, target_board, generator_typ
     Parameters are loaded from model metadata to ensure consistency.
     """
     if not model_filename:
-        return no_update, html.Div("⚠️ Please select a model first", 
+        return no_update, html.Div("⚠️ Please select a model first",
                                    style={'color': '#ff9800', 'padding': '10px'}), {'display': 'none'}, {}, True, True, no_update, no_update
-    
+
     try:
         # Load metadata from trained_models.json
         models_metadata_file = os.path.join(MODELS_DIR, 'trained_models.json')
         with open(models_metadata_file, 'r') as f:
             models_metadata = json.load(f)
-        
+
         metadata = models_metadata.get(model_filename, {})
         model_type = metadata.get('model_type', 'unknown')
         features = metadata.get('features', 0)
         classes = metadata.get('classes', 0)
-        
+
         # Get training parameters from metadata
         model_params = metadata.get('model_params', {})
         sampling_rate = model_params.get('sampling_rate', 100)
         window_size_ms = model_params.get('window_size_ms', 1500)
         window_size_samples = int((window_size_ms / 1000) * sampling_rate)
-        
+
         # Convert overlap percentage to stride samples
         overlap_percent = stride if stride is not None else 0  # Default: 0% overlap
         overlap_percent = max(0, min(99, overlap_percent))  # Clamp to 0-99%
         stride_percent = 100 - overlap_percent  # Convert overlap to stride
         stride_samples = int((stride_percent / 100.0) * window_size_samples)
         stride_samples = max(1, stride_samples)  # Ensure at least 1 sample
-        
+
         # TODO: Integrate with deployment/code_generator_factory.py for real code generation
         # For now, generate template code with actual parameters
-        
+
         # Board-specific configuration
         board_configs = {
             'm5stack:esp32:m5stick_c': {
@@ -236,14 +524,14 @@ def generate_embedded_code(n_clicks, model_filename, target_board, generator_typ
                 'read_sensors': '  // Read IMU sensor data\\n  float ax, ay, az, gx, gy, gz;'
             }
         }
-        
+
         board_config = board_configs.get(target_board, {
             'name': 'Generic Board',
             'includes': '#include <Arduino.h>',
             'imu_init': '  // Initialize IMU sensor',
             'read_sensors': '  // Read sensor data'
         })
-        
+
         # Generate code
         generated_code = f"""/*
  * Auto-generated HAR Model
@@ -363,19 +651,23 @@ int runInference(float* features) {{
   return 0;  // Placeholder
 }}
 """
-        
+
         status = html.Div([
-            html.H5("✅ Code Generated Successfully!", style={'color': '#28a745'}),
-            html.P(f"Generator: {generator_type} | Target: {board_config['name']} | Optimization: {optimization.upper()}"),
+            html.H5("✅ Code Generated Successfully!",
+                    style={'color': '#28a745'}),
+            html.P(
+                f"Generator: {generator_type} | Target: {board_config['name']} | Optimization: {optimization.upper()}"),
             html.Div([
                 html.Strong("⚠️ Critical: "),
-                html.Span(f"Code uses parameters from training: {sampling_rate} Hz, {window_size_ms} ms window, {features} features")
+                html.Span(
+                    f"Code uses parameters from training: {sampling_rate} Hz, {window_size_ms} ms window, {features} features")
             ], style={'margin-top': '10px', 'padding': '10px', 'background': '#fff3cd', 'border-radius': '4px', 'font-size': '13px'}),
             html.Div([
-                html.Span(f"Overlap: {overlap_percent}% (stride: {stride_samples} samples)", style={'font-size': '12px', 'color': '#666'})
+                html.Span(f"Overlap: {overlap_percent}% (stride: {stride_samples} samples)", style={
+                          'font-size': '12px', 'color': '#666'})
             ], style={'margin-top': '8px'})
         ], style={'background': '#d4edda', 'padding': '15px', 'border-radius': '5px'})
-        
+
         # Enable compile buttons
         compile_btn_style = {
             'background-color': '#007bff',
@@ -388,7 +680,7 @@ int runInference(float* features) {{
             'margin-right': '10px',
             'opacity': '1'
         }
-        
+
         flash_btn_style = {
             'background-color': '#dc3545',
             'color': 'white',
@@ -399,15 +691,20 @@ int runInference(float* features) {{
             'font-weight': 'bold',
             'opacity': '1'
         }
-        
+
+        # Generate PlatformIO configuration
+        platformio_ini = generate_platformio_config(
+            target_board, model_filename, board_config['name'])
+
         code_data = {
             'code': generated_code,
             'filename': f'{model_filename.split(".")[0]}_{generator_type}.ino',
-            'board': target_board
+            'board': target_board,
+            'platformio_ini': platformio_ini
         }
-        
+
         return generated_code, status, {'display': 'block'}, code_data, False, False, compile_btn_style, flash_btn_style
-    
+
     except Exception as e:
         print(f"Error generating code: {e}")
         import traceback
@@ -431,7 +728,7 @@ def download_code(n_clicks, code_data):
     """
     if not code_data or 'code' not in code_data:
         return no_update
-    
+
     from dash import dcc
     return dcc.send_string(code_data['code'], filename=code_data['filename'])
 
@@ -445,57 +742,54 @@ def download_code(n_clicks, code_data):
     [State('generated-code-store', 'data'),
      State('serial-port-selector-deploy', 'value'),
      State('target-board-selector', 'value'),
+     State('toolchain-selector', 'value'),
      State('compilation-options', 'value')],
     prevent_initial_call=True
 )
-def compile_and_flash(compile_clicks, flash_clicks, code_data, serial_port, board_fqbn, options):
+def compile_and_flash(compile_clicks, flash_clicks, code_data, serial_port, board_fqbn, toolchain, options):
     """
-    Compile code using Arduino CLI and optionally flash to device.
+    Compile code using Arduino CLI or PlatformIO and optionally flash to device.
     """
     if not code_data or 'code' not in code_data:
         return "No code to compile", {'display': 'block'}, ""
-    
+
     try:
         # Determine which button was clicked
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
         should_upload = button_id == 'compile-flash-btn'
-        
+
         if should_upload and not serial_port:
             return "❌ Please select a serial port for flashing", {'display': 'block'}, ""
-        
-        # TODO: Implement actual Arduino CLI compilation
-        # 1. Save code to temp sketch directory
-        # 2. Run arduino-cli compile
-        # 3. If should_upload, run arduino-cli upload
-        # 4. Return output
-        
+
         verbose = 'verbose' in options
-        
-        # Placeholder output
-        output = f"""Arduino CLI Compilation Output
-{'='*50}
 
-Sketch: {code_data.get('filename', 'sketch.ino')}
-Board: {board_fqbn}
-Port: {serial_port if should_upload else 'N/A'}
+        # Create temporary project directory
+        import tempfile
+        import shutil
+        temp_dir = tempfile.mkdtemp(prefix='har_build_')
 
-[1/3] Detecting libraries...
-[2/3] Compiling sketch...
-   ✓ Sketch compiled successfully
-   
-Sketch uses 234,567 bytes (22%) of program storage
-Global variables use 45,678 bytes (13%) of dynamic memory
+        try:
+            if toolchain == 'arduino':
+                output, success = compile_with_arduino_cli(
+                    code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose)
+            else:  # platformio
+                output, success = compile_with_platformio(
+                    code_data, temp_dir, serial_port, should_upload, verbose)
+        finally:
+            # Cleanup temp directory
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
 
-{'[3/3] Uploading to device...' if should_upload else ''}
-{'   ✓ Upload complete!' if should_upload else ''}
+        if not success:
+            return output, {'display': 'block'}, ""
 
-{'✅ Compile & Flash successful!' if should_upload else '✅ Compilation successful!'}
-"""
-        
         progress = ""
         if should_upload:
             progress = html.Div([
-                html.Div("Upload Progress:", style={'font-weight': 'bold', 'margin-bottom': '10px'}),
+                html.Div("Upload Progress:", style={
+                         'font-weight': 'bold', 'margin-bottom': '10px'}),
                 html.Div([
                     html.Div(style={
                         'width': '100%',
@@ -512,9 +806,9 @@ Global variables use 45,678 bytes (13%) of dynamic memory
                     })
                 ])
             ], style={'background': '#d4edda', 'padding': '15px', 'border-radius': '5px'})
-        
+
         return output, {'display': 'block'}, progress
-    
+
     except Exception as e:
         error_output = f"❌ Error during compilation:\n\n{str(e)}\n\n{traceback.format_exc()}"
         return error_output, {'display': 'block'}, ""
@@ -548,24 +842,24 @@ def analyze_resources(n_clicks, model_filename, target_board, optimization):
     """
     if not model_filename:
         return html.Div("⚠️ Please select a model first", style={'color': '#ff9800', 'padding': '10px'})
-    
+
     try:
         # Load metadata
         models_metadata_file = os.path.join(MODELS_DIR, 'trained_models.json')
         with open(models_metadata_file, 'r') as f:
             models_metadata = json.load(f)
-        
+
         metadata = models_metadata.get(model_filename, {})
         model_type = metadata.get('model_type', 'unknown')
         features = metadata.get('features', 0)
         classes = metadata.get('classes', 0)
-        
+
         # Get model params
         model_params = metadata.get('model_params', {})
         sampling_rate = model_params.get('sampling_rate', 100)
         window_size_ms = model_params.get('window_size_ms', 1500)
         window_size_samples = int((window_size_ms / 1000) * sampling_rate)
-        
+
         # Estimate resource usage based on model type and target board
         board_specs = {
             'arduino:avr:uno': {'name': 'Arduino Uno', 'ram': 2, 'flash': 32, 'speed': 16},
@@ -575,13 +869,15 @@ def analyze_resources(n_clicks, model_filename, target_board, optimization):
             'm5stack:esp32:m5stick_c': {'name': 'M5StickC Plus2', 'ram': 320, 'flash': 8192, 'speed': 240},
             'STM32:stm32:GenF4': {'name': 'STM32F4', 'ram': 192, 'flash': 1024, 'speed': 168}
         }
-        
-        board_info = board_specs.get(target_board, {'name': 'Unknown', 'ram': 100, 'flash': 1024, 'speed': 100})
-        
+
+        board_info = board_specs.get(
+            target_board, {'name': 'Unknown', 'ram': 100, 'flash': 1024, 'speed': 100})
+
         # Estimate RAM usage (buffer + feature array + model weights)
-        sensor_buffer_kb = (window_size_samples * 6 * 4) / 1024  # 6 sensors, 4 bytes per float
+        sensor_buffer_kb = (window_size_samples * 6 * 4) / \
+            1024  # 6 sensors, 4 bytes per float
         feature_buffer_kb = (features * 4) / 1024  # 4 bytes per float
-        
+
         # Model weights estimation
         if model_type == 'neural_network':
             # Assume 2 hidden layers with 64, 32 neurons
@@ -590,19 +886,22 @@ def analyze_resources(n_clicks, model_filename, target_board, optimization):
             weights_kb = (features * classes * 4) / 1024
         else:
             weights_kb = (features * 2 * 4) / 1024  # Generic estimate
-        
-        total_ram_kb = sensor_buffer_kb + feature_buffer_kb + weights_kb + 10  # +10 for stack/heap
+
+        total_ram_kb = sensor_buffer_kb + feature_buffer_kb + \
+            weights_kb + 10  # +10 for stack/heap
         ram_usage_percent = (total_ram_kb / board_info['ram']) * 100
-        
+
         # Estimate Flash usage
         code_size_kb = 50 + weights_kb  # 50KB for code + model weights
         flash_usage_percent = (code_size_kb / board_info['flash']) * 100
-        
+
         # Estimate inference time (based on optimization level)
-        opt_multipliers = {'accuracy': 1.5, 'balanced': 1.0, 'speed': 0.7, 'power': 1.2}
+        opt_multipliers = {'accuracy': 1.5,
+                           'balanced': 1.0, 'speed': 0.7, 'power': 1.2}
         base_time_ms = (features * 0.1) + (classes * 0.05)  # Rough estimate
-        inference_time_ms = base_time_ms * opt_multipliers.get(optimization, 1.0)
-        
+        inference_time_ms = base_time_ms * \
+            opt_multipliers.get(optimization, 1.0)
+
         # Power consumption estimate (mW)
         if 'esp32' in target_board or 'm5stack' in target_board:
             power_mw = 160 if optimization == 'power' else 240
@@ -610,27 +909,30 @@ def analyze_resources(n_clicks, model_filename, target_board, optimization):
             power_mw = 80 if optimization == 'power' else 120
         else:
             power_mw = 40 if optimization == 'power' else 60
-        
+
         # Build resource analysis display
         return html.Div([
-            html.H5("📊 Resource Analysis Results", style={'color': '#28a745', 'margin-bottom': '15px'}),
-            
+            html.H5("📊 Resource Analysis Results", style={
+                    'color': '#28a745', 'margin-bottom': '15px'}),
+
             html.Div([
                 # Board Info
                 html.Div([
-                    html.H6(f"🎯 Target: {board_info['name']}", style={'color': '#2E86AB', 'margin-bottom': '10px'}),
+                    html.H6(f"🎯 Target: {board_info['name']}", style={
+                            'color': '#2E86AB', 'margin-bottom': '10px'}),
                     html.Div(f"RAM: {board_info['ram']} KB | Flash: {board_info['flash']} KB | Clock: {board_info['speed']} MHz",
                              style={'font-size': '12px', 'color': '#666'})
                 ], style={'margin-bottom': '20px'}),
-                
+
                 # Resource Usage
                 html.Div([
                     # RAM Usage
                     html.Div([
                         html.Div([
-                            html.Span("💾 RAM Usage: ", style={'font-weight': 'bold'}),
+                            html.Span("💾 RAM Usage: ", style={
+                                      'font-weight': 'bold'}),
                             html.Span(f"{total_ram_kb:.1f} KB / {board_info['ram']} KB ({ram_usage_percent:.1f}%)",
-                                     style={'color': '#dc3545' if ram_usage_percent > 80 else '#28a745' if ram_usage_percent < 50 else '#ff9800'})
+                                      style={'color': '#dc3545' if ram_usage_percent > 80 else '#28a745' if ram_usage_percent < 50 else '#ff9800'})
                         ], style={'margin-bottom': '5px'}),
                         html.Div(style={
                             'width': '100%',
@@ -647,13 +949,14 @@ def analyze_resources(n_clicks, model_filename, target_board, optimization):
                             })
                         ])
                     ], style={'margin-bottom': '15px'}),
-                    
+
                     # Flash Usage
                     html.Div([
                         html.Div([
-                            html.Span("💿 Flash Usage: ", style={'font-weight': 'bold'}),
+                            html.Span("💿 Flash Usage: ", style={
+                                      'font-weight': 'bold'}),
                             html.Span(f"{code_size_kb:.1f} KB / {board_info['flash']} KB ({flash_usage_percent:.1f}%)",
-                                     style={'color': '#dc3545' if flash_usage_percent > 80 else '#28a745'})
+                                      style={'color': '#dc3545' if flash_usage_percent > 80 else '#28a745'})
                         ], style={'margin-bottom': '5px'}),
                         html.Div(style={
                             'width': '100%',
@@ -670,35 +973,46 @@ def analyze_resources(n_clicks, model_filename, target_board, optimization):
                             })
                         ])
                     ], style={'margin-bottom': '15px'}),
-                    
+
                     # Performance Metrics
                     html.Div([
                         html.Div([
-                            html.Span("⚡ Inference Time: ", style={'font-weight': 'bold'}),
-                            html.Span(f"{inference_time_ms:.2f} ms", style={'color': '#2E86AB'}),
-                            html.Span(f" (~{1000/inference_time_ms:.1f} Hz max)", style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
+                            html.Span("⚡ Inference Time: ", style={
+                                      'font-weight': 'bold'}),
+                            html.Span(f"{inference_time_ms:.2f} ms",
+                                      style={'color': '#2E86AB'}),
+                            html.Span(f" (~{1000/inference_time_ms:.1f} Hz max)", style={
+                                      'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
                         ], style={'margin-bottom': '8px'}),
                         html.Div([
-                            html.Span("🔋 Power Consumption: ", style={'font-weight': 'bold'}),
-                            html.Span(f"{power_mw} mW", style={'color': '#2E86AB'}),
-                            html.Span(f" ({optimization} mode)", style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
+                            html.Span("🔋 Power Consumption: ",
+                                      style={'font-weight': 'bold'}),
+                            html.Span(f"{power_mw} mW", style={
+                                      'color': '#2E86AB'}),
+                            html.Span(f" ({optimization} mode)", style={
+                                      'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
                         ], style={'margin-bottom': '8px'}),
                         html.Div([
-                            html.Span("🎯 Optimization: ", style={'font-weight': 'bold'}),
-                            html.Span(f"{optimization.upper()}", style={'color': '#2E86AB'})
+                            html.Span("🎯 Optimization: ", style={
+                                      'font-weight': 'bold'}),
+                            html.Span(f"{optimization.upper()}",
+                                      style={'color': '#2E86AB'})
                         ])
                     ])
                 ], style={'padding': '15px', 'background': '#f8f9fa', 'border-radius': '8px'}),
-                
+
                 # Warnings
                 html.Div([
-                    html.Div("⚠️ Warnings:", style={'font-weight': 'bold', 'margin-bottom': '10px', 'color': '#856404'}) if ram_usage_percent > 80 or flash_usage_percent > 80 else None,
-                    html.Div("• RAM usage exceeds 80% - consider reducing window size or features", style={'color': '#721c24', 'margin-bottom': '5px'}) if ram_usage_percent > 80 else None,
-                    html.Div("• Flash usage exceeds 80% - consider model optimization", style={'color': '#721c24'}) if flash_usage_percent > 80 else None
+                    html.Div("⚠️ Warnings:", style={'font-weight': 'bold', 'margin-bottom': '10px',
+                             'color': '#856404'}) if ram_usage_percent > 80 or flash_usage_percent > 80 else None,
+                    html.Div("• RAM usage exceeds 80% - consider reducing window size or features", style={
+                             'color': '#721c24', 'margin-bottom': '5px'}) if ram_usage_percent > 80 else None,
+                    html.Div("• Flash usage exceeds 80% - consider model optimization",
+                             style={'color': '#721c24'}) if flash_usage_percent > 80 else None
                 ], style={'margin-top': '15px', 'padding': '12px', 'background': '#fff3cd', 'border-radius': '6px', 'border-left': '4px solid #ffc107'}) if ram_usage_percent > 80 or flash_usage_percent > 80 else None
             ])
         ], style={'background': '#d4edda', 'padding': '20px', 'border-radius': '8px', 'border-left': '4px solid #28a745'})
-    
+
     except Exception as e:
         print(f"Error analyzing resources: {e}")
         import traceback

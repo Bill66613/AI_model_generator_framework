@@ -17,17 +17,118 @@ layout = html.Div([
         })
     ], style={'margin-bottom': '30px'}),
 
+    # Working Directory Section
+    html.Div([
+        html.H3("📂 Working Directory", style={
+                'color': '#2E86AB', 'margin-bottom': '20px'}),
+        html.P("Select or create a working directory to organize your datasets",
+               style={'color': '#666', 'margin-bottom': '15px'}),
+
+        html.Div([
+            html.Div([
+                html.Label("Current Directory:", style={
+                           'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                html.Div(id='current-working-dir-display', children="Not set", style={
+                    'padding': '12px',
+                    'background': '#e3f2fd',
+                    'border-radius': '6px',
+                    'border-left': '4px solid #2196f3',
+                    'font-family': 'monospace',
+                    'font-size': '13px',
+                    'margin-bottom': '15px'
+                })
+            ]),
+
+            html.Div([
+                html.Div([
+                    html.Label("Directory Path:", style={
+                               'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block'}),
+                    dcc.Input(
+                        id='directory-path-input',
+                        type='text',
+                        placeholder='Enter directory path (e.g., D:\\Workspaces\\data or C:\\my_project\\datasets)',
+                        style={
+                            'width': '100%',
+                            'padding': '10px',
+                            'border': '1px solid #ddd',
+                            'border-radius': '6px',
+                            'font-size': '14px',
+                            'box-sizing': 'border-box'
+                        }
+                    )
+                ], style={'margin-bottom': '15px'}),
+
+                html.Div([
+                    html.Button(
+                        "✅ Apply Directory",
+                        id='select-working-dir-btn',
+                        n_clicks=0,
+                        style={
+                            'background-color': '#2196f3',
+                            'color': 'white',
+                            'border': 'none',
+                            'padding': '10px 20px',
+                            'border-radius': '6px',
+                            'cursor': 'pointer',
+                            'font-weight': 'bold',
+                            'margin-right': '10px'
+                        }
+                    ),
+                    html.Button(
+                        "🔄 Use Default (persistent_data)",
+                        id='use-default-dir-btn',
+                        n_clicks=0,
+                        style={
+                            'background-color': '#4caf50',
+                            'color': 'white',
+                            'border': 'none',
+                            'padding': '10px 20px',
+                            'border-radius': '6px',
+                            'cursor': 'pointer',
+                            'font-weight': 'bold',
+                            'margin-right': '10px'
+                        }
+                    ),
+                    html.Button(
+                        "🔧 Migrate Old Files",
+                        id='migrate-files-btn',
+                        n_clicks=0,
+                        style={
+                            'background-color': '#ff9800',
+                            'color': 'white',
+                            'border': 'none',
+                            'padding': '10px 20px',
+                            'border-radius': '6px',
+                            'cursor': 'pointer',
+                            'font-weight': 'bold'
+                        }
+                    )
+                ], style={'margin-bottom': '15px'})
+            ]),
+
+            html.Div(id='working-dir-status', style={'margin-top': '10px'})
+        ])
+    ], style={
+        'background-color': '#ffffff',
+        'padding': '25px',
+        'border-radius': '10px',
+        'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+        'margin-bottom': '25px',
+        'border': '1px solid #e9ecef'
+    }),
+
     # Upload Section
     html.Div([
-        html.H3("📁 Upload Sensor Data", style={'color': '#2E86AB', 'margin-bottom': '20px'}),
-        html.P("Select one or more CSV files containing sensor data (accelerometer, gyroscope, etc.)", 
+        html.H3("📁 Upload Sensor Data", style={
+                'color': '#2E86AB', 'margin-bottom': '20px'}),
+        html.P("Select one or more CSV files containing sensor data (accelerometer, gyroscope, etc.)",
                style={'color': '#666', 'margin-bottom': '15px'}),
-        
+
         dcc.Upload(
             id='upload-data',
             children=html.Div([
                 html.Button(
-                    "📁 Upload Files", 
+                    "📁 Upload Files",
                     style={
                         'width': '200px',
                         'height': '45px',
@@ -62,7 +163,7 @@ layout = html.Div([
                 'transition': 'border-color 0.3s ease'
             }
         ),
-        
+
         html.Div(id='upload-output', style={
             'margin-top': '15px',
             'padding': '10px',
@@ -80,12 +181,14 @@ layout = html.Div([
 
     # Dataset Management Section
     html.Div([
-        html.H3("🗂️ Dataset Management", style={'color': '#2E86AB', 'margin-bottom': '20px'}),
-        
+        html.H3("🗂️ Dataset Management", style={
+                'color': '#2E86AB', 'margin-bottom': '20px'}),
+
         # Dataset Selection Row
         html.Div([
             html.Div([
-                html.Label("Select Dataset:", style={'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                html.Label("Select Dataset:", style={
+                           'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                 dcc.Dropdown(
                     id='dataset-selector',
                     options=[],
@@ -93,9 +196,10 @@ layout = html.Div([
                     style={'margin-bottom': '15px'}
                 )
             ], style={'width': '70%', 'display': 'inline-block', 'vertical-align': 'top'}),
-            
+
             html.Div([
-                html.Label(" ", style={'display': 'block', 'margin-bottom': '8px'}),  # Spacer
+                html.Label(" ", style={'display': 'block',
+                           'margin-bottom': '8px'}),  # Spacer
                 html.Button(
                     "🗑️ Delete Selected",
                     id='delete-dataset-btn',
@@ -117,10 +221,12 @@ layout = html.Div([
         html.Div([
             # Left Column - Labels and Properties
             html.Div([
-                html.H5("📋 Dataset Properties", style={'color': '#2E86AB', 'margin-bottom': '15px'}),
-                
+                html.H5("📋 Dataset Properties", style={
+                        'color': '#2E86AB', 'margin-bottom': '15px'}),
+
                 html.Div([
-                    html.Label("Current Label:", style={'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block'}),
+                    html.Label("Current Label:", style={
+                               'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block'}),
                     dcc.Textarea(
                         id='assigned-label',
                         readOnly=True,
@@ -137,9 +243,10 @@ layout = html.Div([
                         }
                     )
                 ]),
-                
+
                 html.Div([
-                    html.Label("Assign New Label:", style={'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block'}),
+                    html.Label("Assign New Label:", style={
+                               'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block'}),
                     html.Div([
                         dcc.Input(
                             id='dataset-label',
@@ -174,10 +281,12 @@ layout = html.Div([
 
             # Right Column - Sampling Rate
             html.Div([
-                html.H5("⏱️ Sampling Configuration", style={'color': '#2E86AB', 'margin-bottom': '15px'}),
-                
+                html.H5("⏱️ Sampling Configuration", style={
+                        'color': '#2E86AB', 'margin-bottom': '15px'}),
+
                 html.Div([
-                    html.Label("Sampling Rate (Hz):", style={'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block'}),
+                    html.Label("Sampling Rate (Hz):", style={
+                               'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block'}),
                     html.Div([
                         dcc.Input(
                             id='sampling-rate-input',
@@ -212,9 +321,9 @@ layout = html.Div([
                         )
                     ])
                 ]),
-                
+
                 html.Div([
-                    html.P("💡 Common rates: 50Hz (basic), 100Hz (standard), 200Hz (high-precision)", 
+                    html.P("💡 Common rates: 50Hz (basic), 100Hz (standard), 200Hz (high-precision)",
                            style={
                                'font-size': '12px',
                                'color': '#666',
@@ -227,7 +336,8 @@ layout = html.Div([
 
         # Dataset Information Table
         html.Div([
-            html.H5("📊 Dataset Information", style={'color': '#2E86AB', 'margin-bottom': '15px'}),
+            html.H5("📊 Dataset Information", style={
+                    'color': '#2E86AB', 'margin-bottom': '15px'}),
             html.Div(id='dataset-info-table', style={'margin-bottom': '20px'})
         ]),
 
@@ -275,8 +385,9 @@ layout = html.Div([
 
     # Preview Section
     html.Div([
-        html.H3("📈 Data Preview", style={'color': '#2E86AB', 'margin-bottom': '20px'}),
-        html.P("Interactive visualization of the selected dataset", 
+        html.H3("📈 Data Preview", style={
+                'color': '#2E86AB', 'margin-bottom': '20px'}),
+        html.P("Interactive visualization of the selected dataset",
                style={'color': '#666', 'margin-bottom': '15px'}),
         dcc.Graph(
             id='data-preview',
@@ -302,7 +413,8 @@ layout = html.Div([
     }),
 
     # Hidden components for data storage
-    dcc.Store(id='dataset-metadata', storage_type='session')
+    dcc.Store(id='dataset-metadata', storage_type='session'),
+    dcc.Store(id='working-directory-store', storage_type='local')
 
 ], style={
     'max-width': '1200px',
