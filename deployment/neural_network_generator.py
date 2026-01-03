@@ -15,6 +15,12 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
         self.weights = model_data.get('weights', {})
         self.hidden_size = self.weights.get('hidden_size', 50)
 
+        # Multi-layer network support
+        self.num_hidden_layers = 1  # Default to 1 hidden layer
+        self.hidden_layer_sizes = []  # Will store sizes of all hidden layers
+        self.all_weights = []  # Store all weight matrices
+        self.all_biases = []   # Store all bias vectors
+
         # Extract real model weights if available
         self._extract_real_weights()
 
@@ -29,25 +35,47 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
                     coefs = model_obj.model.coefs_
                     intercepts = model_obj.model.intercepts_
 
+                    # Get hidden layer sizes from model
+                    if hasattr(model_obj.model, 'hidden_layer_sizes'):
+                        if isinstance(model_obj.model.hidden_layer_sizes, tuple):
+                            self.hidden_layer_sizes = list(
+                                model_obj.model.hidden_layer_sizes)
+                        else:
+                            self.hidden_layer_sizes = [
+                                model_obj.model.hidden_layer_sizes]
+
+                    self.num_hidden_layers = len(
+                        self.hidden_layer_sizes) if self.hidden_layer_sizes else len(coefs) - 1
+
+                    # Extract ALL weight matrices and biases
+                    self.all_weights = [coef.tolist() for coef in coefs]
+                    self.all_biases = [intercept.tolist()
+                                       for intercept in intercepts]
+
+                    # For backwards compatibility, set common attributes
                     if len(coefs) >= 1:
-                        # Input to hidden weights
                         self.input_weights = coefs[0].tolist()
-                        # Hidden layer biases
                         self.hidden_biases = intercepts[0].tolist()
                         self.hidden_size = len(intercepts[0])
 
                     if len(coefs) >= 2:
-                        # Hidden to output weights
                         self.output_weights = coefs[1].tolist()
-                        # Output layer biases
                         self.output_biases = intercepts[1].tolist()
-                    else:
-                        # Single layer network
-                        self.output_weights = []
-                        self.output_biases = []
 
-                    print(
-                        f"Extracted NN weights from model object: {len(self.input_weights)}x{len(self.input_weights[0]) if self.input_weights else 0} input weights")
+                    # For multi-hidden-layer networks
+                    if len(coefs) >= 3:
+                        # Hidden1 -> Hidden2
+                        self.hidden2_weights = coefs[1].tolist()
+                        self.hidden2_biases = intercepts[1].tolist()
+                        self.hidden2_size = len(intercepts[1])
+                        # Hidden2 -> Output
+                        self.final_weights = coefs[2].tolist()
+                        self.final_biases = intercepts[2].tolist()
+                        print(
+                            f"✅ Extracted {len(coefs)}-layer NN: {[c.shape for c in coefs]}")
+                    else:
+                        print(
+                            f"✅ Extracted {len(coefs)}-layer NN: {coefs[0].shape[0]}→{coefs[0].shape[1]}→{coefs[1].shape[1] if len(coefs) > 1 else '?'}")
                     return
 
             except Exception as e:
@@ -58,9 +86,7 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
         if self.weights:
             try:
                 self.input_weights = self.weights.get('input_weights', [])
-                # Note: input_bias is hidden layer bias
                 self.hidden_biases = self.weights.get('input_bias', [])
-                # Note: hidden_weights is output weights
                 self.output_weights = self.weights.get('hidden_weights', [])
                 self.output_biases = self.weights.get('output_bias', [])
 
@@ -82,17 +108,25 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
 
     def _get_model_specific_declarations(self) -> str:
         """Generate Neural Network specific declarations."""
-        return f"""
+        # Check if this is a multi-hidden-layer network
+        declarations = f"""
 // Neural Network specific definitions
 #define HIDDEN_LAYER_SIZE {self.hidden_size}
 #define INPUT_SIZE NUM_FEATURES
 #define OUTPUT_SIZE NUM_CLASSES
+"""
 
+        # Add second hidden layer size if it exists
+        if hasattr(self, 'hidden2_size'):
+            declarations += f"#define HIDDEN2_LAYER_SIZE {self.hidden2_size}\n"
+
+        declarations += """
 // Neural Network utility functions
 float sigmoid(float x);
 float relu(float x);
 void print_network_outputs(float features[]);
 """
+        return declarations
 
     def _generate_model_specific_implementation(self) -> str:
         """Generate Neural Network implementation with real or placeholder weights."""
@@ -128,20 +162,44 @@ const float output_weights[HIDDEN_LAYER_SIZE][OUTPUT_SIZE] = {{
     // Would contain actual output weights from trained model
 }};"""
 
-        # Generate output biases array
+        # Generate output biases array (or hidden2 biases for 3-layer networks)
         if hasattr(self, 'output_biases') and self.output_biases:
-            output_biases_str = self._format_1d_array(
-                self.output_biases, "output_biases", self.feature_precision)
+            # Check if this is actually hidden2 layer (for 3-layer networks)
+            if hasattr(self, 'final_weights'):
+                # This is a 3-layer network - rename output_biases to hidden2_biases
+                output_biases_str = self._format_1d_array(
+                    self.output_biases, "hidden2_biases", self.feature_precision)
+            else:
+                # This is a 2-layer network - keep as output_biases
+                output_biases_str = self._format_1d_array(
+                    self.output_biases, "output_biases", self.feature_precision)
         else:
             output_biases_str = f"""// Placeholder output biases
 const float output_biases[OUTPUT_SIZE] = {{
     // Would contain actual output biases from trained model
 }};"""
 
+        # Generate final layer weights if this is a 3-layer network
+        final_weights_str = ""
+        final_biases_str = ""
+        if hasattr(self, 'final_weights') and self.final_weights:
+            final_weights_str = self._format_2d_array(
+                self.final_weights, "final_weights")
+            final_biases_str = self._format_1d_array(
+                self.final_biases, "final_biases", self.feature_precision)
+
         has_real_weights = hasattr(
             self, 'input_weights') and self.input_weights
-        return f"""// Neural Network Model Implementation
+        is_multilayer = hasattr(self, 'final_weights')
+
+        # For 3-layer networks, rename output_weights to hidden2_weights
+        if is_multilayer:
+            output_weights_str = output_weights_str.replace(
+                "output_weights", "hidden2_weights")
+
+        implementation = f"""// Neural Network Model Implementation
 // Using real weights: {has_real_weights}
+// Architecture: {'3-layer (Input→Hidden1→Hidden2→Output)' if is_multilayer else '2-layer (Input→Hidden→Output)'}
 
 {input_weights_str}
 
@@ -149,16 +207,27 @@ const float output_biases[OUTPUT_SIZE] = {{
 
 {output_weights_str}
 
-{output_biases_str}
+{output_biases_str}"""
+
+        # Add final layer weights for 3-layer networks
+        if final_weights_str:
+            implementation += f"""
+
+{final_weights_str}
+
+{final_biases_str}"""
+
+        implementation += """
 
 // Activation functions
-float sigmoid(float x) {{
+float sigmoid(float x) {
     return 1.0 / (1.0 + exp(-x));
-}}
+}
 
-float relu(float x) {{
+float relu(float x) {
     return x > 0 ? x : 0;
-}}"""
+}"""
+        return implementation
 
     def _format_1d_array(self, array, name, precision=4):
         """Format 1D array for C++ code with proper precision."""
@@ -209,28 +278,79 @@ float relu(float x) {{
 
     def _generate_prediction_function(self) -> str:
         """Generate Neural Network prediction function."""
-        return """// Internal neural network prediction function
+        # Check if this is a 3-layer network
+        is_multilayer = hasattr(self, 'final_weights')
+
+        if is_multilayer:
+            # 3-layer network: Input → Hidden1 → Hidden2 → Output
+            return """// Internal neural network prediction function (3-layer architecture)
 // NOTE: This function expects ALREADY SCALED features from har_predict()
 int har_predict_internal(float features[NUM_FEATURES]) {
-    // Forward pass through hidden layer
-    // Features are already scaled by har_predict() wrapper
+    // Layer 1: Input → Hidden1 (ReLU activation)
+    float hidden1_outputs[HIDDEN_LAYER_SIZE];
+    for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {
+        float sum = hidden_biases[h];
+        for (int i = 0; i < INPUT_SIZE; i++) {
+            sum += features[i] * input_weights[i][h];
+        }
+        hidden1_outputs[h] = relu(sum);
+    }
+
+    // Layer 2: Hidden1 → Hidden2 (ReLU activation)
+    float hidden2_outputs[HIDDEN2_LAYER_SIZE];
+    for (int h = 0; h < HIDDEN2_LAYER_SIZE; h++) {
+        float sum = hidden2_biases[h];
+        for (int i = 0; i < HIDDEN_LAYER_SIZE; i++) {
+            sum += hidden1_outputs[i] * hidden2_weights[i][h];
+        }
+        hidden2_outputs[h] = relu(sum);
+    }
+
+    // Layer 3: Hidden2 → Output (Linear activation)
+    float output_scores[OUTPUT_SIZE];
+    for (int o = 0; o < OUTPUT_SIZE; o++) {
+        float sum = final_biases[o];
+        for (int h = 0; h < HIDDEN2_LAYER_SIZE; h++) {
+            sum += hidden2_outputs[h] * final_weights[h][o];
+        }
+        output_scores[o] = sum;  // Linear activation (no ReLU on output)
+    }
+
+    // Find class with highest score
+    int predicted_class = 0;
+    float max_score = output_scores[0];
+    for (int i = 1; i < OUTPUT_SIZE; i++) {
+        if (output_scores[i] > max_score) {
+            max_score = output_scores[i];
+            predicted_class = i;
+        }
+    }
+
+    return predicted_class;
+}"""
+        else:
+            # 2-layer network: Input → Hidden → Output
+            return """// Internal neural network prediction function (2-layer architecture)
+// NOTE: This function expects ALREADY SCALED features from har_predict()
+int har_predict_internal(float features[NUM_FEATURES]) {
+    // Layer 1: Input → Hidden (ReLU activation)
     float hidden_outputs[HIDDEN_LAYER_SIZE];
     for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {
         float sum = hidden_biases[h];
         for (int i = 0; i < INPUT_SIZE; i++) {
             sum += features[i] * input_weights[i][h];
         }
-        hidden_outputs[h] = relu(sum);  // ReLU activation
+        hidden_outputs[h] = relu(sum);
     }
 
-    // Forward pass through output layer
+    // Layer 2: Hidden → Output (Linear activation)
     float output_scores[OUTPUT_SIZE];
     for (int o = 0; o < OUTPUT_SIZE; o++) {
         float sum = output_biases[o];
         for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {
             sum += hidden_outputs[h] * output_weights[h][o];
         }
-        output_scores[o] = sum;
+        output_scores[o] = sum;  // Linear activation
     }
 
     // Find class with highest score

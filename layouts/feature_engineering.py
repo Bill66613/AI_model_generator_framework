@@ -9,7 +9,8 @@ layout = html.Div([
 
         # Global configuration notice
         html.Div([
-            html.H5("⚙️ Unified Settings", style={'color': '#495057', 'margin-bottom': '15px'}),
+            html.H5("⚙️ Unified Settings", style={
+                    'color': '#495057', 'margin-bottom': '15px'}),
             html.P([
                 "Configure feature engineering settings ",
                 html.Strong("once"),
@@ -105,10 +106,16 @@ layout = html.Div([
                     dcc.Dropdown(
                         id='global-feature-selection',
                         options=[
-                            {'label': '🎯 All Features (Time + Frequency Domain)', 'value': 'all'},
-                            {'label': '⏱️ Time-Domain Only (90 features)', 'value': 'time_domain'},
-                            {'label': '🌊 Frequency-Domain Only (48 features)', 'value': 'frequency_domain'},
-                            {'label': '📊 Raw Sensor Axes Only (6 features)', 'value': 'raw'}
+                            {'label': '🎯 All Features (Time + Frequency Domain)',
+                             'value': 'all'},
+                            {'label': '⏱️ Time-Domain Only (90 features)',
+                             'value': 'time_domain'},
+                            {'label': '🌊 Frequency-Domain Only (48 features)',
+                             'value': 'frequency_domain'},
+                            {'label': '📊 Raw Sensor Axes Only (6 features)',
+                             'value': 'raw'},
+                            {'label': '🧭 Orientation-Invariant (Magnitude + Jerk)',
+                             'value': 'orientation_invariant'}
                         ],
                         value='time_domain',
                         placeholder="Select feature extraction method",
@@ -127,9 +134,12 @@ layout = html.Div([
                     dcc.Dropdown(
                         id='global-normalization-method',
                         options=[
-                            {'label': '📏 Standard Scaler (Z-score)', 'value': 'standard'},
-                            {'label': '📐 MinMax Scaler (0-1)', 'value': 'minmax'},
-                            {'label': '🎯 Robust Scaler (median/IQR)', 'value': 'robust'},
+                            {'label': '📏 Standard Scaler (Z-score)',
+                             'value': 'standard'},
+                            {'label': '📐 MinMax Scaler (0-1)',
+                             'value': 'minmax'},
+                            {'label': '🎯 Robust Scaler (median/IQR)',
+                             'value': 'robust'},
                             {'label': '❌ No Normalization', 'value': 'none'}
                         ],
                         value='standard',
@@ -144,11 +154,12 @@ layout = html.Div([
                     ])
                 ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'})
             ], style={'margin-bottom': '30px'}),
-            
+
             # Window Configuration (for zero-padding)
             html.Div([
-                html.H5("⚙️ Window Configuration", style={'color': '#495057', 'margin-bottom': '15px'}),
-                
+                html.H5("⚙️ Window Configuration", style={
+                        'color': '#495057', 'margin-bottom': '15px'}),
+
                 html.Div([
                     html.Label("Target Window Size (ms):", style={
                         'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
@@ -158,12 +169,13 @@ layout = html.Div([
                         value=1500,
                         min=1,
                         placeholder="Window duration in milliseconds",
-                        style={'width': '100%', 'padding': '8px', 'border': '1px solid #ddd', 'border-radius': '4px'}
+                        style={'width': '100%', 'padding': '8px',
+                               'border': '1px solid #ddd', 'border-radius': '4px'}
                     ),
-                    html.Div("💡 Windows smaller than this will be zero-padded (1500ms = 150 samples @ 100Hz)", 
-                            style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic'})
+                    html.Div("💡 Windows smaller than this will be zero-padded (1500ms = 150 samples @ 100Hz)",
+                             style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic'})
                 ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
-                
+
                 html.Div([
                     html.Label("Sampling Rate (Hz):", style={
                         'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
@@ -173,10 +185,11 @@ layout = html.Div([
                         value=100,
                         min=1,
                         placeholder="Sampling rate in Hz",
-                        style={'width': '100%', 'padding': '8px', 'border': '1px solid #ddd', 'border-radius': '4px'}
+                        style={'width': '100%', 'padding': '8px',
+                               'border': '1px solid #ddd', 'border-radius': '4px'}
                     ),
-                    html.Div("ℹ️ Used to calculate time duration from samples", 
-                            style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic'})
+                    html.Div("ℹ️ Used to calculate time duration from samples",
+                             style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic'})
                 ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'})
             ], style={'margin-bottom': '30px', 'padding': '15px', 'background': '#f8f9fa', 'border-radius': '6px'})
         ], style={
@@ -205,7 +218,8 @@ layout = html.Div([
                         max=0.9,
                         step=0.05,
                         value=0.7,
-                        marks={0.5: '50%', 0.6: '60%', 0.7: '70%', 0.8: '80%', 0.9: '90%'},
+                        marks={0.5: '50%', 0.6: '60%',
+                               0.7: '70%', 0.8: '80%', 0.9: '90%'},
                         tooltip={"placement": "bottom", "always_visible": True}
                     ),
                     html.Div(id='global-train-split-display', style={
@@ -223,7 +237,8 @@ layout = html.Div([
                         max=0.3,
                         step=0.05,
                         value=0.15,
-                        marks={0.05: '5%', 0.1: '10%', 0.15: '15%', 0.2: '20%', 0.3: '30%'},
+                        marks={0.05: '5%', 0.1: '10%',
+                               0.15: '15%', 0.2: '20%', 0.3: '30%'},
                         tooltip={"placement": "bottom", "always_visible": True}
                     ),
                     html.Div(id='global-val-split-display', style={
@@ -254,7 +269,8 @@ layout = html.Div([
                     value=42,
                     min=0,
                     max=9999,
-                    style={'width': '200px', 'padding': '8px', 'border-radius': '4px', 'border': '1px solid #ccc'}
+                    style={'width': '200px', 'padding': '8px',
+                           'border-radius': '4px', 'border': '1px solid #ccc'}
                 ),
                 html.P("ℹ️ Same seed = reproducible splits across runs", style={
                     'font-size': '12px', 'color': '#666', 'font-style': 'italic', 'margin-top': '5px'
@@ -272,7 +288,7 @@ layout = html.Div([
         html.Div([
             html.H3("🚀 Step 4: Execute Feature Engineering", style={
                 'color': '#2E86AB', 'margin-bottom': '20px'}),
-            
+
             html.Button(
                 "⚙️ Engineer Features for All Selected Datasets",
                 id='execute-feature-engineering-btn',

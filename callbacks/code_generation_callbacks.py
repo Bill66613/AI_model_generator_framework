@@ -247,17 +247,18 @@ def populate_model_selector(tab, base_dir):
     # Only populate when on the code generation tab to avoid unnecessary loads
     if tab != 'tab-5':  # Code Generation tab
         return no_update
-    
+
     try:
         # Use stored base directory or default to PERSISTENT_DIR
         if not base_dir:
             base_dir = PERSISTENT_DIR
-        
+
         models_dir = os.path.join(base_dir, 'models')
         models_metadata_file = os.path.join(models_dir, 'trained_models.json')
 
         if not os.path.exists(models_metadata_file):
-            print(f"WARNING: trained_models.json not found at {models_metadata_file}")
+            print(
+                f"WARNING: trained_models.json not found at {models_metadata_file}")
             return []
 
         with open(models_metadata_file, 'r') as f:
@@ -307,7 +308,7 @@ def display_model_info(model_filename, base_dir):
         # Use stored base directory or default to PERSISTENT_DIR
         if not base_dir:
             base_dir = PERSISTENT_DIR
-        
+
         models_dir = os.path.join(base_dir, 'models')
         models_metadata_file = os.path.join(models_dir, 'trained_models.json')
 
@@ -514,10 +515,10 @@ def generate_embedded_code(n_clicks, model_filename, target_board, optimization,
         # Use stored base directory or default to PERSISTENT_DIR
         if not base_dir:
             base_dir = PERSISTENT_DIR
-        
+
         models_dir = os.path.join(base_dir, 'models')
         models_metadata_file = os.path.join(models_dir, 'trained_models.json')
-        
+
         with open(models_metadata_file, 'r') as f:
             models_metadata = json.load(f)
 
@@ -535,7 +536,8 @@ def generate_embedded_code(n_clicks, model_filename, target_board, optimization,
         # Convert overlap percentage to stride samples and fraction
         overlap_percent = stride if stride is not None else 0  # Default: 0% overlap
         overlap_percent = max(0, min(99, overlap_percent))  # Clamp to 0-99%
-        overlap_fraction = overlap_percent / 100.0  # Convert to 0.0-0.99 range for generator
+        # Convert to 0.0-0.99 range for generator
+        overlap_fraction = overlap_percent / 100.0
         stride_percent = 100 - overlap_percent  # Convert overlap to stride
         stride_samples = int((stride_percent / 100.0) * window_size_samples)
         stride_samples = max(1, stride_samples)  # Ensure at least 1 sample
@@ -544,31 +546,34 @@ def generate_embedded_code(n_clicks, model_filename, target_board, optimization,
         model_path = get_model_path(model_filename, base_dir)
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}")
-        
+
         model = EdgeMLModel.load_model(model_path)
-        
+
         # Get feature names from model or training metadata
         feature_names = model.feature_names
         if not feature_names:
             # Try to get from training metadata
             training_dir = os.path.join(base_dir, 'training')
-            metadata_files = glob.glob(os.path.join(training_dir, '*_metadata.json'))
+            metadata_files = glob.glob(
+                os.path.join(training_dir, '*_metadata.json'))
             if metadata_files:
                 with open(metadata_files[0], 'r') as f:
                     training_metadata = json.load(f)
                     feature_names = training_metadata.get('feature_names', [])
-        
+
         if not feature_names:
             # Last resort: load from training CSV
             train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
             if train_files:
                 import pandas as pd
                 temp_df = pd.read_csv(train_files[0])
-                feature_names = [col for col in temp_df.columns if col != 'label']
-        
+                feature_names = [
+                    col for col in temp_df.columns if col != 'label']
+
         # Get class names
-        classes = list(model.label_encoder.classes_) if model.label_encoder else ['activity_1', 'activity_2']
-        
+        classes = list(model.label_encoder.classes_) if model.label_encoder else [
+            'activity_1', 'activity_2']
+
         # Map target board to platform string for code generator
         platform_mapping = {
             'arduino:avr:uno': 'arduino',
@@ -580,7 +585,19 @@ def generate_embedded_code(n_clicks, model_filename, target_board, optimization,
             'STM32:stm32:GenF4': 'arm_cortex_m'
         }
         platform = platform_mapping.get(target_board, 'arduino')
-        
+
+        # Infer feature_method if not present in metadata
+        if 'feature_method' not in model_params and feature_names:
+            try:
+                has_acc_mag = any(str(name).startswith('acc_mag_')
+                                  for name in feature_names)
+                has_gyro_mag = any(str(name).startswith('gyro_mag_')
+                                   for name in feature_names)
+                if has_acc_mag and has_gyro_mag:
+                    model_params['feature_method'] = 'orientation_invariant'
+            except Exception:
+                pass
+
         # Prepare model data for code generation
         model_data = {
             'model_type': model_type,
@@ -589,24 +606,24 @@ def generate_embedded_code(n_clicks, model_filename, target_board, optimization,
             'model_params': model_params,
             'model_object': model  # Pass actual model for parameter extraction
         }
-        
+
         # Generate code using proper code generators
         generated_code_files = generate_deployment_code(
             model_type, model_data, platform, optimization, overlap_fraction
         )
-        
+
         # Also save to working directory in organized structure
         output_dir = os.path.join(base_dir, 'generated')
         saved_files = generate_and_save_deployment_code(
             model_type, model_data, platform, output_dir, optimization, overlap_fraction
         )
-        
+
         # Get the first generated file for preview (typically the sketch/example)
         # Priority: sketch > source > header
         sketch_file = None
         source_file = None
         header_file = None
-        
+
         for filename, code in generated_code_files.items():
             if '.ino' in filename or 'example' in filename.lower():
                 sketch_file = (filename, code)
@@ -614,16 +631,18 @@ def generate_embedded_code(n_clicks, model_filename, target_board, optimization,
                 source_file = (filename, code)
             elif '.h' in filename:
                 header_file = (filename, code)
-        
+
         # Show sketch first, then source, then header
-        preview_file = sketch_file or source_file or header_file or list(generated_code_files.items())[0]
+        preview_file = sketch_file or source_file or header_file or list(
+            generated_code_files.items())[0]
         preview_code = preview_file[1]
         preview_filename = preview_file[0]
 
         status = html.Div([
             html.H5("✅ Code Generated Successfully!",
                     style={'color': '#28a745'}),
-            html.P(f"Model Type: {model_type.upper()} | Platform: {platform} | Optimization: {optimization.upper()}"),
+            html.P(
+                f"Model Type: {model_type.upper()} | Platform: {platform} | Optimization: {optimization.upper()}"),
             html.Div([
                 html.Strong("📁 Generated Files: "),
                 html.Ul([
@@ -633,15 +652,18 @@ def generate_embedded_code(n_clicks, model_filename, target_board, optimization,
             ], style={'margin-top': '10px', 'padding': '10px', 'background': '#e8f5e9', 'border-radius': '4px', 'font-size': '13px'}),
             html.Div([
                 html.Strong("💾 Saved to: "),
-                html.Code(output_dir, style={'background': '#f8f9fa', 'padding': '2px 8px', 'border-radius': '3px'}),
+                html.Code(output_dir, style={
+                          'background': '#f8f9fa', 'padding': '2px 8px', 'border-radius': '3px'}),
                 html.Ul([
-                    html.Li(os.path.relpath(filepath, base_dir), style={'font-family': 'monospace', 'font-size': '12px'})
+                    html.Li(os.path.relpath(filepath, base_dir), style={
+                            'font-family': 'monospace', 'font-size': '12px'})
                     for filepath in saved_files.keys()
                 ], style={'margin-top': '5px'})
             ], style={'margin-top': '10px', 'padding': '10px', 'background': '#d1ecf1', 'border-radius': '4px', 'font-size': '13px'}),
             html.Div([
                 html.Strong("⚠️ Note: "),
-                html.Span(f"Showing preview of {preview_filename}. All files will be included in download.")
+                html.Span(
+                    f"Showing preview of {preview_filename}. All files will be included in download.")
             ], style={'margin-top': '10px', 'padding': '10px', 'background': '#fff3cd', 'border-radius': '4px', 'font-size': '13px'}),
             html.Div([
                 html.Span(f"Model uses: {sampling_rate} Hz, {window_size_ms} ms window, {len(feature_names)} features", style={
@@ -844,10 +866,10 @@ def analyze_resources(n_clicks, model_filename, target_board, optimization, base
         # Use stored base directory or default to PERSISTENT_DIR
         if not base_dir:
             base_dir = PERSISTENT_DIR
-        
+
         models_dir = os.path.join(base_dir, 'models')
         models_metadata_file = os.path.join(models_dir, 'trained_models.json')
-        
+
         with open(models_metadata_file, 'r') as f:
             models_metadata = json.load(f)
 

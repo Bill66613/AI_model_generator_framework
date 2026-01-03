@@ -226,6 +226,109 @@ const float feature_stds[NUM_FEATURES] = {{
 
     def _generate_complete_feature_extraction(self) -> str:
         """Generate optimization-aware feature extraction function."""
+        # Orientation-invariant feature method (magnitude + jerk)
+        try:
+            feature_method = self.model_data.get(
+                'model_params', {}).get('feature_method')
+        except Exception:
+            feature_method = None
+
+        if feature_method == 'orientation_invariant':
+            return """void extract_features(float sensor_data[][6], int samples, float features[]) {
+    // Orientation-invariant features: magnitudes + jerk
+    // features order:
+    // acc_mag_mean, acc_mag_std, acc_mag_rms, acc_mag_energy, acc_mag_min, acc_mag_max,
+    // gyro_mag_mean, gyro_mag_std, gyro_mag_rms, gyro_mag_energy, gyro_mag_min, gyro_mag_max,
+    // jerk_mag_mean, jerk_mag_std, jerk_mag_rms, jerk_mag_energy, jerk_mag_max
+
+    if (samples <= 1) {
+        for (int i = 0; i < NUM_FEATURES; i++) features[i] = 0.0f;
+        return;
+    }
+
+    float acc_mag_sum = 0.0f, acc_mag_sum_sq = 0.0f, acc_mag_min = 1e9f, acc_mag_max = -1e9f;
+    float gyro_mag_sum = 0.0f, gyro_mag_sum_sq = 0.0f, gyro_mag_min = 1e9f, gyro_mag_max = -1e9f;
+    float jerk_mag_sum = 0.0f, jerk_mag_sum_sq = 0.0f, jerk_mag_max = -1e9f;
+
+    float prev_ax = sensor_data[0][0];
+    float prev_ay = sensor_data[0][1];
+    float prev_az = sensor_data[0][2];
+
+    for (int i = 0; i < samples; i++) {
+        float ax = sensor_data[i][0];
+        float ay = sensor_data[i][1];
+        float az = sensor_data[i][2];
+        float gx = sensor_data[i][3];
+        float gy = sensor_data[i][4];
+        float gz = sensor_data[i][5];
+
+        float acc_mag = sqrtf(ax*ax + ay*ay + az*az);
+        float gyro_mag = sqrtf(gx*gx + gy*gy + gz*gz);
+
+        acc_mag_sum += acc_mag;
+        acc_mag_sum_sq += acc_mag * acc_mag;
+        if (acc_mag < acc_mag_min) acc_mag_min = acc_mag;
+        if (acc_mag > acc_mag_max) acc_mag_max = acc_mag;
+
+        gyro_mag_sum += gyro_mag;
+        gyro_mag_sum_sq += gyro_mag * gyro_mag;
+        if (gyro_mag < gyro_mag_min) gyro_mag_min = gyro_mag;
+        if (gyro_mag > gyro_mag_max) gyro_mag_max = gyro_mag;
+
+        if (i > 0) {
+            float dax = ax - prev_ax;
+            float day = ay - prev_ay;
+            float daz = az - prev_az;
+            float jerk_mag = sqrtf(dax*dax + day*day + daz*daz);
+            jerk_mag_sum += jerk_mag;
+            jerk_mag_sum_sq += jerk_mag * jerk_mag;
+            if (jerk_mag > jerk_mag_max) jerk_mag_max = jerk_mag;
+        }
+
+        prev_ax = ax; prev_ay = ay; prev_az = az;
+    }
+
+    float n = (float)samples;
+    float n_jerk = (float)(samples - 1);
+
+    int idx = 0;
+    // Acc magnitude features (mean, std, rms, energy) - NO min/max here!
+    float acc_mean = acc_mag_sum / n;
+    float acc_var = (acc_mag_sum_sq / n) - acc_mean * acc_mean;
+    float acc_std = sqrtf(acc_var > 0 ? acc_var : 0.0f);
+    features[idx++] = acc_mean;                           // 0
+    features[idx++] = acc_std;                            // 1
+    features[idx++] = sqrtf(acc_mag_sum_sq / n);          // 2: RMS
+    features[idx++] = acc_mag_sum_sq;                     // 3: Energy
+
+    // Gyro magnitude features (mean, std, rms, energy) - NO min/max here!
+    float gyro_mean = gyro_mag_sum / n;
+    float gyro_var = (gyro_mag_sum_sq / n) - gyro_mean * gyro_mean;
+    float gyro_std = sqrtf(gyro_var > 0 ? gyro_var : 0.0f);
+    features[idx++] = gyro_mean;                          // 4
+    features[idx++] = gyro_std;                           // 5
+    features[idx++] = sqrtf(gyro_mag_sum_sq / n);         // 6: RMS
+    features[idx++] = gyro_mag_sum_sq;                    // 7: Energy
+
+    // Jerk magnitude features (mean, std, rms, energy) - NO max here!
+    float jerk_mean = (n_jerk > 0) ? (jerk_mag_sum / n_jerk) : 0.0f;
+    float jerk_var = (n_jerk > 0) ? ((jerk_mag_sum_sq / n_jerk) - jerk_mean * jerk_mean) : 0.0f;
+    float jerk_std = sqrtf(jerk_var > 0 ? jerk_var : 0.0f);
+    features[idx++] = jerk_mean;                          // 8
+    features[idx++] = jerk_std;                           // 9
+    features[idx++] = (n_jerk > 0) ? sqrtf(jerk_mag_sum_sq / n_jerk) : 0.0f;  // 10: RMS
+    features[idx++] = jerk_mag_sum_sq;                    // 11: Energy
+
+    // Min/max features - grouped at the end to match training feature order
+    features[idx++] = acc_mag_min;                        // 12
+    features[idx++] = acc_mag_max;                        // 13
+    features[idx++] = gyro_mag_min;                       // 14
+    features[idx++] = gyro_mag_max;                       // 15
+    features[idx++] = jerk_mag_max;                       // 16
+
+    for (; idx < NUM_FEATURES; idx++) features[idx] = 0.0f;
+}
+"""
 
         if self.optimization == 'speed':
             # Simplified feature extraction for speed
@@ -688,7 +791,7 @@ void loop() {{
 
     def _get_platform_specific_code(self) -> dict:
         """Get platform-specific code snippets for IMU initialization and sensor reading."""
-        
+
         if self.platform == 'seeed_xiao':
             return {
                 'includes': """#include <LSM6DS3.h>
@@ -765,7 +868,7 @@ const float buffer_index_shift = WINDOW_SIZE * (1 - OVERLAP);""",
             Serial.print(predicted_class);
             Serial.println(")");"""
             }
-        
+
         elif self.platform == 'esp32':
             # ESP32 with MPU6050/MPU6886
             return {
@@ -806,7 +909,7 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
             Serial.print(predicted_class);
             Serial.println(")");"""
             }
-        
+
         else:  # Generic Arduino
             return {
                 'includes': """// Include your IMU library here
@@ -883,7 +986,8 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
             # Balanced approach - use 100 Hz for consistency with training data
             # Window size of 150 samples = 1.5 seconds at 100 Hz
             self.sampling_rate = 100  # Standard sampling rate for HAR
-            self.window_size = 150    # 1.5 second windows (increased from 75 for better accuracy)
+            # 1.5 second windows (increased from 75 for better accuracy)
+            self.window_size = 150
             self.feature_precision = 3  # Balanced precision
             self.debug_enabled = False  # No debugging by default
             self.buffer_optimization = False
