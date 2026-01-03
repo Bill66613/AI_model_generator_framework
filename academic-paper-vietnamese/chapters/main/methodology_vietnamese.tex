@@ -1,0 +1,406 @@
+\chapter{PHƯƠNG PHÁP LUẬN}
+\label{chap:methodology}
+
+\section{Tổng quan kiến trúc Framework}
+\label{sec:architecture-overview}
+
+Framework được đề xuất implement một pipeline end-to-end để tạo ra các mô hình AI cho theo dõi chuyển động trên edge devices. Kiến trúc hệ thống bao gồm năm thành phần chính:
+
+\begin{enumerate}
+    \item \textbf{Thu thập dữ liệu:} Ứng dụng mobile để capture dữ liệu IMU sensor
+    \item \textbf{Preprocessing:} X thập đường chuẩn hóa, làm sạch và phân đoạn dữ liệu
+    \item \textbf{Feature extraction:} Trích xuất orientation-invariant features
+    \item \textbf{Model training:} Huấn luyện SVM và Neural Network models
+    \item \textbf{Code generation:} Tự động sinh C++ code cho embedded platforms
+\end{enumerate}
+
+\section{Nền tảng phần cứng và Thu thập dữ liệu}
+\label{sec:hardware-data-collection}
+
+\subsection{Seeed XIAO nRF52840 Platform}
+Hệ thống sử dụng Seeed XIAO nRF52840 Sense làm platform thu thập dữ liệu và deployment:
+\begin{itemize}
+    \item \textbf{Processor:} ARM Cortex-M4F @ 64MHz
+    \item \textbf{Memory:} 256KB RAM, 1MB Flash
+    \item \textbf{IMU Sensor:} LSM6DS3 6-axis (3-axis accelerometer + 3-axis gyroscope)
+    \item \textbf{Communication:} I2C address 0x6A
+    \item \textbf{Power:} 5mW average consumption
+\end{itemize}
+
+\subsection{Cấu hình IMU Sensor}
+LSM6DS3 được cấu hình với các parameters sau:
+\begin{itemize}
+    \item Accelerometer range: $\pm$2g (độ nhạy phù hợp cho human motion)
+    \item Gyroscope range: $\pm$245 deg/s
+    \item Sampling rate: 100Hz (đủ để capture human motion < 20Hz)
+    \item Output data rate (ODR): 104Hz
+    \item Low-pass filter: Enabled để giảm noise tần số cao
+\end{itemize}
+
+\subsection{Protocol Thu thập dữ liệu}
+Firmware thu thập dữ liệu thực hiện các bước sau:
+
+\begin{enumerate}
+    \item Initialize I2C communication và verify IMU connection
+    \item Configure accelerometer và gyroscope registers
+    \item Đọc raw sensor readings mỗi 10ms (100Hz)
+    \item Convert accelerometer values sang m/s² (factor: 9.80665)
+    \item Convert gyroscope values sang degrees/second
+    \item Output CSV format: $aX, aY, aZ, gX, gY, gZ, Time_{seconds}$
+\end{enumerate}
+
+Dữ liệu được streaming qua USB Serial với baudrate 115200 và lưu trực tiếp vào CSV files trên computer.
+
+\section{Pipeline Xử lý Dữ liệu}
+\label{sec:preprocessing-pipeline}
+
+\subsection{Sliding Window Segmentation}
+Dữ liệu time-series được chia thành các windows với overlapping:
+
+\begin{itemize}
+    \item \textbf{Window size:} 50 samples (0.5 giây @ 100Hz)
+    \item \textbf{Overlap:} 50\% (25 samples)
+    \item \textbf{Step size:} 25 samples (0.25 giây)
+\end{itemize}
+
+Window size 50 samples được chọn dựa trên phân tích:
+\begin{itemize}
+    \item Đủ dài để capture 1 chu kỳ walking cycle ($\sim$0.5s)
+    \item Đủ ngắn để detect activity transitions nhanh
+    \item Balance giữa temporal resolution và computational cost
+\end{itemize}
+
+Overlap 50\% đảm bảo:
+\begin{itemize}
+    \item Tăng số training samples (data augmentation)
+    \item Smooth transitions giữa các windows
+    \item Capture được movements xảy ra ở biên windows
+\end{itemize}
+
+\subsection{Orientation-Invariant Feature Extraction}
+Để giải quyết vấn đề device orientation, system sử dụng magnitude-based features:
+
+\textbf{Bước 1: Tính Magnitude Vectors}
+\begin{align}
+\text{acc\_mag}[i] &= \sqrt{aX[i]^2 + aY[i]^2 + aZ[i]^2} \\
+\text{gyro\_mag}[i] &= \sqrt{gX[i]^2 + gY[i]^2 + gZ[i]^2}
+\end{align}
+
+\textbf{Bước 2: Tính Jerk (tốc độ thay đổi gia tốc)}
+\begin{equation}
+\text{jerk\_mag}[i] = |\text{acc\_mag}[i] - \text{acc\_mag}[i-1]| \times 100
+\end{equation}
+
+\textbf{Bước 3: Trích xuất 17 Statistical Features}
+
+Cho mỗi window, tính các features sau:
+
+\textit{Accelerometer magnitude features (6 features):}
+\begin{itemize}
+    \item $f_0$: acc\_mag\_mean = $\frac{1}{N}\sum_{i=1}^{N} \text{acc\_mag}[i]$
+    \item $f_1$: acc\_mag\_std = $\sqrt{\frac{1}{N}\sum_{i=1}^{N}(\text{acc\_mag}[i] - \mu)^2}$
+    \item $f_2$: acc\_mag\_rms = $\sqrt{\frac{1}{N}\sum_{i=1}^{N}\text{acc\_mag}[i]^2}$
+    \item $f_3$: acc\_mag\_energy = $\sum_{i=1}^{N}\text{acc\_mag}[i]^2$
+    \item $f_{12}$: acc\_mag\_min = $\min(\text{acc\_mag})$
+    \item $f_{13}$: acc\_mag\_max = $\max(\text{acc\_mag})$
+\end{itemize}
+
+\textit{Gyroscope magnitude features (6 features):}
+\begin{itemize}
+    \item $f_4$ đến $f_7$: gyro\_mag mean, std, rms, energy
+    \item $f_{14}$, $f_{15}$: gyro\_mag min, max
+\end{itemize}
+
+\textit{Jerk magnitude features (5 features):}
+\begin{itemize}
+    \item $f_8$ đến $f_{11}$: jerk\_mag mean, std, rms, energy
+    \item $f_{16}$: jerk\_mag\_max
+\end{itemize}
+
+\textbf{Feature Order Critical:} Thứ tự features phải khớp chính xác giữa training và deployment:
+\begin{equation}
+\mathbf{F} = [f_0, f_1, ..., f_{11}, f_{12}, f_{13}, f_{14}, f_{15}, f_{16}]
+\end{equation}
+
+\subsection{Feature Normalization}
+Sau khi extract features, áp dụng StandardScaler normalization:
+
+\begin{equation}
+f'_i = \frac{f_i - \mu_i}{\sigma_i}
+\end{equation}
+
+Trong đó:
+\begin{itemize}
+    \item $f_i$: raw feature value
+    \item $\mu_i$: mean của feature $i$ trên toàn bộ training set
+    \item $\sigma_i$: standard deviation của feature $i$
+    \item $f'_i$: normalized feature value
+\end{itemize}
+
+\textbf{Lưu ý quan trọng:} Scaler phải được fit trên RAW features (chưa normalize), không được fit trên dữ liệu đã normalize trước đó để tránh double normalization bug.
+
+\section{Machine Learning Models}
+\label{sec:ml-models}
+
+\subsection{Support Vector Machine (SVM)}
+\subsubsection{Thuật toán}
+SVM tìm hyperplane tối ưu phân tách các classes:
+
+\begin{equation}
+\mathbf{w}^T\mathbf{x} + b = 0
+\end{equation}
+
+Với RBF (Radial Basis Function) kernel:
+\begin{equation}
+K(\mathbf{x}_i, \mathbf{x}_j) = \exp(-\gamma ||\mathbf{x}_i - \mathbf{x}_j||^2)
+\end{equation}
+
+\subsubsection{Hyperparameters}
+\begin{itemize}
+    \item \textbf{C (regularization):} 1.0 (default) - balance margin và misclassification
+    \item \textbf{gamma:} 'scale' = $\frac{1}{n_{features} \times \text{var}(X)}$
+    \item \textbf{kernel:} 'rbf' - xử lý tốt non-linear relationships
+    \item \textbf{decision\_function\_shape:} 'ovr' (one-vs-rest) cho multi-class
+\end{itemize}
+
+\subsubsection{Training Process}
+\begin{enumerate}
+    \item Load normalized features và labels
+    \item Split data: 70\% train, 15\% validation, 15\% test
+    \item Fit SVM model với GridSearchCV để tìm best params
+    \item Evaluate trên validation set
+    \item Final evaluation trên test set
+\end{enumerate}
+
+\subsection{Multi-layer Neural Network}
+\subsubsection{Kiến trúc}
+3-layer feedforward neural network:
+
+\begin{itemize}
+    \item \textbf{Input layer:} 17 neurons (17 features)
+    \item \textbf{Hidden layer 1:} 100 neurons, ReLU activation
+    \item \textbf{Hidden layer 2:} 50 neurons, ReLU activation
+    \item \textbf{Output layer:} 5 neurons (5 classes), Linear activation
+\end{itemize}
+
+Architecture: 17 $\rightarrow$ 100 $\rightarrow$ 50 $\rightarrow$ 5
+
+\subsubsection{Forward Propagation}
+
+\textbf{Layer 1 (Input $\rightarrow$ Hidden1):}
+\begin{align}
+\mathbf{z}^{(1)} &= \mathbf{W}^{(1)}\mathbf{x} + \mathbf{b}^{(1)} \\
+\mathbf{a}^{(1)} &= \text{ReLU}(\mathbf{z}^{(1)}) = \max(0, \mathbf{z}^{(1)})
+\end{align}
+
+\textbf{Layer 2 (Hidden1 $\rightarrow$ Hidden2):}
+\begin{align}
+\mathbf{z}^{(2)} &= \mathbf{W}^{(2)}\mathbf{a}^{(1)} + \mathbf{b}^{(2)} \\
+\mathbf{a}^{(2)} &= \text{ReLU}(\mathbf{z}^{(2)})
+\end{align}
+
+\textbf{Layer 3 (Hidden2 $\rightarrow$ Output):}
+\begin{equation}
+\mathbf{y} = \mathbf{W}^{(3)}\mathbf{a}^{(2)} + \mathbf{b}^{(3)}
+\end{equation}
+
+Prediction:
+\begin{equation}
+\text{class} = \arg\max_i(\mathbf{y}_i)
+\end{equation}
+
+\subsubsection{Hyperparameters}
+\begin{itemize}
+    \item \textbf{Solver:} 'adam' - adaptive learning rate
+    \item \textbf{Learning rate:} 0.001 (initial)
+    \item \textbf{Max iterations:} 500
+    \item \textbf{Batch size:} 'auto' = min(200, n\_samples)
+    \item \textbf{Activation:} 'relu' (hidden), linear (output)
+    \item \textbf{Alpha (L2 regularization):} 0.0001
+\end{itemize}
+
+\section{Automatic Code Generation}
+\label{sec:code-generation}
+
+\subsection{Architecture Overview}
+Code generator tự động chuyển đổi trained scikit-learn models sang optimized C++ code.
+
+\textbf{Components:}
+\begin{itemize}
+    \item \textbf{BaseGenerator:} Abstract class với common functionality
+    \item \textbf{SVMGenerator:} Generate SVM-specific code
+    \item \textbf{NeuralNetworkGenerator:} Generate NN-specific code
+    \item \textbf{Template Engine:} Sử dụng string formatting với placeholders
+\end{itemize}
+
+\subsection{SVM Code Generation}
+
+\textbf{Bước 1: Extract Model Parameters}
+\begin{itemize}
+    \item Support vectors: $\mathbf{SV} \in \mathbb{R}^{n_{sv} \times 17}$
+    \item Dual coefficients: $\alpha_i$ for each support vector
+    \item Intercepts: $b_j$ for each class pair
+    \item Kernel parameters: $\gamma$
+\end{itemize}
+
+\textbf{Bước 2: Generate Prediction Function}
+\begin{verbatim}
+int svm_predict(float features[17]) {
+    // Step 1: Normalize features
+    float scaled[17];
+    for(int i=0; i<17; i++)
+        scaled[i] = (features[i] - means[i]) / stds[i];
+    
+    // Step 2: Compute RBF kernel với support vectors
+    float decision_values[num_classes];
+    for(int c=0; c<num_classes; c++) {
+        float sum = 0;
+        for(int sv=0; sv<n_support_vectors; sv++) {
+            float diff_sq = 0;
+            for(int f=0; f<17; f++) {
+                float diff = scaled[f] - support_vectors[sv][f];
+                diff_sq += diff * diff;
+            }
+            float kernel = exp(-gamma * diff_sq);
+            sum += dual_coef[sv] * kernel;
+        }
+        decision_values[c] = sum + intercepts[c];
+    }
+    
+    // Step 3: Return class with highest score
+    return argmax(decision_values);
+}
+\end{verbatim}
+
+\subsection{Neural Network Code Generation}
+
+\textbf{Bước 1: Extract Weight Matrices}
+\begin{itemize}
+    \item $\mathbf{W}^{(1)} \in \mathbb{R}^{17 \times 100}$: input $\rightarrow$ hidden1
+    \item $\mathbf{W}^{(2)} \in \mathbb{R}^{100 \times 50}$: hidden1 $\rightarrow$ hidden2
+    \item $\mathbf{W}^{(3)} \in \mathbb{R}^{50 \times 5}$: hidden2 $\rightarrow$ output
+    \item Biases: $\mathbf{b}^{(1)}, \mathbf{b}^{(2)}, \mathbf{b}^{(3)}$
+\end{itemize}
+
+\textbf{Bước 2: Generate C++ Arrays}
+\begin{verbatim}
+const float input_weights[17][100] = { ... };
+const float hidden_biases[100] = { ... };
+const float hidden2_weights[100][50] = { ... };
+const float hidden2_biases[50] = { ... };
+const float final_weights[50][5] = { ... };
+const float final_biases[5] = { ... };
+\end{verbatim}
+
+\textbf{Bước 3: Generate Inference Function}
+\begin{verbatim}
+int nn_predict(float features[17]) {
+    // Normalize
+    float scaled[17];
+    normalize(features, scaled);
+    
+    // Layer 1
+    float hidden1[100];
+    for(int h=0; h<100; h++) {
+        float sum = hidden_biases[h];
+        for(int i=0; i<17; i++)
+            sum += scaled[i] * input_weights[i][h];
+        hidden1[h] = relu(sum);
+    }
+    
+    // Layer 2
+    float hidden2[50];
+    for(int h=0; h<50; h++) {
+        float sum = hidden2_biases[h];
+        for(int i=0; i<100; i++)
+            sum += hidden1[i] * hidden2_weights[i][h];
+        hidden2[h] = relu(sum);
+    }
+    
+    // Output layer
+    float output[5];
+    for(int o=0; o<5; o++) {
+        float sum = final_biases[o];
+        for(int h=0; h<50; h++)
+            sum += hidden2[h] * final_weights[h][o];
+        output[o] = sum;
+    }
+    
+    return argmax(output);
+}
+\end{verbatim}
+
+\subsection{Memory Optimization Techniques}
+
+\textbf{1. Fixed-point Arithmetic (Optional):}
+Chuyển float32 sang int16:
+\begin{equation}
+\text{int16\_value} = \text{round}(\text{float\_value} \times 2^{14})
+\end{equation}
+
+Giảm memory 50\% nhưng cần verify accuracy impact.
+
+\textbf{2. Weight Pruning:}
+Loại bỏ weights < threshold (e.g., $|w| < 0.01$):
+\begin{itemize}
+    \item Giảm computation
+    \item Tăng sparsity cho compression
+    \item Trade-off: có thể giảm accuracy
+\end{itemize}
+
+\textbf{3. Const Arrays in Flash:}
+Sử dụng \texttt{const} keyword để lưu weights vào Flash thay vì RAM:
+\begin{verbatim}
+const float PROGMEM weights[100][50] = { ... };
+\end{verbatim}
+
+\section{Deployment Workflow}
+\label{sec:deployment-workflow}
+
+\subsection{Complete Pipeline}
+\begin{enumerate}
+    \item \textbf{Data Collection:} Thu thập IMU data với XIAO, lưu CSV
+    \item \textbf{Preprocessing:} Load CSV, sliding window, extract features
+    \item \textbf{Training:} Train SVM/NN, optimize hyperparameters
+    \item \textbf{Validation:} Evaluate accuracy, confusion matrix
+    \item \textbf{Code Generation:} Generate C++ .h và .cpp files
+    \item \textbf{Integration:} Include vào Arduino project
+    \item \textbf{Compilation:} Build với Arduino IDE
+    \item \textbf{Upload:} Flash lên XIAO board
+    \item \textbf{Testing:} Verify real-time predictions
+\end{enumerate}
+
+\subsection{Generated Code Structure}
+\begin{verbatim}
+har_model_xiao_f17_c5/
+├── har_model_xiao_f17_c5.h      # Header với declarations
+├── har_model_xiao_f17_c5.cpp    # Implementation
+└── README.md                     # Usage instructions
+\end{verbatim}
+
+\textbf{Header file contains:}
+\begin{itemize}
+    \item Model constants (NUM\_FEATURES, NUM\_CLASSES)
+    \item Function declarations (har\_predict, har\_extract\_features)
+    \item Activity name mappings
+\end{itemize}
+
+\textbf{Implementation file contains:}
+\begin{itemize}
+    \item Feature scaling parameters (means, stds)
+    \item Model weights (SVM support vectors hoặc NN weights)
+    \item Feature extraction logic
+    \item Prediction function
+\end{itemize}
+
+\section{Tóm tắt}
+Chương này đã trình bày chi tiết methodology của framework, bao gồm:
+\begin{itemize}
+    \item Hardware platform và data collection protocol
+    \item Preprocessing pipeline với orientation-invariant features
+    \item Machine learning algorithms (SVM, Neural Network)
+    \item Automatic code generation cho embedded deployment
+    \item Optimization techniques để giảm memory footprint
+\end{itemize}
+
+Chương tiếp theo sẽ present kết quả thử nghiệm và đánh giá hiệu năng của framework.

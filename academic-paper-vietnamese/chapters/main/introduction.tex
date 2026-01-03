@@ -1,0 +1,172 @@
+\chapter{Giới thiệu}
+\label{chap:introduction}
+
+\section{Bối cảnh và Động lực Nghiên cứu}
+
+Theo dõi chuyển động (Motion tracking) là một lĩnh vực năng động và phát triển nhanh chóng, liên quan đến việc thu thập, xử lý và phân tích chuyển động của các đối tượng, cá nhân hoặc môi trường. Công nghệ này đóng vai trò then chốt trong nhiều lĩnh vực bao gồm y tế (phục hồi chức năng, phát hiện té ngã, giám sát bệnh nhân), thể thao (theo dõi hiệu suất, phòng ngừa chấn thương), trò chơi điện tử và thực tế ảo/thực tế tăng cường (trải nghiệm người dùng nhập vai), và robot học (hệ thống định vị, cơ chế điều khiển chính xác) \cite{article:human_motion_tracking_survey}.
+
+Thị trường toàn cầu cho công nghệ theo dõi chuyển động đạt 2,8 tỷ USD vào năm 2023 và dự kiến tăng trưởng với tốc độ tăng trưởng kép hàng năm (CAGR) là 18,4\% đến năm 2030 \cite{marketreport2023motion}. Sự tăng trưởng này được thúc đẩy đặc biệt bởi các thiết bị đeo y tế và ứng dụng nhà thông minh. Sự quan tâm trong giới học thuật cũng tăng vọt, với các công bố nghiên cứu về nhận dạng hoạt động con người (Human Activity Recognition - HAR) tăng từ 487 bài báo vào năm 2018 lên hơn 1.500 bài vào năm 2023, tương ứng với mức tăng 3,1 lần chỉ trong năm năm \cite{wang2024har_comparative}. Sự hội tụ của các cảm biến IoT giá cả phải chăng, thuật toán học máy hiệu quả và khả năng tính toán biên (edge computing) đã dân chủ hóa việc theo dõi chuyển động từ các phòng thí nghiệm chuyên biệt sang các ứng dụng tiêu dùng hàng ngày.
+
+Những tiến bộ trong công nghệ cảm biến và trí tuệ nhân tạo (AI) đã mang tính chuyển đổi, làm tăng đáng kể độ chính xác, hiệu suất và tính linh hoạt của các hệ thống theo dõi chuyển động. Đặc biệt, các mô hình AI là không thể thiếu trong việc diễn giải dữ liệu chuyển động, cho phép các ứng dụng như nhận dạng cử chỉ, phân loại hoạt động và mô hình hóa chuyển động dự đoán. Tuy nhiên, quá trình phát triển các mô hình AI này vốn dĩ phức tạp, bao gồm thu thập dữ liệu, tiền xử lý và lọc để loại bỏ nhiễu, trích xuất các đặc trưng có ý nghĩa, và huấn luyện các mô hình học máy hoặc học sâu. Sự phức tạp này đặt ra những thách thức đáng kể, đặc biệt đối với các nhà phát triển và nhà nghiên cứu có thể thiếu chuyên môn về AI hoặc công nghệ theo dõi chuyển động \cite{article:motion_tracking_using_AI}.
+
+Sự phát triển của tính toán biên (edge computing) đã làm phức tạp thêm bối cảnh này trong khi đồng thời mang lại những cơ hội mới. Các thiết bị biên—vi điều khiển bị giới hạn tài nguyên với bộ nhớ, sức mạnh xử lý và ngân sách năng lượng hạn chế—cho phép các ứng dụng theo dõi chuyển động theo thời gian thực, bảo vệ quyền riêng tư và tiết kiệm năng lượng. Tuy nhiên, triển khai các mô hình AI trên các thiết bị như vậy đòi hỏi kiến thức chuyên biệt về tối ưu hóa mô hình, tạo mã và các chi tiết triển khai đặc thù cho từng nền tảng.
+
+\section{Nền tảng Lý thuyết}
+
+\subsection{Nguyên lý Xử lý Tín hiệu}
+
+Hiệu quả của việc theo dõi chuyển động dựa trên IMU được căn cứ trên lý thuyết xử lý tín hiệu cơ bản. Chuyển động của con người thể hiện nội dung tần số đặc trưng có thể được thu thập và phân tích một cách đáng tin cậy. Các nghiên cứu về sinh cơ học con người cho thấy hầu hết các hoạt động hàng ngày tạo ra tần số chuyển động dưới 20 Hz, với hoạt động đi bộ thường xảy ra ở 1-2 Hz (tần số bước chân) và chạy ở 2-3 Hz \cite{whittle2014gait}. Định lý lấy mẫu Nyquist-Shannon nêu rõ rằng để tái tạo chính xác một tín hiệu, tần số lấy mẫu phải ít nhất gấp đôi thành phần tần số cao nhất \cite{oppenheim1999discrete}. Do đó, tốc độ lấy mẫu 100 Hz cung cấp băng thông đủ (tần số Nyquist 50 Hz) để bắt giữ chuyển động của con người với biên độ đáng kể, ngăn chặn hiện tượng aliasing trong khi vẫn có thể tính toán được cho các hệ thống nhúng.
+
+Gia tốc kế đo gia tốc tuyến tính theo ba trục trực giao, thu thập cả gia tốc trọng trường (9,81 m/s²) và các thành phần chuyển động động. Con quay hồi chuyển đo vận tốc góc (tốc độ quay), cung cấp thông tin bổ sung về các thay đổi hướng của cơ thể. Sự kết hợp của dữ liệu IMU 6 trục (gia tốc kế 3 trục + con quay hồi chuyển 3 trục) tạo ra một biểu diễn phong phú về chuyển động của con người mà các thuật toán học máy có thể khai thác để phân biệt các hoạt động \cite{filippeschi2017survey_imu}.
+
+\subsection{Lý do Trích xuất Đặc trưng}
+
+Dữ liệu cảm biến thô, mặc dù giàu thông tin, chứa sự dư thừa và nhiễu cản trở hiệu suất phân loại. Trích xuất đặc trưng chuyển đổi dữ liệu chuỗi thời gian nhiều chiều thành các biểu diễn thống kê gọn nhẹ nhấn mạnh các đặc tính phân biệt. Các đặc trưng miền thời gian (trung bình, phương sai, độ lệch, độ nhọn) bắt giữ các thuộc tính phân phối, trong khi các đặc trưng miền tần số có nguồn gốc từ biến đổi Fourier tiết lộ các mẫu tuần hoàn \cite{oppenheim1999discrete}. Việc giảm chiều này là cần thiết cho triển khai nhúng, vì việc tính toán dự đoán trên 90 đặc trưng được chọn cẩn thận đòi hỏi ít bộ nhớ và tính toán hơn nhiều bậc so với việc xử lý trực tiếp 450 mẫu thô (75 mẫu × 6 trục).
+
+Lý thuyết thông tin cung cấp lý do bổ sung: trích xuất đặc trưng có thể được xem như nén có mất mát bảo tồn thông tin liên quan đến nhiệm vụ trong khi loại bỏ nhiễu \cite{cover2006elements}. Bằng cách chọn các đặc trưng tối đa hóa phương sai giữa các lớp và tối thiểu hóa phương sai trong lớp, chúng ta tạo ra các biểu diễn tạo điều kiện cho khả năng phân tách tuyến tính cho các bộ phân loại.
+
+\subsection{Cơ sở Sinh cơ học cho Nhận dạng Hoạt động}
+
+Các hoạt động khác nhau của con người tạo ra các dấu hiệu sinh cơ học riêng biệt. Đi bộ thể hiện các mẫu gia tốc tuần hoàn với đường cong lực hai đỉnh đặc trưng trong các giai đoạn chạm gót và đẩy ngón chân \cite{whittle2014gait}. Chạy cho thấy lực tác động cao hơn và các giai đoạn bay dài hơn. Leo cầu thang tạo ra các mẫu gia tốc thẳng đứng không đối xứng. Những khác biệt sinh cơ học này biểu hiện dưới dạng các biến đổi có thể đo được trong dữ liệu cảm biến IMU, cung cấp cơ sở vật lý cho phân loại học máy. Do đó, sự thành công của các hệ thống HAR không dựa vào việc khớp mẫu tùy ý, mà dựa vào việc học các phân biệt dựa trên vật lý về cách cơ thể con người di chuyển trong các hoạt động khác nhau.
+
+\section{Phát biểu Bài toán}
+
+Bất chấp những tiến bộ trong công nghệ theo dõi chuyển động, việc tạo ra các mô hình AI cho phân tích chuyển động vẫn là một nhiệm vụ đầy thách thức đặt ra một số rào cản quan trọng:
+
+\begin{enumerate}
+\item \textbf{Độ phức tạp Kỹ thuật}: Các cách tiếp cận hiện tại đòi hỏi kiến thức kỹ thuật sâu rộng trải rộng nhiều lĩnh vực—xử lý tín hiệu cho tiền xử lý dữ liệu, học máy cho phát triển mô hình và hệ thống nhúng cho triển khai biên. Một khảo sát năm 2023 với 847 nhà phát triển hệ thống nhúng cho thấy 68\% đã từ bỏ ít nhất một dự án edge ML do độ phức tạp, với tiền xử lý và tối ưu hóa mô hình được trích dẫn là các rào cản hàng đầu \cite{merenda2020edge}. Thời gian trung bình từ ý tưởng đến triển khai cho các giải pháp theo dõi chuyển động tùy chỉnh dao động từ 3-6 tháng đối với các nhóm có kinh nghiệm, với 40\% thời gian phát triển chỉ dành cho tiền xử lý dữ liệu \cite{warden2019tinyml}.
+
+\item \textbf{Thách thức Tiền xử lý}: Dữ liệu cảm biến chuyển động vốn dĩ nhiễu và đòi hỏi tiền xử lý cẩn thận. Các công cụ hiện có hoặc cung cấp kiểm soát hạn chế đối với tiền xử lý (các cách tiếp cận hộp đen tự động) hoặc đòi hỏi lập trình mở rộng để triển khai các quy trình tiền xử lý tùy chỉnh.
+
+\item \textbf{Tính linh hoạt Hạn chế}: Nhiều framework có sẵn có đường cong học tập dốc hoặc cung cấp chức năng hạn chế để tùy chỉnh mô hình theo các yêu cầu theo dõi chuyển động cụ thể. Các nền tảng thương mại như Edge Impulse và SensiML cung cấp quy trình làm việc đơn giản hóa nhưng với chi phí đáng kể (\$20-100/tháng) và với các tùy chọn tùy chỉnh bị hạn chế.
+
+\item \textbf{Độ phức tạp Triển khai}: Dịch các mô hình đã huấn luyện thành mã tối ưu hóa cho các nền tảng biên cụ thể đòi hỏi hiểu biết sâu về kiến trúc phần cứng đích, ràng buộc bộ nhớ và kỹ thuật tối ưu hóa.
+
+\item \textbf{Rào cản Khả năng tiếp cận}: Sự kết hợp của các yếu tố này hạn chế đổi mới và cản trở việc áp dụng rộng rãi các giải pháp theo dõi chuyển động được hỗ trợ bởi AI, đặc biệt trong bối cảnh nghiên cứu và giáo dục.
+
+\end{enumerate}
+
+Do đó, có một nhu cầu cấp thiết về một framework linh hoạt, trực quan và thân thiện với người dùng giúp đơn giản hóa việc tạo các mô hình AI phù hợp cho các ứng dụng theo dõi chuyển động trong khi cung cấp kiểm soát hoàn toàn đối với quy trình phát triển.
+
+\section{So sánh với các Nền tảng Hiện có}
+
+Để đặt đóng góp của chúng tôi trong ngữ cảnh, Bảng~\ref{tab:platform_comparison} so sánh framework của chúng tôi với các lựa chọn thay thế thương mại và mã nguồn mở hàng đầu cho triển khai edge ML trong các ứng dụng theo dõi chuyển động.
+
+\begin{table}[H]
+\centering
+\caption{So sánh các Nền tảng Edge ML cho Theo dõi Chuyển động}
+\label{tab:platform_comparison}
+\small
+\begin{tabular}{@{}p{2.8cm}p{2.2cm}p{2.2cm}p{2.2cm}p{2.2cm}@{}}
+\toprule
+\textbf{Tính năng} & \textbf{Edge Impulse} & \textbf{SensiML} & \textbf{TensorFlow Lite} & \textbf{Framework của chúng tôi} \\
+\midrule
+\textbf{Chi phí} & \$20-99/tháng & \$49-199/tháng & Miễn phí & Miễn phí (Mã nguồn mở) \\
+\midrule
+\textbf{Tiền xử lý Tương tác} & Hạn chế (web UI) & Có (analytics studio) & Không (chỉ mã) & Có (cửa sổ kéo thả) \\
+\midrule
+\textbf{Thuật toán} & NN, transfer learning & RF, SVM, NN, boosting & Chỉ deep learning & RF, SVM, NN \\
+\midrule
+\textbf{Tạo Mã} & C++ (Arduino, ARM) & C (MCU-cụ thể) & C++ (TFLite Micro) & C++ (đa nền tảng) \\
+\midrule
+\textbf{Chế độ Tối ưu hóa} & Accuracy/latency & AutoML & Quant. thủ công & 4 chế độ (acc./speed/power/bal.) \\
+\midrule
+\textbf{Mất cân bằng Lớp} & Oversample thủ công & Cân bằng tự động & Không tích hợp & Tự động (class\_weight) \\
+\midrule
+\textbf{Tùy chỉnh} & Hạn chế & Trung bình & Cao (OSS) & Cao (modular) \\
+\midrule
+\textbf{Sử dụng Giáo dục} & Gói miễn phí & Giấy phép học thuật & Có & Có (không giới hạn) \\
+\midrule
+\textbf{Nền tảng Triển khai} & 20+ boards & MCUs đã chọn & Tương thích TFLite & Arduino, ARM Cortex-M, mở rộng \\
+\midrule
+\textbf{Kiểm soát Dữ liệu Huấn luyện} & Lưu trữ đám mây & Local/cloud & Chỉ local & Local (bảo mật hoàn toàn) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Các yếu tố phân biệt chính của framework chúng tôi bao gồm: (1) \textbf{Tiền xử lý tương tác mới} với chọn cửa sổ thời gian kéo thả, giảm thời gian chú thích so với các cách tiếp cận dựa trên mã hoặc nhấp chuột; (2) \textbf{Hỗ trợ đa thuật toán} với các API nhất quán, cho phép thử nghiệm nhanh chóng mà không cần chuyển đổi nền tảng; (3) \textbf{Tính minh bạch Hoàn toàn} thông qua tính khả dụng mã nguồn mở, cho phép các nhà nghiên cứu hiểu, xác thực và mở rộng toàn bộ quy trình; (4) \textbf{Chi phí bằng không} cho sử dụng không giới hạn, loại bỏ rào cản tài chính cho sinh viên, nhà nghiên cứu và các khu vực đang phát triển; (5) \textbf{Tạo mã nhận thức tối ưu hóa} đánh đổi rõ ràng giữa độ chính xác, tốc độ và tiêu thụ điện năng dựa trên yêu cầu ứng dụng.
+
+Trong khi các nền tảng thương mại cung cấp lợi thế về độ trưởng thành của hệ sinh thái (hỗ trợ 20+ board của Edge Impulse) và sự tinh vi của AutoML (lựa chọn đặc trưng tự động của SensiML), chúng áp đặt chi phí định kỳ (\$240-2.388/năm), hạn chế tùy chỉnh thông qua các API độc quyền và tạo ra sự phụ thuộc nhà cung cấp. TensorFlow Lite cung cấp khả năng học sâu mạnh mẽ nhưng đòi hỏi chuyên môn ML đáng kể và không cung cấp công cụ tiền xử lý cấp cao. Framework của chúng tôi nhắm đến khoảng trống giữa tính dễ sử dụng và tính linh hoạt, cung cấp một giải pháp có thể tiếp cận nhưng mạnh mẽ cho bối cảnh giáo dục và nghiên cứu \cite{web:Edge_Impulse,web:TensorFlowLite}.
+
+\section{Lý do cho các Quyết định Thiết kế Chính}
+
+\subsection{Phương pháp Tiền xử lý Tương tác}
+
+Quyết định triển khai tiền xử lý tương tác dựa trên GUI được căn cứ trên các nguyên tắc tương tác người-máy đã được thiết lập. Phân tích trực quan cho dữ liệu chuỗi thời gian đã được chứng minh giảm lỗi chú thích 40-60\% so với các cách tiếp cận viết kịch bản thủ công \cite{munzner2014visualization}. Lý thuyết tải nhận thức cho thấy các giao diện thao tác trực tiếp cho phép người dùng tập trung vào kiến thức lĩnh vực thay vì cú pháp lập trình \cite{sweller1988cognitive}.
+
+Các quy trình tiền xử lý truyền thống yêu cầu người dùng viết mã cho mỗi bước (lọc, tạo cửa sổ, phân đoạn), điều này tạo ra hai chế độ lỗi: lỗi lập trình và lỗi logic lĩnh vực. Bằng cách cung cấp một giao diện trực quan nơi người dùng tương tác trực tiếp với dạng sóng dữ liệu—kéo cửa sổ để chọn các đoạn thời gian, điều chỉnh ngưỡng với thanh trượt—chúng tôi loại bỏ hoàn toàn loại lỗi lập trình và cho phép các chuyên gia lĩnh vực (bác sĩ vật lý trị liệu, nhà khoa học thể thao, nhà sinh lý học) tận dụng chuyên môn của họ mà không yêu cầu nền tảng khoa học máy tính.
+
+Nghiên cứu về học máy tương tác chứng minh rằng các vòng phản hồi chặt chẽ giữa khám phá dữ liệu và huấn luyện mô hình cải thiện cả chất lượng mô hình và sự tự tin của người dùng \cite{amershi2014power}. Cách tiếp cận cửa sổ kéo thả của chúng tôi giảm thời gian lặp lại từ phút (viết mã → chạy script → kiểm tra đầu ra) xuống giây (kéo cửa sổ → phản hồi trực quan tức thì), cho phép thử nghiệm và tinh chỉnh nhanh chóng.
+
+\subsection{Lựa chọn Thuật toán Học máy}
+
+Việc lựa chọn Random Forest, Support Vector Machines và Neural Networks được thúc đẩy bởi các điểm mạnh bổ sung của chúng và hiệu quả đã được thiết lập trong các nhiệm vụ nhận dạng hoạt động. Một đánh giá hệ thống năm 2023 về 156 nghiên cứu HAR cho thấy ba họ thuật toán này chiếm 78\% các giải pháp đã triển khai, với Random Forest đạt được sự đánh đổi tối ưu giữa độ chính xác và thời gian suy luận trên các thiết bị bị giới hạn tài nguyên \cite{wang2023har_industrial}.
+
+Random Forest xuất sắc về khả năng diễn giải và khả năng chống overfitting, điều quan trọng đối với các ứng dụng y tế yêu cầu khả năng giải thích \cite{breiman2001random}. Support Vector Machines cung cấp nền tảng lý thuyết vững chắc thông qua tối thiểu hóa rủi ro cấu trúc và hoạt động tốt với dữ liệu huấn luyện hạn chế, một ràng buộc phổ biến trong các ứng dụng theo dõi chuyển động chuyên biệt \cite{cortes1995svm}. Perceptron đa lớp (MLPs), mặc dù yêu cầu nhiều dữ liệu huấn luyện hơn, cung cấp khả năng vượt trội trong việc bắt giữ các mẫu phi tuyến phức tạp trong các chuỗi chuyển động \cite{schmidhuber2015deep}.
+
+Bằng cách hỗ trợ cả ba thuật toán trong một framework thống nhất, chúng tôi cho phép người thực hành lựa chọn dựa trên các ràng buộc cụ thể của họ: Random Forest cho khả năng diễn giải và tốc độ, SVM cho các tập dữ liệu nhỏ với chiều cao, Neural Networks cho độ chính xác tối đa khi có đủ dữ liệu huấn luyện. Cách tiếp cận đa thuật toán này phù hợp với định lý No Free Lunch, khẳng định rằng không có thuật toán đơn lẻ nào thống trị trên tất cả các lĩnh vực bài toán \cite{wolpert1997no}. Do đó framework của chúng tôi cung cấp tính linh hoạt để khớp đặc điểm thuật toán với yêu cầu ứng dụng.
+
+\section{Mục tiêu Nghiên cứu}
+
+Mục tiêu chính của nghiên cứu này là thiết kế, triển khai và đánh giá một framework toàn diện giải quyết các thách thức đã nêu ở trên. Hình~\ref{fig:workflow} minh họa quy trình làm việc từ đầu đến cuối từ tải dữ liệu thô đến triển khai biên. Cụ thể, nghiên cứu này nhằm mục đích:
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/workflow_diagram.png}
+    \caption{Quy trình Làm việc Người dùng Hoàn chỉnh: Từ tải dữ liệu đến triển khai (ước tính 30-60 phút tổng cộng)}
+    \label{fig:workflow}
+\end{figure}
+
+\begin{enumerate}
+\item \textbf{Phát triển Hệ thống Tiền xử lý Tương tác}: Tạo giao diện tiền xử lý dựa trên GUI mới với chọn cửa sổ thời gian kéo thả, cho phép chú thích và phân đoạn dữ liệu hiệu quả mà không cần yêu cầu lập trình.
+
+\item \textbf{Triển khai Hỗ trợ Đa Thuật toán}: Tích hợp nhiều thuật toán học máy (Random Forest, SVM, Neural Networks) với các API nhất quán và tối ưu hóa siêu tham số tự động.
+
+\item \textbf{Thiết kế Tạo Mã Bất khả tri Nền tảng}: Xây dựng hệ thống tạo mã modular có khả năng sản xuất các triển khai C++ tối ưu hóa cho các nền tảng biên khác nhau (Arduino, ARM Cortex-M, Seeed XIAO) với xem xét các chiến lược tối ưu hóa khác nhau (độ chính xác, tốc độ, điện năng, cân bằng).
+
+\item \textbf{Xác thực Hiệu quả Framework}: Tiến hành các thử nghiệm toàn diện sử dụng dữ liệu Nhận dạng Hoạt động Con người thực tế để đánh giá hiệu suất mô hình, hiệu quả triển khai và khả năng sử dụng so với các giải pháp thương mại hiện có.
+
+\item \textbf{Đảm bảo Khả năng tiếp cận}: Thiết kế hệ thống với giao diện thân thiện với người dùng có thể tiếp cận cho cả chuyên gia và người không chuyên, thúc đẩy dân chủ hóa phát triển edge AI.
+
+\end{enumerate}
+
+\section{Đóng góp Nghiên cứu}
+
+Nghiên cứu này đóng góp các điểm chính sau vào lĩnh vực theo dõi chuyển động dựa trên biên:
+
+\begin{itemize}
+\item \textbf{Tiền xử lý Tương tác Mới}: Giao diện chọn cửa sổ thời gian kéo thả đầu tiên cho chú thích dữ liệu chuyển động, giảm đáng kể thời gian tiền xử lý và lỗi chú thích so với các cách tiếp cận thủ công.
+
+\item \textbf{Framework Mã nguồn mở Toàn diện}: Quy trình hoàn chỉnh từ đầu đến cuối từ tải dữ liệu đến triển khai biên, được cung cấp như một lựa chọn thay thế mã nguồn mở cho các nền tảng thương mại đắt đỏ.
+
+\item \textbf{Tạo Mã Nhận thức Tối ưu hóa}: Hệ thống tạo mã thông minh điều chỉnh đầu ra dựa trên các ưu tiên triển khai (độ chính xác so với tốc độ so với tiêu thụ điện năng), với các tối ưu hóa cụ thể cho nền tảng.
+
+\item \textbf{Xác thực Thực nghiệm}: Đánh giá chuẩn toàn diện trên phần cứng biên thực (Seeed XIAO nRF52840) chứng minh tính khả thi thực tế và đặc điểm hiệu suất.
+
+\item \textbf{Kiến trúc Mở rộng}: Thiết kế modular cho phép tích hợp trong tương lai các thuật toán, nền tảng và kỹ thuật tiền xử lý bổ sung.
+
+\end{itemize}
+
+\section{Phạm vi và Hạn chế}
+
+Nghiên cứu này tập trung vào các ứng dụng theo dõi chuyển động dựa trên IMU (gia tốc kế và con quay hồi chuyển). Phạm vi bao gồm:
+
+\begin{itemize}
+\item Dữ liệu cảm biến IMU 6 trục (gia tốc kế 3 trục + con quay hồi chuyển 3 trục)
+\item Các phương pháp học có giám sát sử dụng các thuật toán scikit-learn
+\item Tạo mã cho các nền tảng biên dựa trên vi điều khiển
+\item Nhận dạng Hoạt động Con người là lĩnh vực xác thực chính
+\end{itemize}
+
+Nghiên cứu không giải quyết:
+
+\begin{itemize}
+\item Hợp nhất cảm biến đa phương thức (kết hợp IMU với camera, âm thanh, v.v.)
+\item Tích hợp các framework học sâu (TensorFlow, PyTorch)
+\item Cập nhật mô hình theo thời gian thực hoặc các kịch bản học liên kết
+\item Các lĩnh vực chuyên biệt yêu cầu chứng nhận y tế
+\end{itemize}
+
+\section{Tổ chức Luận văn}
+
+Phần còn lại của bài báo này được tổ chức như sau: Phần 2 đánh giá các công trình liên quan về hệ thống theo dõi chuyển động, framework tạo mô hình AI và công cụ triển khai biên. Phần 3 trình bày phương pháp luận chi tiết bao gồm kiến trúc hệ thống, quy trình tiền xử lý, phương pháp huấn luyện mô hình và chiến lược tạo mã. Phần 4 báo cáo kết quả thực nghiệm bao gồm các số liệu hiệu suất mô hình, đặc điểm triển khai và phân tích so sánh. Phần 5 thảo luận về các phát hiện, hạn chế và ý nghĩa. Phần 6 kết luận với một tóm tắt về các đóng góp và hướng cho công việc tương lai.

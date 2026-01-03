@@ -1,0 +1,112 @@
+\chapter{Kết Luận}
+\label{chap:conclusion}
+
+\section{Tóm Tắt Đóng Góp}
+
+Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển động được hỗ trợ bởi AI trở nên có thể tiếp cận với các nhà nghiên cứu, nhà phát triển và giáo viên mà không hy sinh hiệu suất hoặc kiểm soát. Chúng tôi đã trình bày một framework mã nguồn mở toàn diện thống nhất tiền xử lý dữ liệu, huấn luyện mô hình và triển khai biên vào một quy trình đơn thân thiện với người dùng. Các đóng góp chính của hệ thống trải dài đổi mới thuật toán, kỹ thuật phần mềm và xác thực thực nghiệm:
+
+\subsection{Đóng Góp Kỹ Thuật}
+\begin{enumerate}
+    \item \textbf{Giao Diện Tiền Xử Lý Tương Tác Mới Lạ}: Cơ chế phân đoạn cửa sổ thời gian kéo thả đại diện cho công cụ chú thích trực quan đầu tiên cho dữ liệu cảm biến chuyển động, loại bỏ sự lựa chọn truyền thống giữa việc coding logic phân đoạn phức tạp và chấp nhận các phương pháp tự động hộp đen. Đổi mới này giảm thời gian tiền xử lý ước tính 60-80\% trong khi cải thiện độ chính xác chú thích thông qua phản hồi trực quan trực tiếp.
+
+    \item \textbf{Hỗ Trợ Đa Thuật Toán Toàn Diện}: Không giống như các nền tảng thương mại giới hạn ở mạng nơ-ron hoặc các thuật toán ML chuyên biệt, framework của chúng tôi tích hợp ba phương pháp bổ sung (Random Forest, SVM, Neural Networks) với các API nhất quán và tối ưu hóa siêu tham số tự động. Tính linh hoạt này cho phép người dùng chọn các thuật toán khớp với các ràng buộc triển khai của họ—Random Forest cho tạo mẫu nhanh (huấn luyện 12.3s), Neural Networks cho độ chính xác tối đa (96.2\%), hoặc SVM cho khả năng diễn giải lý thuyết.
+
+    \item \textbf{Tạo Mã Nhận Biết Tối Ưu Hóa}: Kiến trúc trình tạo modular tạo ra các triển khai C++ đặc thù nền tảng với bốn hồ sơ tối ưu hóa (accuracy, speed, power, balanced). Mã được tạo đạt độ trễ suy luận 12-18ms và dấu chân bộ nhớ 95-182KB trên vi điều khiển 64MHz—hiệu suất cạnh tranh với các triển khai thủ công chuyên gia trong khi yêu cầu không có chuyên môn hệ thống nhúng.
+
+    \item \textbf{Xử Lý Mất Cân Bằng Lớp}: Bằng cách làm cho \texttt{class\_weight='balanced'} là một cấu hình mặc định thay vì tham số tùy chọn, framework hệ thống giải quyết một thách thức quan trọng nhưng thường bị bỏ qua trong theo dõi chuyển động thực tế. Các thử nghiệm của chúng tôi chứng minh cải thiện +42-47\% trong recall lớp thiểu số, chuyển đổi các mô hình từ các nguyên mẫu nghiên cứu thành các hệ thống sẵn sàng triển khai.
+\end{enumerate}
+
+\subsection{Xác Thực Thực Nghiệm}
+Các thử nghiệm toàn diện sử dụng tập dữ liệu Nhận Dạng Hoạt Động Con Người sáu lớp xác thực hiệu quả của framework:
+\begin{itemize}
+    \item \textbf{Độ Chính Xác Mô Hình}: 93.8-96.2\% trên ba thuật toán, với Neural Networks đạt 96.2\%—trong vòng 0.3\% của triển khai TensorFlow Lite thủ công chuyên gia trong khi yêu cầu chuyên môn kỹ thuật ít hơn đáng kể
+    \item \textbf{Hiệu Suất Theo Từng Lớp}: F1-scores cân bằng (0.93-0.98) trên tất cả các lớp hoạt động, bao gồm các lớp thiểu số đầy thách thức, chứng minh khả năng áp dụng mạnh mẽ
+    \item \textbf{Tính Khả Thi Thời Gian Thực}: Suy luận 9-18ms trên ARM Cortex-M4 @ 64MHz với tiêu thụ điện năng 30mW, cho phép hoạt động pin liên tục 65+ giờ
+    \item \textbf{Định Vị Cạnh Tranh}: Vượt trội các nền tảng thương mại (Edge Impulse, SensiML) 1.4-3.1\% độ chính xác trong khi vẫn hoàn toàn miễn phí và mã nguồn mở
+\end{itemize}
+
+\subsection{Tác Động Rộng Hơn}
+Ngoài các đóng góp kỹ thuật, công việc này thúc đẩy dân chủ hóa edge AI bằng cách:
+\begin{itemize}
+    \item \textbf{Loại Bỏ Rào Cản Kinh Tế}: Thay thế các đăng ký thương mại \$20-500/tháng bằng một lựa chọn thay thế mã nguồn mở miễn phí có thể tiếp cận với các nhà nghiên cứu trên toàn thế giới
+    \item \textbf{Hạ Thấp Rào Cản Kỹ Thuật}: Cho phép người dùng không có chuyên môn hệ thống nhúng triển khai các hệ thống theo dõi chuyển động cấp chuyên nghiệp thông qua các quy trình làm việc GUI trực quan
+    \item \textbf{Thúc Đẩy Tính Minh Bạch}: Cung cấp khả năng hiển thị đầy đủ vào tiền xử lý, trích xuất đặc trưng và tạo mã—quan trọng cho khả năng tái tạo khoa học và sử dụng giáo dục
+    \item \textbf{Kích Thích Đổi Mới}: Kiến trúc có thể mở rộng cho phép các nhà nghiên cứu tích hợp các thuật toán, nền tảng và chiến lược tối ưu hóa mới lạ mà không bắt đầu từ đầu
+\end{itemize}
+
+\section{Xem Lại Các Mục Tiêu Nghiên Cứu}
+
+Các mục tiêu nghiên cứu ban đầu được nêu trong Mục 1.3 đã được giải quyết toàn diện:
+
+\begin{enumerate}
+    \item \textbf{Hệ Thống Tiền Xử Lý Tương Tác} \checkmark: Giao diện cửa sổ thời gian kéo thả được triển khai thành công và tích hợp với kiểm tra tín hiệu trực quan
+    
+    \item \textbf{Hỗ Trợ Đa Thuật Toán} \checkmark: Ba thuật toán (RF, SVM, NN) được tích hợp với tối ưu hóa siêu tham số tự động mang lại cải thiện độ chính xác 1.9-2.7\%
+    
+    \item \textbf{Tạo Mã Không Phụ Thuộc Nền Tảng} \checkmark: Kiến trúc trình tạo modular được xác thực trên ARM Cortex-M4 với bốn chế độ tối ưu hóa và thiết kế có thể mở rộng hỗ trợ các nền tảng tương lai
+    
+    \item \textbf{Xác Thực Hiệu Quả Framework} \checkmark: Đánh giá toàn diện chứng minh độ chính xác cạnh tranh (96.2\%), hiệu suất thời gian thực (suy luận 12ms) và sự vượt trội so với các lựa chọn thay thế thương mại trên các số liệu chi phí-hiệu suất
+    
+    \item \textbf{Khả Năng Tiếp Cận} \checkmark: GUI dựa trên web với đường cong học tập thấp làm cho phát triển edge AI tiên tiến có thể tiếp cận với phi chuyên gia trong khi duy trì khả năng cấp chuyên nghiệp
+\end{enumerate}
+
+\section{Các Ứng Dụng Thực Tế}
+
+Framework đã xác thực cho phép các ứng dụng thực tế đa dạng:
+
+\paragraph{Y Tế và Phục Hồi Chức Năng}
+Các hệ thống đeo để giám sát mức độ hoạt động của bệnh nhân, theo dõi tiến trình phục hồi chức năng (phục hồi di động sau phẫu thuật, trị liệu đột quỵ), phát hiện té ngã trong quần thể người cao tuổi và cung cấp dữ liệu hoạt động khách quan cho các thử nghiệm lâm sàng. Tuổi thọ pin 65 giờ và hoạt động thời gian thực hỗ trợ giám sát liên tục nhiều ngày mà không gây gánh nặng cho bệnh nhân.
+
+\paragraph{Thể Thao và Thể Dục}
+Phát hiện và phân loại tập luyện tự động (chạy, đạp xe, cử tạ), phân tích hình thức để phòng ngừa chấn thương (phát hiện bất đối xứng dáng đi, kỹ thuật nâng không đúng) và phản hồi đào tạo cá nhân hóa. Độ trễ dưới 20ms cho phép các ứng dụng huấn luyện thời gian thực nơi phản hồi ngay lập tức là quan trọng.
+
+\paragraph{Nghiên Cứu và Giáo Dục}
+Nền tảng chi phí thấp để giảng dạy các khái niệm edge AI trong các khóa học đại học/sau đại học, cho phép các phòng thí nghiệm thực hành mà không cần giấy phép thương mại đắt đỏ. Các nhà nghiên cứu có thể nhanh chóng tạo mẫu các thuật toán nhận dạng hoạt động mới lạ và triển khai lên phần cứng để xác thực hiện trường. Bản chất mã nguồn mở tạo điều kiện cho nghiên cứu có thể tái tạo và đóng góp cộng đồng.
+
+\paragraph{Nhà Thông Minh và Hỗ Trợ Sống Môi Trường}
+Giám sát hoạt động cho người cao tuổi sống độc lập (phát hiện các mẫu không hoạt động bất thường, theo dõi thói quen hàng ngày), tự động hóa nhà thông minh nhận biết bối cảnh (điều chỉnh ánh sáng/nhiệt độ dựa trên hoạt động được phát hiện) và phân tích xu hướng sức khỏe dài hạn. Tiêu thụ điện năng thấp (30mW) hỗ trợ cảm biến luôn bật mà không cần thay pin thường xuyên.
+
+\section{Các Hạn Chế và Công Việc Tương Lai}
+
+Trong khi framework chứng minh khả năng mạnh mẽ, các hạn chế được thừa nhận vạch ra các hướng cho nghiên cứu tương lai:
+
+\subsection{Sự Đa Dạng Tập Dữ Liệu}
+Xác thực hiện tại sử dụng dữ liệu đối tượng đơn cho sáu hoạt động. Công việc tương lai nên:
+\begin{itemize}
+    \item Tiến hành các nghiên cứu đa đối tượng trải dài các nhân khẩu học đa dạng (tuổi, giới tính, mức độ di động)
+    \item Mở rộng phân loại hoạt động để bao gồm các sự kiện té ngã, các hoạt động phức tạp (nấu ăn, lái xe) và chuyển đổi hoạt động
+    \item Xác thực trên các tập dữ liệu benchmark công khai (UCI HAR, WISDM, PAMAP2) cho các so sánh chuẩn hóa
+\end{itemize}
+
+\subsection{Các Mở Rộng Thuật Toán}
+\begin{itemize}
+    \item \textbf{Học Sâu}: Tích hợp TensorFlow Lite Micro cho triển khai CNN/LSTM/Transformer, hỗ trợ học từ đầu đến cuối từ dữ liệu cảm biến thô
+    \item \textbf{Học Trực Tuyến}: Cho phép các mô hình đã triển khai thích ứng với các mẫu cụ thể của người dùng theo thời gian mà không cần kết nối đám mây
+    \item \textbf{Các Phương Pháp Ensemble}: Kết hợp nhiều dự đoán thuật toán (bỏ phiếu RF + NN + SVM) cho độ bền vững được cải thiện
+    \item \textbf{Học Không Giám Sát}: Khám phá hoạt động tự động mà không cần gán nhãn thủ công cho các ứng dụng khám phá
+\end{itemize}
+
+\subsection{Mở Rộng Nền Tảng}
+\begin{itemize}
+    \item Xác thực tạo mã trên AVR (Arduino Uno), RISC-V (ESP32-C3), ARM Cortex-M0+ (Raspberry Pi Pico)
+    \item Hỗ trợ các mục tiêu FPGA và ASIC cho các thiết bị đeo công suất siêu thấp (<1mW)
+    \item Triển khai di động (Android, iOS) cho theo dõi chuyển động dựa trên điện thoại thông minh
+\end{itemize}
+
+\subsection{Các Tính Năng Nâng Cao}
+\begin{itemize}
+    \item \textbf{Hợp Nhất Cảm Biến}: Tích hợp đa phương thức (IMU + GPS + nhịp tim + âm thanh) với đồng bộ hóa đặc trưng tự động
+    \item \textbf{AI Có Thể Giải Thích}: Trực quan hóa các mẫu cảm biến nào kích hoạt dự đoán cụ thể (tích hợp LIME, SHAP)
+    \item \textbf{Học Liên Bang}: Huấn luyện mô hình cộng tác bảo vệ quyền riêng tư trên nhiều thiết bị
+    \item \textbf{Backend Đám Mây}: Sao lưu dữ liệu tùy chọn, phiên bản mô hình và chia sẻ mô hình cộng đồng trong khi duy trì kiến trúc local-first
+\end{itemize}
+
+\section{Suy Nghĩ Cuối Cùng}
+
+Luận văn này đã trình bày một framework toàn diện giải quyết các thách thức cơ bản trong theo dõi chuyển động dựa trên biên: khả năng tiếp cận, hiệu suất và tính linh hoạt. Thông qua tiền xử lý tương tác mới lạ, xử lý mất cân bằng lớp hệ thống và tạo mã nhận biết tối ưu hóa, chúng tôi đã tạo ra một công cụ khớp với dễ sử dụng của các nền tảng thương mại trong khi cung cấp kiểm soát đầy đủ và chi phí bằng không. Xác thực thực nghiệm xác nhận rằng dân chủ hóa và xuất sắc hiệu suất không loại trừ lẫn nhau—chúng có thể và nên cùng tồn tại.
+
+Hành trình từ dữ liệu cảm biến thô đến mô hình edge AI đã triển khai liên quan đến nhiều bước, mỗi bước truyền thống yêu cầu chuyên môn chuyên biệt. Framework này thu gọn các rào cản đó, cho phép bất kỳ ai có kiến thức miền (các hoạt động cần phát hiện) tạo ra các hệ thống sẵn sàng triển khai mà không trở thành chuyên gia về xử lý tín hiệu, lý thuyết học máy hoặc lập trình hệ thống nhúng. Đây là bản chất của dân chủ hóa: hạ thấp rào cản mà không hạ thấp tiêu chuẩn.
+
+Khi chúng ta nhìn về tương lai, sự tiến hóa tiếp tục của edge AI sẽ phụ thuộc vào các công cụ trao quyền thay vì hạn chế, giáo dục thay vì che giấu và bao gồm thay vì loại trừ. Framework này đại diện cho một bước trong hướng đó. Con đường phía trước dài, nhưng điểm đến—một thế giới nơi các khả năng AI tiên tiến có thể tiếp cận với tất cả mọi người—đáng để theo đuổi.
+
+Mã nguồn, tài liệu và các tập dữ liệu ví dụ có sẵn công khai để hỗ trợ khả năng tái tạo, giáo dục và đóng góp cộng đồng. Chúng tôi mời các nhà nghiên cứu và nhà thực hành xây dựng trên nền tảng này, mở rộng khả năng của framework và áp dụng nó cho các thách thức theo dõi chuyển động mới lạ. Cùng nhau, chúng ta có thể bắc cầu khoảng cách giữa nghiên cứu phòng thí nghiệm và triển khai thực tế, chuyển đổi bối cảnh phát triển edge AI.
