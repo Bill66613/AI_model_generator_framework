@@ -115,7 +115,7 @@ class EdgeMLModel:
               scaler_type: str = 'standard', use_cross_validation: bool = True,
               X_val: Optional[pd.DataFrame] = None, y_val: Optional[pd.Series] = None) -> Dict[str, Any]:
         """Train the model with the provided data.
-        
+
         Args:
             X_train: Training features
             y_train: Training labels
@@ -123,7 +123,7 @@ class EdgeMLModel:
             use_cross_validation: Whether to use CV for evaluation
             X_val: Optional validation features for early stopping
             y_val: Optional validation labels for early stopping
-        
+
         Returns:
             Dictionary containing performance metrics and training history
         """
@@ -146,7 +146,7 @@ class EdgeMLModel:
         if self.model_type == 'neural_network' and X_val_scaled is not None:
             # Neural networks support partial_fit for monitoring per-epoch progress
             from sklearn.neural_network import MLPClassifier
-            
+
             # Track validation accuracy per epoch
             val_accuracies = []
             train_accuracies = []
@@ -154,45 +154,48 @@ class EdgeMLModel:
             best_model_params = None
             patience_counter = 0
             patience = 10  # Stop if no improvement for 10 epochs
-            
+
             logger.info("Training with validation-based early stopping...")
-            
+
             # Train epoch by epoch
             for epoch in range(self.model.max_iter):
                 # Fit one epoch (using warm_start to continue from previous state)
                 self.model.max_iter = epoch + 1
                 self.model.warm_start = True
                 self.model.fit(X_scaled, y_encoded)
-                
+
                 # Evaluate on validation set
                 val_pred = self.model.predict(X_val_scaled)
                 val_acc = accuracy_score(y_val_encoded, val_pred)
                 val_accuracies.append(val_acc)
-                
+
                 # Track training accuracy
                 train_pred = self.model.predict(X_scaled)
                 train_acc = accuracy_score(y_encoded, train_pred)
                 train_accuracies.append(train_acc)
-                
+
                 # Early stopping check
                 if val_acc > best_val_accuracy:
                     best_val_accuracy = val_acc
                     best_model_params = self.model.get_params()
                     patience_counter = 0
-                    logger.info(f"Epoch {epoch+1}: Val Acc={val_acc:.4f} (improved) - Train Acc={train_acc:.4f}")
+                    logger.info(
+                        f"Epoch {epoch+1}: Val Acc={val_acc:.4f} (improved) - Train Acc={train_acc:.4f}")
                 else:
                     patience_counter += 1
                     if patience_counter >= patience:
-                        logger.info(f"Early stopping at epoch {epoch+1}: No improvement for {patience} epochs")
+                        logger.info(
+                            f"Early stopping at epoch {epoch+1}: No improvement for {patience} epochs")
                         break
-            
+
             # Store training history
             self.performance_metrics['val_accuracies'] = val_accuracies
             self.performance_metrics['train_accuracies'] = train_accuracies
             self.performance_metrics['best_val_accuracy'] = best_val_accuracy
             self.performance_metrics['stopped_epoch'] = epoch + 1
-            self.performance_metrics['early_stopped'] = (patience_counter >= patience)
-            
+            self.performance_metrics['early_stopped'] = (
+                patience_counter >= patience)
+
         else:
             # Standard training for other models or when no validation set
             self.model.fit(X_scaled, y_encoded)
@@ -231,7 +234,7 @@ class EdgeMLModel:
         # Calculate metrics with original label names
         accuracy = accuracy_score(y_encoded, y_pred)
         conf_matrix = confusion_matrix(y_encoded, y_pred)
-        
+
         # Get target names for classification report
         if self.label_encoder is not None:
             target_names = self.label_encoder.classes_.tolist()
@@ -297,14 +300,14 @@ class EdgeMLModel:
                                  X_val: Optional[pd.DataFrame] = None,
                                  y_val: Optional[pd.Series] = None) -> Dict[str, Any]:
         """Optimize hyperparameters using validation set or grid search.
-        
+
         Args:
             X_train: Training features
             y_train: Training labels
             param_grid: Dictionary of hyperparameters to search
             X_val: Optional validation features for evaluation
             y_val: Optional validation labels for evaluation
-        
+
         Returns:
             Dictionary with best parameters and optimization results
         """
@@ -313,12 +316,13 @@ class EdgeMLModel:
 
         # Preprocess data
         X_scaled, y_encoded = self.preprocess_data(X_train, y_train)
-        
+
         # Preprocess validation data if provided
         X_val_scaled, y_val_encoded = None, None
         if X_val is not None and y_val is not None:
             X_val_scaled, y_val_encoded = self.preprocess_data(X_val, y_val)
-            logger.info(f"Using validation-based hyperparameter tuning with {len(X_val)} samples")
+            logger.info(
+                f"Using validation-based hyperparameter tuning with {len(X_val)} samples")
         else:
             logger.info("Using cross-validation for hyperparameter tuning")
 
@@ -328,48 +332,50 @@ class EdgeMLModel:
             best_score = 0
             best_params = None
             best_model = None
-            
+
             # Generate all parameter combinations
             from itertools import product
             keys = param_grid.keys()
             values = param_grid.values()
             param_combinations = [dict(zip(keys, v)) for v in product(*values)]
-            
-            logger.info(f"Testing {len(param_combinations)} parameter combinations...")
-            
+
+            logger.info(
+                f"Testing {len(param_combinations)} parameter combinations...")
+
             for i, params in enumerate(param_combinations, 1):
                 # Initialize model with these parameters
                 self.model_params.update(params)
                 self._initialize_model()
-                
+
                 # Train on training set
                 self.model.fit(X_scaled, y_encoded)
-                
+
                 # Evaluate on validation set
                 val_pred = self.model.predict(X_val_scaled)
                 val_score = accuracy_score(y_val_encoded, val_pred)
-                
+
                 if val_score > best_score:
                     best_score = val_score
                     best_params = params.copy()
                     best_model = self.model
-                    logger.info(f"  [{i}/{len(param_combinations)}] New best: {val_score:.4f} with {params}")
-            
+                    logger.info(
+                        f"  [{i}/{len(param_combinations)}] New best: {val_score:.4f} with {params}")
+
             # Update model with best parameters
             self.model = best_model
             self.model_params.update(best_params)
-            
+
             optimization_results = {
                 'best_params': best_params,
                 'best_score': best_score,
                 'method': 'validation_set',
                 'n_combinations_tested': len(param_combinations)
             }
-            
+
         else:
             # Initialize model
             self._initialize_model()
-            
+
             # Grid search with cross-validation
             grid_search = GridSearchCV(
                 self.model, param_grid, cv=5, scoring='accuracy', n_jobs=-1

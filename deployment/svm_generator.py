@@ -33,10 +33,10 @@ void print_svm_decision_scores(float features[]);
         dual_coef = self.model_data.get('dual_coefficients', [])
         intercepts = self.model_data.get('intercept', [])
         gamma_value = self.model_data.get('gamma', 0.1)
-        
+
         num_classes = len(self.classes)
         num_sv = len(support_vectors) if support_vectors else 0
-        
+
         # Format support vectors array
         sv_formatted = ""
         if support_vectors and num_sv > 0:
@@ -48,8 +48,9 @@ void print_svm_decision_scores(float features[]);
                     sv_formatted += ",\n"
         else:
             # Fallback if no support vectors (should not happen in production)
-            sv_formatted = "    {" + ", ".join(["0.0f"] * len(self.feature_names)) + "}"
-        
+            sv_formatted = "    {" + \
+                ", ".join(["0.0f"] * len(self.feature_names)) + "}"
+
         # Format dual coefficients (organized by class for OvR)
         dual_coef_formatted = ""
         if dual_coef and len(dual_coef) > 0:
@@ -61,15 +62,17 @@ void print_svm_decision_scores(float features[]);
                     dual_coef_formatted += ",\n"
         else:
             # Fallback
-            dual_coef_formatted = "    {" + ", ".join(["0.0f"] * max(num_sv, 1)) + "}"
-        
+            dual_coef_formatted = "    {" + \
+                ", ".join(["0.0f"] * max(num_sv, 1)) + "}"
+
         # Format intercepts
         intercepts_formatted = ""
         if intercepts and len(intercepts) > 0:
-            intercepts_formatted = ", ".join([f"{ic:.6f}f" for ic in intercepts])
+            intercepts_formatted = ", ".join(
+                [f"{ic:.6f}f" for ic in intercepts])
         else:
             intercepts_formatted = ", ".join(["0.0f"] * num_classes)
-        
+
         return f"""// SVM Model Implementation
 // One-vs-Rest (OvR) Multi-class SVM with RBF Kernel
 

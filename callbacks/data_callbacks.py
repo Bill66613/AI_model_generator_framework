@@ -35,7 +35,7 @@ def upload_files(contents, filenames, base_dir):
     # Use stored base directory or default to PERSISTENT_DIR
     if not base_dir:
         base_dir = PERSISTENT_DIR
-    
+
     # Files should be saved to datasets subdirectory
     datasets_dir = os.path.join(base_dir, 'datasets')
     os.makedirs(datasets_dir, exist_ok=True)
@@ -68,7 +68,7 @@ def upload_files(contents, filenames, base_dir):
 
             # Save the file to the datasets directory
             df.to_csv(file_path, index=False)
-            
+
             # Track the actual saved filename
             saved_filenames.append(filename)
 
@@ -121,7 +121,7 @@ def save_sampling_rate(n_clicks, dataset_name, sampling_rate, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         # Load existing metadata
         if os.path.exists(metadata_file):
             with open(metadata_file, 'r') as f:
@@ -156,7 +156,7 @@ def data_selector_options(tab, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         if os.path.exists(metadata_file):
             with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
@@ -184,7 +184,7 @@ def save_label(n_clicks, dataset_name, label, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         # Load existing metadata
         if os.path.exists(metadata_file):
             with open(metadata_file, 'r') as f:
@@ -239,7 +239,7 @@ def filter_and_display_data(dataset_name, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         # Load existing metadata
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
@@ -288,7 +288,7 @@ def display_label(dataset_name, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         if os.path.exists(metadata_file):
             with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
@@ -307,7 +307,7 @@ def display_dataset(dataset_name, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         if os.path.exists(metadata_file):
             with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
@@ -364,7 +364,7 @@ def delete_specific_dataset(n_clicks, dataset_name, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         # Load existing metadata
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
@@ -422,7 +422,7 @@ def update_dataset_info_table(dataset_name, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         # Load metadata
         if os.path.exists(metadata_file):
             with open(metadata_file, 'r') as f:
@@ -521,7 +521,7 @@ def export_metadata(n_clicks, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         # Load metadata
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)

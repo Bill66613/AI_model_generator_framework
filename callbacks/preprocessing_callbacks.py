@@ -226,7 +226,7 @@ def display_dataset_and_status(dataset_name, base_dir):
     if not base_dir:
         base_dir = PERSISTENT_DIR
     metadata_file = os.path.join(base_dir, 'metadata.json')
-    
+
     with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
@@ -440,7 +440,7 @@ def clean_and_smooth_data(n_clicks, dataset_name, base_dir):
     if not base_dir:
         base_dir = PERSISTENT_DIR
     datasets_dir = os.path.join(base_dir, 'datasets')
-    
+
     file_path = os.path.join(datasets_dir, dataset_name)
     if not os.path.exists(file_path):
         return no_update, no_update
@@ -511,7 +511,7 @@ def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, process
     if not base_dir:
         base_dir = PERSISTENT_DIR
     datasets_dir = os.path.join(base_dir, 'datasets')
-    
+
     df = pd.DataFrame(cleaned_smoothed)
     cleaned_smoothed_file_path = os.path.join(
         datasets_dir, f"cleaned_smoothed_{dataset_name}")
@@ -551,7 +551,7 @@ def apply_time_window(n_clicks, dataset_name, time_window_span, base_dir):
     if not base_dir:
         base_dir = PERSISTENT_DIR
     metadata_file = os.path.join(base_dir, 'metadata.json')
-    
+
     with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
@@ -831,7 +831,7 @@ def manage_windows(add_clicks, remove_clicks, reset_clicks, current_windows, dat
     if not base_dir:
         base_dir = PERSISTENT_DIR
     metadata_file = os.path.join(base_dir, 'metadata.json')
-    
+
     with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
@@ -1002,28 +1002,32 @@ def load_previous_windows(n_clicks, dataset_name, current_figure, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
         if dataset_name not in metadata:
-            print(f"Load Previous: Dataset {dataset_name} not found in metadata")
+            print(
+                f"Load Previous: Dataset {dataset_name} not found in metadata")
             return no_update, no_update
 
         # Check for saved window positions (manual windows take priority)
-        saved_positions = metadata[dataset_name].get('manual_window_positions', [])
+        saved_positions = metadata[dataset_name].get(
+            'manual_window_positions', [])
 
         if not saved_positions:
             # Fall back to sliding window positions if no manual windows
-            saved_positions = metadata[dataset_name].get('sliding_window_positions', [])
+            saved_positions = metadata[dataset_name].get(
+                'sliding_window_positions', [])
 
         if not saved_positions:
-            print(f"Load Previous: No saved window positions for {dataset_name}")
+            print(
+                f"Load Previous: No saved window positions for {dataset_name}")
             return no_update, no_update
 
         # Get saved window size
         window_size_ms = metadata[dataset_name].get('window_size_ms', 1500)
-        
+
         # Load the dataset to create the graph
         if "cleaned_data_path" in metadata[dataset_name]:
             file_path = metadata[dataset_name]["cleaned_data_path"]
@@ -1035,25 +1039,31 @@ def load_previous_windows(n_clicks, dataset_name, current_figure, base_dir):
             return no_update, no_update
 
         df = pd.read_csv(file_path)
-        sampling_rate = metadata.get(dataset_name, {}).get('sampling_rate', 100)
-        
+        sampling_rate = metadata.get(
+            dataset_name, {}).get('sampling_rate', 100)
+
         # Create time axis
         df['Time_seconds'] = df.index / sampling_rate
 
         # If we don't have a figure yet, create one
         if not current_figure or 'data' not in current_figure:
             # Get sensor columns
-            sensor_cols = [col for col in df.columns if col not in ['Time_seconds', 'Window']]
+            sensor_cols = [col for col in df.columns if col not in [
+                'Time_seconds', 'Window']]
             priority_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
-            available_cols = [col for col in priority_cols if col in sensor_cols]
+            available_cols = [
+                col for col in priority_cols if col in sensor_cols]
 
             if not available_cols:
-                numerical_cols = df.select_dtypes(include=['float64', 'int64']).columns
-                available_cols = [col for col in numerical_cols if col != 'Time_seconds'][:6]
+                numerical_cols = df.select_dtypes(
+                    include=['float64', 'int64']).columns
+                available_cols = [
+                    col for col in numerical_cols if col != 'Time_seconds'][:6]
 
             # Create the figure
             fig = go.Figure()
-            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
+                      '#d62728', '#9467bd', '#8c564b']
 
             for i, col in enumerate(available_cols[:6]):
                 fig.add_trace(go.Scatter(
@@ -1073,7 +1083,7 @@ def load_previous_windows(n_clicks, dataset_name, current_figure, base_dir):
         else:
             # Use existing figure
             fig = current_figure.copy()
-            
+
             # Get y-axis range from existing figure or calculate from data
             if 'layout' in fig and 'yaxis' in fig['layout'] and 'range' in fig['layout']['yaxis']:
                 y_range_data = fig['layout']['yaxis']['range']
@@ -1084,7 +1094,7 @@ def load_previous_windows(n_clicks, dataset_name, current_figure, base_dir):
                 for trace in fig.get('data', []):
                     if 'y' in trace:
                         y_data.extend(trace['y'])
-                
+
                 if y_data:
                     y_min, y_max = min(y_data), max(y_data)
                     y_range = y_max - y_min
@@ -1130,8 +1140,9 @@ def load_previous_windows(n_clicks, dataset_name, current_figure, base_dir):
         if 'layout' not in fig:
             fig['layout'] = {}
         fig['layout']['shapes'] = shapes
-        
-        print(f"Load Previous: Successfully loaded {len(windows)} windows for {dataset_name}")
+
+        print(
+            f"Load Previous: Successfully loaded {len(windows)} windows for {dataset_name}")
         return fig, windows
 
     except Exception as e:
@@ -1172,9 +1183,11 @@ def update_window_positions(relayout_data, current_windows):
                     # Ensure we have this window in our data
                     if shape_idx < len(updated_windows):
                         if coord_type == 'x0':
-                            updated_windows[shape_idx]['start_time'] = float(value)
+                            updated_windows[shape_idx]['start_time'] = float(
+                                value)
                         elif coord_type == 'x1':
-                            updated_windows[shape_idx]['end_time'] = float(value)
+                            updated_windows[shape_idx]['end_time'] = float(
+                                value)
 
         print(f"Updated window positions: {updated_windows}")
         return updated_windows
@@ -1266,7 +1279,7 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
     if not (dataset_name and current_windows and window_size_ms):
         return html.Div("⚠️ Please select a dataset and define windows first.",
                         style={'color': '#FF9800', 'padding': '20px'}), None, True
-    
+
     # Ensure all window times are floats
     current_windows = [
         {
@@ -1276,16 +1289,16 @@ def generate_sliding_windows(n_clicks, dataset_name, current_windows, window_siz
         }
         for w in current_windows
     ]
-    
+
     try:
         # Load data
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
-        
+
         if "cleaned_data_path" in metadata[dataset_name]:
             file_path = metadata[dataset_name]["cleaned_data_path"]
         else:
@@ -1557,7 +1570,7 @@ def save_sliding_windows(n_clicks, window_data, dataset_name, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
@@ -1675,7 +1688,7 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
     if not base_dir:
         base_dir = PERSISTENT_DIR
     metadata_file = os.path.join(base_dir, 'metadata.json')
-    
+
     with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
@@ -1761,7 +1774,8 @@ def split_selected_windows(n_clicks, dataset_name, current_windows, current_figu
             # Use working directory for window storage
             windows_dir = os.path.join(base_dir, 'windows')
             os.makedirs(windows_dir, exist_ok=True)
-            sample_file_path = os.path.join(windows_dir, f"dragged_window_{window_id}_{dataset_name}")
+            sample_file_path = os.path.join(
+                windows_dir, f"dragged_window_{window_id}_{dataset_name}")
             # Use 4 decimal places precision for sensor data readability
             window_data[available_cols].to_csv(
                 sample_file_path, index=False, float_format='%.4f')
@@ -1933,7 +1947,7 @@ def update_split_dataset_selector(split_clicks, dataset_name, split_graph, curre
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
@@ -2142,8 +2156,9 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name, base_dir):
         # Extract window_id from filename - handle both manual and sliding windows
         filename = os.path.basename(selected_file_path)
         # Remove dataset name and base prefix
-        temp = filename.replace(f"_{dataset_name}", "").replace("dragged_window_", "").replace(".csv", "")
-        
+        temp = filename.replace(f"_{dataset_name}", "").replace(
+            "dragged_window_", "").replace(".csv", "")
+
         # Determine if it's a sliding window or manual window
         if temp.startswith("sliding_"):
             # Sliding window: dragged_window_sliding_79_dataset.csv -> sliding_79 -> 79
@@ -2153,16 +2168,17 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name, base_dir):
             # Manual window: dragged_window_5_dataset.csv -> 5
             deleted_window_id = int(temp)
             is_sliding = False
-        
+
         # Delete the file
         os.remove(selected_file_path)
-        print(f"Deleted {'sliding' if is_sliding else 'manual'} window file: {selected_file_path}")
+        print(
+            f"Deleted {'sliding' if is_sliding else 'manual'} window file: {selected_file_path}")
 
         # Update metadata
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
@@ -2170,8 +2186,9 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name, base_dir):
             # Remove from dragged_samples
             if 'dragged_samples' in metadata[dataset_name]:
                 if selected_file_path in metadata[dataset_name]['dragged_samples']:
-                    metadata[dataset_name]['dragged_samples'].remove(selected_file_path)
-            
+                    metadata[dataset_name]['dragged_samples'].remove(
+                        selected_file_path)
+
             # Only remove from manual_window_positions if it's a manual window
             # Sliding windows don't have entries in manual_window_positions
             if not is_sliding and 'manual_window_positions' in metadata[dataset_name]:
@@ -2179,7 +2196,8 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name, base_dir):
                     pos for pos in metadata[dataset_name]['manual_window_positions']
                     if pos['window_id'] != deleted_window_id
                 ]
-                print(f"Removed window position for manual window_id {deleted_window_id}")
+                print(
+                    f"Removed window position for manual window_id {deleted_window_id}")
 
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
@@ -2196,7 +2214,8 @@ def delete_split_window(n_clicks, selected_file_path, dataset_name, base_dir):
                 filename = os.path.basename(file_path)
                 parts = filename.replace(f"_{dataset_name}", "").replace(
                     "dragged_window_", "")
-                window_id = parts.split("_")[0] if "_" in parts else parts.replace(".csv", "")
+                window_id = parts.split(
+                    "_")[0] if "_" in parts else parts.replace(".csv", "")
 
                 df = pd.read_csv(file_path)
                 samples = len(df)
@@ -2261,7 +2280,7 @@ def clean_all_generated_data(n_clicks, dataset_name, base_dir):
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
@@ -2503,7 +2522,7 @@ def preprocess_for_training(n_clicks, selected_files, norm_method, feature_metho
             if not base_dir:
                 base_dir = PERSISTENT_DIR
             metadata_file = os.path.join(base_dir, 'metadata.json')
-            
+
             if os.path.exists(metadata_file):
                 with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
@@ -2967,7 +2986,7 @@ def update_dataset_status_on_operations(clean_clicks, split_clicks, dataset_name
         if not base_dir:
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
-        
+
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 

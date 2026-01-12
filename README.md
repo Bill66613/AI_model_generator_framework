@@ -4,13 +4,170 @@
 
 ### Target Platform: Seeed XIAO nRF52840 Sense
 
+---
+
+## 📖 Quick Links
+
+- **[📘 Complete Documentation](FRAMEWORK_DOCUMENTATION.md)** ← **START HERE for comprehensive guide**
+- **[🔧 Quick Reference](QUICK_REFERENCE.md)** - Tab overview and quick commands
+- **[📊 Data Collection Guide](DATA_COLLECTION_GUIDE.md)** - How to collect IMU data
+- **[📋 TODO](TODO.md)** - Future improvements and known issues
+- **[🔍 Development History](DEVELOPMENT_HISTORY.md)** - Testing and bug fix history
+
+---
+
 ## 📋 Abstract
 
 This repository contains the implementation of a comprehensive framework for developing and deploying human activity recognition (HAR) models on resource-constrained edge devices. The project addresses the complete pipeline from IMU sensor data acquisition to model deployment, providing researchers and developers with an integrated solution for edge-based motion tracking applications.
 
 The framework leverages 6-axis IMU data (accelerometer and gyroscope) to classify human activities through machine learning models optimized for microcontroller deployment, specifically targeting the Seeed XIAO nRF52840 Sense platform.
 
-## 🎯 Research Objectives & Competitive Advantages
+**✨ Key Features**:
+- 🎨 **Interactive Web Interface** - No coding required for basic operations
+- 📊 **Draggable Time Windowing** - Unique interactive data segmentation (not found in competitors!)
+- 🤖 **Multiple ML Algorithms** - Random Forest, SVM, Neural Networks
+- 📱 **Real-Time Testing** - Live device monitoring with serial communication
+- 💰 **100% Free & Open Source** - No subscription fees (unlike Edge Impulse)
+- 🔓 **Fully Transparent** - Complete access to all algorithms and models
+
+**🆚 Why This Framework?**
+- ✅ **vs Edge Impulse**: Free, open-source, interactive windowing, academic focus
+- ✅ **vs SensiML**: No enterprise licensing, modern web UI, cross-platform
+- ✅ **vs TFLite Micro**: Complete end-to-end pipeline, user-friendly GUI
+- ✅ **vs Arduino ML**: Professional interface, advanced preprocessing, multi-platform output
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd GUI_app
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run application
+python app.py
+```
+
+### First-Time Usage
+
+1. **Open browser**: Navigate to `http://127.0.0.1:8050`
+2. **Read documentation**: Check [FRAMEWORK_DOCUMENTATION.md](FRAMEWORK_DOCUMENTATION.md) for complete guide
+3. **Upload data**: Go to Tab 1 (📊 Data Management) and upload CSV files
+4. **Follow workflow**: Complete tabs 1→2→3→4→5→6 in order
+
+### Example Workflow (5 Minutes)
+
+```
+Tab 1: Upload walking.csv, running.csv, sitting.csv
+Tab 2: Create 10 windows per activity (manual or sliding window)
+Tab 3: Select all activities, extract all features, standard scaler
+Tab 4: Train Random Forest model
+Tab 5: Generate code for Seeed XIAO nRF52840
+Tab 6: Connect device and test real-time predictions
+```
+
+**📖 For detailed step-by-step instructions**: See [FRAMEWORK_DOCUMENTATION.md - How to Use](FRAMEWORK_DOCUMENTATION.md#how-to-use-complete-workflow)
+
+---
+
+## 🏗️ Framework Architecture
+
+### 6 Integrated Tabs
+
+| Tab | Name | Purpose | Status |
+|-----|------|---------|--------|
+| 1 | 📊 Data Management | Upload and label CSV datasets | ✅ Complete |
+| 2 | 🔬 Signal Preprocessing | Interactive windowing & signal processing | ✅ Complete |
+| 3 | ⚙️ Feature Engineering | Extract features uniformly across all activities | ✅ Complete |
+| 4 | 🎯 Model Training | Train ML models (RF, SVM, NN) | ✅ Complete |
+| 5 | 🔧 Code Generation | Generate Arduino C/C++ code | ✅ Complete |
+| 6 | 📡 Device Testing | Real-time serial monitoring & live predictions | ✅ Complete |
+
+**🎯 Unique Features**:
+- **Interactive Windowing** (Tab 2): Drag-and-drop time window selection - **Not found in any competitor!**
+- **Unified Feature Engineering** (Tab 3): Process all activities with identical settings - prevents inconsistencies
+- **Real-Time Debug Console** (Tab 6): Live troubleshooting with device communication logs
+
+---
+
+## 📊 What This Framework Can Do
+
+### ✅ Current Capabilities (v1.0)
+
+**Data Management**:
+- ✅ CSV upload with 6-axis IMU data (aX, aY, aZ, gX, gY, gZ)
+- ✅ Activity labeling and organization
+- ✅ Interactive visualization of sensor data
+- ✅ Automatic dataset storage and management
+
+**Signal Processing**:
+- ✅ Low-pass filtering (Butterworth)
+- ✅ Outlier removal (3-sigma method)
+- ✅ Data smoothing (moving average)
+- ✅ **Interactive draggable windowing** (unique!)
+- ✅ Automated sliding window generation
+- ✅ Configurable window size and overlap
+
+**Feature Extraction**:
+- ✅ 138 total features (90 time-domain + 48 frequency-domain)
+- ✅ Per-axis statistics (mean, std, min, max, variance, etc.)
+- ✅ FFT-based frequency features
+- ✅ Multiple normalization methods (Standard, MinMax, Robust)
+- ✅ Unified processing for all activity classes
+
+**Machine Learning**:
+- ✅ Random Forest (optimized for edge devices)
+- ✅ Support Vector Machine (RBF kernel)
+- ✅ Neural Networks (TensorFlow/Keras)
+- ✅ Automated train/validation/test splitting
+- ✅ Comprehensive evaluation metrics
+- ✅ Confusion matrix visualization
+
+**Code Generation**:
+- ✅ Arduino-compatible C/C++ code
+- ✅ Platform-specific sensor drivers (LSM6DS3, MPU6050)
+- ✅ Embedded model inference
+- ✅ Multiple optimization profiles (accuracy, speed, power, balanced)
+- ✅ Ready-to-upload .ino files
+
+**Device Testing**:
+- ✅ Real-time serial communication (UART)
+- ✅ Live 6-axis sensor visualization
+- ✅ Live activity predictions with confidence
+- ✅ Debug console with timestamped logs
+- ✅ Data statistics (sampling rate, sample count)
+
+### ⚠️ Known Limitations
+
+**Data**:
+- ❌ No multi-label support (one activity per dataset)
+- ❌ No automatic sampling rate detection
+- ❌ Fixed 6-axis IMU (no magnetometer, barometer)
+
+**Preprocessing**:
+- ❌ No data augmentation (rotation, scaling, jitter)
+- ❌ No automatic quality assessment
+
+**Training**:
+- ❌ No hyperparameter tuning UI
+- ❌ No cross-validation (only single split)
+- ❌ No model comparison (can't train multiple models simultaneously)
+- ❌ No learning curve visualization
+
+**Deployment**:
+- ❌ Neural Networks require TFLite Micro (more complex)
+- ❌ No automatic memory estimation
+- ❌ No over-the-air (OTA) updates
+
+**Full list**: See [FRAMEWORK_DOCUMENTATION.md - Known Issues](FRAMEWORK_DOCUMENTATION.md#known-issues--limitations)
+
+---
+
+## 🎓 Research Objectives & Competitive Advantages
 
 ### Primary Research Goals
 

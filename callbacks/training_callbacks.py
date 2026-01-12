@@ -47,7 +47,7 @@ def enable_training_components(tab, base_dir):
     # Use stored base directory or default to PERSISTENT_DIR
     if not base_dir:
         base_dir = PERSISTENT_DIR
-    
+
     # Load available trained models using helper function
     model_options = load_trained_model_options(base_dir)
 
@@ -64,12 +64,12 @@ def save_model_metadata(model_filename, model_info, base_dir=None):
     """Save model metadata to the models database."""
     if not base_dir:
         base_dir = PERSISTENT_DIR
-    
+
     models_dir = os.path.join(base_dir, 'models')
     # Ensure models directory exists
     if not os.path.exists(models_dir):
         os.makedirs(models_dir)
-    
+
     model_metadata_file = os.path.join(models_dir, 'trained_models.json')
 
     if os.path.exists(model_metadata_file):
@@ -88,12 +88,12 @@ def load_trained_model_options(base_dir=None):
     """Load available trained model options for dropdown."""
     if not base_dir:
         base_dir = PERSISTENT_DIR
-    
+
     model_options = []
     try:
         models_dir = os.path.join(base_dir, 'models')
         model_metadata_file = os.path.join(models_dir, 'trained_models.json')
-        
+
         if os.path.exists(model_metadata_file):
             with open(model_metadata_file, 'r') as f:
                 models_metadata = json.load(f)
@@ -112,7 +112,7 @@ def load_training_data_summary(base_dir=None):
     """Load and display summary of available training data."""
     if not base_dir:
         base_dir = PERSISTENT_DIR
-    
+
     try:
         training_dir = os.path.join(base_dir, 'training')
         if not os.path.exists(training_dir):
@@ -853,7 +853,7 @@ def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, 
     """Perform basic model training with optional validation set."""
     if not base_dir:
         base_dir = PERSISTENT_DIR
-        
+
     start_time = time.time()
 
     # Training - use CV only if no validation set provided
@@ -924,7 +924,7 @@ def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test,
     """Perform hyperparameter optimization with optional validation set."""
     if not base_dir:
         base_dir = PERSISTENT_DIR
-        
+
     start_time = time.time()
 
     # Hyperparameter optimization - uses validation set if available, otherwise CV
@@ -1177,7 +1177,7 @@ def perform_cross_validation(model, X_train, y_train, model_type, base_dir=None)
     """Perform cross-validation analysis and optionally save the trained model."""
     if not base_dir:
         base_dir = PERSISTENT_DIR
-        
+
     start_time = time.time()
 
     # Perform training with cross-validation
@@ -1523,7 +1523,8 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename, base_dir
             print(
                 f"DEBUG: Has performance_metrics: {'performance_metrics' in model_info}")
 
-            graph = create_model_evaluation_plot(model, model_filename, base_dir)
+            graph = create_model_evaluation_plot(
+                model, model_filename, base_dir)
             detailed_results = create_detailed_evaluation_display(
                 model_info, model_filename)
 
@@ -1533,7 +1534,8 @@ def evaluate_trained_model(eval_clicks, feature_clicks, model_filename, base_dir
             return graph, detailed_results
 
         elif button_id == 'feature-importance-btn':
-            graph = create_feature_importance_plot(model, model_filename, base_dir)
+            graph = create_feature_importance_plot(
+                model, model_filename, base_dir)
             return graph, html.Div()
 
         return {}, html.Div()
@@ -2527,7 +2529,7 @@ def get_training_session_stats(base_dir=None):
     """Get current training session statistics."""
     if not base_dir:
         base_dir = PERSISTENT_DIR
-    
+
     try:
         # Load trained models metadata
         models_dir = os.path.join(base_dir, 'models')
