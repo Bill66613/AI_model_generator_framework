@@ -495,6 +495,143 @@ class EdgeMLModel:
         return self.model.predict_proba(X_scaled)
 
 
+def extract_orientation_invariant_features(df: pd.DataFrame, sensor_cols: List[str] = None) -> pd.DataFrame:
+    """Extract orientation-invariant features using magnitude vectors.
+
+    These features are robust to device orientation changes, making the model
+    work regardless of how the sensor is mounted (left/right wrist, rotated, etc.).
+
+    Args:
+        df: DataFrame with sensor data
+        sensor_cols: Sensor column names (default: ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ'])
+
+    Returns:
+        DataFrame with orientation-invariant magnitude-based features
+    """
+    if sensor_cols is None:
+        sensor_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+
+    features = {}
+
+    # Calculate magnitude vectors (MOST IMPORTANT for orientation invariance)
+    acc_mag = np.sqrt(df['aX']**2 + df['aY']**2 + df['aZ']**2)
+    gyro_mag = np.sqrt(df['gX']**2 + df['gY']**2 + df['gZ']**2)
+
+    # Statistical features on acceleration magnitude
+    for name, mag_data in [('acc_mag', acc_mag), ('gyro_mag', gyro_mag)]:
+        data = mag_data.values
+
+        # Basic statistical features
+        features[f'{name}_mean'] = np.mean(data)
+        features[f'{name}_std'] = np.std(data)
+        features[f'{name}_min'] = np.min(data)
+        features[f'{name}_max'] = np.max(data)
+        features[f'{name}_range'] = np.max(data) - np.min(data)
+        features[f'{name}_median'] = np.median(data)
+        features[f'{name}_q25'] = np.percentile(data, 25)
+        features[f'{name}_q75'] = np.percentile(data, 75)
+        features[f'{name}_iqr'] = np.percentile(
+            data, 75) - np.percentile(data, 25)
+
+        # Advanced statistical features
+        features[f'{name}_skewness'] = pd.Series(data).skew()
+        features[f'{name}_kurtosis'] = pd.Series(data).kurtosis()
+        features[f'{name}_rms'] = np.sqrt(np.mean(data**2))
+        features[f'{name}_energy'] = np.sum(data**2)
+
+        # Signal characteristics
+        mean_val = np.mean(data)
+        features[f'{name}_zero_crossings'] = len(
+            np.where(np.diff(np.sign(data)))[0])
+        features[f'{name}_mean_crossing_rate'] = len(
+            np.where(np.diff(np.sign(data - mean_val)))[0])
+
+    # Jerk magnitude (rate of change of acceleration) - also orientation invariant
+    acc_jerk_mag = np.sqrt(
+        np.diff(df['aX'])**2 + np.diff(df['aY'])**2 + np.diff(df['aZ'])**2)
+    features['acc_jerk_mag_mean'] = np.mean(acc_jerk_mag)
+    features['acc_jerk_mag_std'] = np.std(acc_jerk_mag)
+    features['acc_jerk_mag_max'] = np.max(acc_jerk_mag)
+
+    return pd.DataFrame([features])
+
+
+def extract_frequency_magnitude_features(df: pd.DataFrame, sensor_cols: List[str] = None,
+                                         sampling_rate: float = 100) -> pd.DataFrame:
+    """Extract FFT features from magnitude vectors (orientation invariant).
+
+    Frequency components of magnitude vectors are independent of device orientation.
+    Walking has the same step frequency regardless of which wrist or rotation.
+
+    Args:
+        df: DataFrame with sensor data
+        sensor_cols: Sensor column names
+        sampling_rate: Sampling rate in Hz
+
+    Returns:
+        DataFrame with frequency domain magnitude features
+    """
+    if sensor_cols is None:
+        sensor_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+
+    features = {}
+
+    # Calculate magnitude vectors
+    acc_mag = np.sqrt(df['aX']**2 + df['aY']**2 + df['aZ']**2)
+    gyro_mag = np.sqrt(df['gX']**2 + df['gY']**2 + df['gZ']**2)
+
+    for name, mag_data in [('acc_mag', acc_mag), ('gyro_mag', gyro_mag)]:
+        data = mag_data.values
+
+        # Compute FFT
+        fft_vals = np.fft.fft(data)
+        fft_magnitude = np.abs(fft_vals)
+        fft_freq = np.fft.fftfreq(len(data), 1/sampling_rate)
+
+        # Only use positive frequencies
+        pos_mask = fft_freq > 0
+        fft_magnitude_pos = fft_magnitude[pos_mask]
+        fft_freq_pos = fft_freq[pos_mask]
+
+        # Dominant frequency (most important for activity classification)
+        dominant_freq_idx = np.argmax(fft_magnitude_pos)
+        features[f'{name}_dominant_frequency'] = fft_freq_pos[dominant_freq_idx]
+        features[f'{name}_dominant_frequency_magnitude'] = fft_magnitude_pos[dominant_freq_idx]
+
+        # Spectral centroid (center of mass of spectrum)
+        features[f'{name}_spectral_centroid'] = np.sum(
+            fft_freq_pos * fft_magnitude_pos) / np.sum(fft_magnitude_pos)
+
+        # Energy in frequency bands
+        low_freq_mask = (fft_freq_pos >= 0) & (
+            fft_freq_pos < 2)  # 0-2 Hz (walking/slow)
+        mid_freq_mask = (fft_freq_pos >= 2) & (
+            fft_freq_pos < 5)  # 2-5 Hz (running/fast)
+        high_freq_mask = (fft_freq_pos >= 5) & (
+            fft_freq_pos < sampling_rate/2)  # >5 Hz
+
+        features[f'{name}_energy_low_freq'] = np.sum(
+            fft_magnitude_pos[low_freq_mask]**2)
+        features[f'{name}_energy_mid_freq'] = np.sum(
+            fft_magnitude_pos[mid_freq_mask]**2)
+        features[f'{name}_energy_high_freq'] = np.sum(
+            fft_magnitude_pos[high_freq_mask]**2)
+
+        # Spectral rolloff (frequency below which 85% of energy is contained)
+        cumsum = np.cumsum(fft_magnitude_pos)
+        if cumsum[-1] > 0:
+            rolloff_threshold = 0.85 * cumsum[-1]
+            rolloff_idx = np.where(cumsum >= rolloff_threshold)[0]
+            if len(rolloff_idx) > 0:
+                features[f'{name}_spectral_rolloff'] = fft_freq_pos[rolloff_idx[0]]
+            else:
+                features[f'{name}_spectral_rolloff'] = fft_freq_pos[-1]
+        else:
+            features[f'{name}_spectral_rolloff'] = 0.0
+
+    return pd.DataFrame([features])
+
+
 def extract_time_domain_features(df: pd.DataFrame, sensor_cols: List[str]) -> pd.DataFrame:
     """Extract time-domain statistical features from sensor data."""
     features = {}
@@ -583,22 +720,64 @@ def extract_frequency_domain_features(df: pd.DataFrame, sensor_cols: List[str],
 
 
 def create_feature_vector(df: pd.DataFrame, sensor_cols: List[str] = None,
-                          sampling_rate: float = 100, include_frequency: bool = True) -> pd.DataFrame:
-    """Create comprehensive feature vector from raw sensor data."""
+                          sampling_rate: float = 100, include_frequency: bool = True,
+                          orientation_robust: bool = True, include_per_axis: bool = False) -> pd.DataFrame:
+    """Create comprehensive feature vector from raw sensor data.
+
+    Args:
+        df: Window DataFrame with sensor data columns
+        sensor_cols: Sensor column names (default: ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ'])
+        sampling_rate: Sampling rate in Hz (default: 100)
+        include_frequency: Include FFT features (default: True)
+        orientation_robust: Use magnitude-based features (RECOMMENDED - default: True)
+        include_per_axis: Include per-axis features (less robust, default: False)
+
+    Returns:
+        DataFrame with extracted features
+
+    Feature Counts:
+        - Magnitude only (robust): ~33 features (no FFT) or ~49 features (with FFT)
+        - Per-axis only: ~90 features (no FFT) or ~138 features (with FFT)
+        - Both: ~123 features (no FFT) or ~187 features (with FFT)
+    """
     if sensor_cols is None:
         sensor_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
 
-    # Extract time-domain features
-    time_features = extract_time_domain_features(df, sensor_cols)
+    features_list = []
 
-    # Extract frequency-domain features
-    if include_frequency:
-        freq_features = extract_frequency_domain_features(
-            df, sensor_cols, sampling_rate)
-        # Combine features
-        combined_features = pd.concat([time_features, freq_features], axis=1)
-    else:
-        combined_features = time_features
+    # ORIENTATION-ROBUST FEATURES (magnitude-based) - RECOMMENDED
+    if orientation_robust:
+        # Time-domain magnitude features (30 features)
+        mag_features = extract_orientation_invariant_features(df, sensor_cols)
+        features_list.append(mag_features)
+
+        # Frequency-domain magnitude features (16 features) - if enabled
+        if include_frequency:
+            freq_mag_features = extract_frequency_magnitude_features(
+                df, sensor_cols, sampling_rate)
+            features_list.append(freq_mag_features)
+
+    # PER-AXIS FEATURES (orientation-dependent) - OPTIONAL
+    if include_per_axis:
+        # Time-domain per-axis features (90 features)
+        time_features = extract_time_domain_features(df, sensor_cols)
+        features_list.append(time_features)
+
+        # Frequency-domain per-axis features (48 features) - if enabled
+        if include_frequency:
+            freq_features = extract_frequency_domain_features(
+                df, sensor_cols, sampling_rate)
+            features_list.append(freq_features)
+
+    # If neither enabled, fall back to per-axis time features
+    if not orientation_robust and not include_per_axis:
+        logger.warning(
+            "No features enabled! Using per-axis time features as fallback.")
+        time_features = extract_time_domain_features(df, sensor_cols)
+        features_list.append(time_features)
+
+    # Combine all feature sets
+    combined_features = pd.concat(features_list, axis=1)
 
     return combined_features
 

@@ -46,6 +46,7 @@ layout = html.Div([
                     dcc.Input(
                         id='directory-path-input',
                         type='text',
+                        value='',  # Initialize with empty string instead of undefined
                         placeholder='Enter directory path (e.g., D:\\Workspaces\\data or C:\\my_project\\datasets)',
                         style={
                             'width': '100%',

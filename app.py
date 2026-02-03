@@ -5,10 +5,10 @@ from layouts.feature_engineering import layout as feature_engineering_layout
 from layouts.training import layout as training_layout
 from layouts.code_generation import layout as code_generation_layout
 from layouts.device_test import layout as device_test_layout
-from callbacks import data_callbacks, preprocessing_callbacks, training_callbacks, feature_engineering_callbacks, code_generation_callbacks, device_test_callbacks
 
-# Initialize the app
+# Initialize the app FIRST
 app = Dash(__name__, suppress_callback_exceptions=True)
+server = app.server  # For deployment
 
 # Define the app layout with tabs
 app.layout = html.Div([
@@ -28,7 +28,15 @@ app.layout = html.Div([
     ])
 ])
 
-# Register all callbacks
+# NOW import and register callbacks (after layout is set)
+from callbacks import data_callbacks, preprocessing_callbacks, training_callbacks, feature_engineering_callbacks, code_generation_callbacks, device_test_callbacks
+
+# Explicitly register all callbacks
+data_callbacks.register_callbacks(app)
+preprocessing_callbacks.register_callbacks(app)
+feature_engineering_callbacks.register_callbacks(app)
+training_callbacks.register_callbacks(app)
+code_generation_callbacks.register_callbacks(app)
 device_test_callbacks.register_callbacks(app)
 
 if __name__ == '__main__':

@@ -226,34 +226,48 @@ const float feature_stds[NUM_FEATURES] = {{
 
     def _generate_complete_feature_extraction(self) -> str:
         """Generate optimization-aware feature extraction function."""
-        # Orientation-invariant feature method (magnitude + jerk)
+        # Check for new feature_config (orientation_robust features)
+        try:
+            feature_config = self.model_data.get('model_info', {}).get('feature_config', {})
+            orientation_robust = feature_config.get('orientation_robust', False)
+            include_per_axis = feature_config.get('include_per_axis', False)
+            include_frequency = feature_config.get('include_frequency', False)
+        except Exception:
+            orientation_robust = False
+            include_per_axis = True
+            include_frequency = False
+        
+        # Legacy support for old feature_method parameter
         try:
             feature_method = self.model_data.get(
                 'model_params', {}).get('feature_method')
         except Exception:
             feature_method = None
-
-        if feature_method == 'orientation_invariant':
+        
+        # Use orientation-robust features if configured
+        if orientation_robust or feature_method == 'orientation_invariant':
             return """void extract_features(float sensor_data[][6], int samples, float features[]) {
-    // Orientation-invariant features: magnitudes + jerk
-    // features order:
-    // acc_mag_mean, acc_mag_std, acc_mag_rms, acc_mag_energy, acc_mag_min, acc_mag_max,
-    // gyro_mag_mean, gyro_mag_std, gyro_mag_rms, gyro_mag_energy, gyro_mag_min, gyro_mag_max,
-    // jerk_mag_mean, jerk_mag_std, jerk_mag_rms, jerk_mag_energy, jerk_mag_max
+    // Orientation-robust features (33 magnitude-based features)
+    // Matches Python extract_orientation_invariant_features()
+    // Features per magnitude (acc_mag, gyro_mag): mean, std, min, max, range, median, q25, q75, iqr, 
+    // skewness, kurtosis, rms, energy, zero_crossings, mean_crossing_rate (15 × 2 = 30)
+    // Plus jerk magnitude: mean, std, max (3 features) = 33 total
 
     if (samples <= 1) {
         for (int i = 0; i < NUM_FEATURES; i++) features[i] = 0.0f;
         return;
     }
 
-    float acc_mag_sum = 0.0f, acc_mag_sum_sq = 0.0f, acc_mag_min = 1e9f, acc_mag_max = -1e9f;
-    float gyro_mag_sum = 0.0f, gyro_mag_sum_sq = 0.0f, gyro_mag_min = 1e9f, gyro_mag_max = -1e9f;
-    float jerk_mag_sum = 0.0f, jerk_mag_sum_sq = 0.0f, jerk_mag_max = -1e9f;
-
+    // Temporary arrays for magnitude values
+    float acc_mag[WINDOW_SIZE];
+    float gyro_mag[WINDOW_SIZE];
+    float jerk_mag[WINDOW_SIZE];
+    
+    // Calculate magnitude vectors
     float prev_ax = sensor_data[0][0];
     float prev_ay = sensor_data[0][1];
     float prev_az = sensor_data[0][2];
-
+    
     for (int i = 0; i < samples; i++) {
         float ax = sensor_data[i][0];
         float ay = sensor_data[i][1];
@@ -262,71 +276,136 @@ const float feature_stds[NUM_FEATURES] = {{
         float gy = sensor_data[i][4];
         float gz = sensor_data[i][5];
 
-        float acc_mag = sqrtf(ax*ax + ay*ay + az*az);
-        float gyro_mag = sqrtf(gx*gx + gy*gy + gz*gz);
-
-        acc_mag_sum += acc_mag;
-        acc_mag_sum_sq += acc_mag * acc_mag;
-        if (acc_mag < acc_mag_min) acc_mag_min = acc_mag;
-        if (acc_mag > acc_mag_max) acc_mag_max = acc_mag;
-
-        gyro_mag_sum += gyro_mag;
-        gyro_mag_sum_sq += gyro_mag * gyro_mag;
-        if (gyro_mag < gyro_mag_min) gyro_mag_min = gyro_mag;
-        if (gyro_mag > gyro_mag_max) gyro_mag_max = gyro_mag;
-
+        acc_mag[i] = sqrtf(ax*ax + ay*ay + az*az);
+        gyro_mag[i] = sqrtf(gx*gx + gy*gy + gz*gz);
+        
         if (i > 0) {
             float dax = ax - prev_ax;
             float day = ay - prev_ay;
             float daz = az - prev_az;
-            float jerk_mag = sqrtf(dax*dax + day*day + daz*daz);
-            jerk_mag_sum += jerk_mag;
-            jerk_mag_sum_sq += jerk_mag * jerk_mag;
-            if (jerk_mag > jerk_mag_max) jerk_mag_max = jerk_mag;
+            jerk_mag[i-1] = sqrtf(dax*dax + day*day + daz*daz);
         }
-
+        
         prev_ax = ax; prev_ay = ay; prev_az = az;
     }
-
-    float n = (float)samples;
-    float n_jerk = (float)(samples - 1);
-
+    
+    int n_jerk = samples - 1;
     int idx = 0;
-    // Acc magnitude features (mean, std, rms, energy) - NO min/max here!
-    float acc_mean = acc_mag_sum / n;
-    float acc_var = (acc_mag_sum_sq / n) - acc_mean * acc_mean;
-    float acc_std = sqrtf(acc_var > 0 ? acc_var : 0.0f);
-    features[idx++] = acc_mean;                           // 0
-    features[idx++] = acc_std;                            // 1
-    features[idx++] = sqrtf(acc_mag_sum_sq / n);          // 2: RMS
-    features[idx++] = acc_mag_sum_sq;                     // 3: Energy
-
-    // Gyro magnitude features (mean, std, rms, energy) - NO min/max here!
-    float gyro_mean = gyro_mag_sum / n;
-    float gyro_var = (gyro_mag_sum_sq / n) - gyro_mean * gyro_mean;
-    float gyro_std = sqrtf(gyro_var > 0 ? gyro_var : 0.0f);
-    features[idx++] = gyro_mean;                          // 4
-    features[idx++] = gyro_std;                           // 5
-    features[idx++] = sqrtf(gyro_mag_sum_sq / n);         // 6: RMS
-    features[idx++] = gyro_mag_sum_sq;                    // 7: Energy
-
-    // Jerk magnitude features (mean, std, rms, energy) - NO max here!
-    float jerk_mean = (n_jerk > 0) ? (jerk_mag_sum / n_jerk) : 0.0f;
-    float jerk_var = (n_jerk > 0) ? ((jerk_mag_sum_sq / n_jerk) - jerk_mean * jerk_mean) : 0.0f;
+    
+    // Extract 15 features from acc_mag
+    idx = extract_magnitude_stats(acc_mag, samples, features, idx);
+    
+    // Extract 15 features from gyro_mag
+    idx = extract_magnitude_stats(gyro_mag, samples, features, idx);
+    
+    // Extract 3 jerk magnitude features (mean, std, max)
+    float jerk_sum = 0.0f, jerk_sum_sq = 0.0f, jerk_max = -1e9f;
+    for (int i = 0; i < n_jerk; i++) {
+        jerk_sum += jerk_mag[i];
+        jerk_sum_sq += jerk_mag[i] * jerk_mag[i];
+        if (jerk_mag[i] > jerk_max) jerk_max = jerk_mag[i];
+    }
+    
+    float jerk_mean = (n_jerk > 0) ? (jerk_sum / n_jerk) : 0.0f;
+    float jerk_var = (n_jerk > 0) ? ((jerk_sum_sq / n_jerk) - jerk_mean * jerk_mean) : 0.0f;
     float jerk_std = sqrtf(jerk_var > 0 ? jerk_var : 0.0f);
-    features[idx++] = jerk_mean;                          // 8
-    features[idx++] = jerk_std;                           // 9
-    features[idx++] = (n_jerk > 0) ? sqrtf(jerk_mag_sum_sq / n_jerk) : 0.0f;  // 10: RMS
-    features[idx++] = jerk_mag_sum_sq;                    // 11: Energy
-
-    // Min/max features - grouped at the end to match training feature order
-    features[idx++] = acc_mag_min;                        // 12
-    features[idx++] = acc_mag_max;                        // 13
-    features[idx++] = gyro_mag_min;                       // 14
-    features[idx++] = gyro_mag_max;                       // 15
-    features[idx++] = jerk_mag_max;                       // 16
-
+    
+    features[idx++] = jerk_mean;
+    features[idx++] = jerk_std;
+    features[idx++] = jerk_max;
+    
+    // Fill remaining features with zeros
     for (; idx < NUM_FEATURES; idx++) features[idx] = 0.0f;
+}
+
+// Helper function to extract statistical features from magnitude vector
+int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx) {
+    // Calculate all statistical features for one magnitude vector
+    // Returns: mean, std, min, max, range, median, q25, q75, iqr, 
+    //          skewness, kurtosis, rms, energy, zero_crossings, mean_crossing_rate (15 features)
+    
+    int idx = start_idx;
+    float n = (float)samples;
+    
+    // First pass: sum, sum_sq, min, max
+    float sum = 0.0f, sum_sq = 0.0f;
+    float min_val = 1e9f, max_val = -1e9f;
+    for (int i = 0; i < samples; i++) {
+        sum += mag[i];
+        sum_sq += mag[i] * mag[i];
+        if (mag[i] < min_val) min_val = mag[i];
+        if (mag[i] > max_val) max_val = mag[i];
+    }
+    
+    float mean = sum / n;
+    float variance = (sum_sq / n) - (mean * mean);
+    float std = sqrtf(variance > 0 ? variance : 0.0f);
+    float rms = sqrtf(sum_sq / n);
+    float energy = sum_sq;
+    float range = max_val - min_val;
+    
+    features[idx++] = mean;         // 0: mean
+    features[idx++] = std;          // 1: std
+    features[idx++] = min_val;      // 2: min
+    features[idx++] = max_val;      // 3: max
+    features[idx++] = range;        // 4: range
+    
+    // Median and quartiles (requires sorting a copy)
+    float sorted[WINDOW_SIZE];
+    for (int i = 0; i < samples; i++) sorted[i] = mag[i];
+    
+    // Simple bubble sort (sufficient for small arrays)
+    for (int i = 0; i < samples - 1; i++) {
+        for (int j = 0; j < samples - i - 1; j++) {
+            if (sorted[j] > sorted[j + 1]) {
+                float temp = sorted[j];
+                sorted[j] = sorted[j + 1];
+                sorted[j + 1] = temp;
+            }
+        }
+    }
+    
+    float median = (samples % 2 == 0) ? 
+        (sorted[samples/2 - 1] + sorted[samples/2]) / 2.0f : 
+        sorted[samples/2];
+    float q25 = sorted[samples/4];
+    float q75 = sorted[(3*samples)/4];
+    float iqr = q75 - q25;
+    
+    features[idx++] = median;       // 5: median
+    features[idx++] = q25;          // 6: q25
+    features[idx++] = q75;          // 7: q75
+    features[idx++] = iqr;          // 8: iqr
+    
+    // Skewness and kurtosis
+    float sum_cubed = 0.0f, sum_fourth = 0.0f;
+    for (int i = 0; i < samples; i++) {
+        float diff = mag[i] - mean;
+        float diff_sq = diff * diff;
+        sum_cubed += diff * diff_sq;
+        sum_fourth += diff_sq * diff_sq;
+    }
+    
+    float skewness = (std > 0.0001f) ? (sum_cubed / (n * std * std * std)) : 0.0f;
+    float kurtosis = (std > 0.0001f) ? ((sum_fourth / (n * std * std * std * std)) - 3.0f) : 0.0f;
+    
+    features[idx++] = skewness;     // 9: skewness
+    features[idx++] = kurtosis;     // 10: kurtosis
+    features[idx++] = rms;          // 11: rms
+    features[idx++] = energy;       // 12: energy
+    
+    // Zero crossings and mean crossing rate
+    int zero_crossings = 0;
+    int mean_crossings = 0;
+    for (int i = 1; i < samples; i++) {
+        if ((mag[i-1] * mag[i]) < 0) zero_crossings++;
+        if ((mag[i-1] - mean) * (mag[i] - mean) < 0) mean_crossings++;
+    }
+    
+    features[idx++] = (float)zero_crossings;       // 13: zero_crossings
+    features[idx++] = (float)mean_crossings / n;   // 14: mean_crossing_rate
+    
+    return idx;
 }
 """
 

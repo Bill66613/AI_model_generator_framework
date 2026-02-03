@@ -106,22 +106,38 @@ layout = html.Div([
                     dcc.Dropdown(
                         id='global-feature-selection',
                         options=[
-                            {'label': '🎯 All Features (Time + Frequency Domain)',
-                             'value': 'all'},
-                            {'label': '⏱️ Time-Domain Only (90 features)',
+                            {'label': '🧭 Orientation-Invariant Time-Domain ONLY (RECOMMENDED for deployment) - 33 features',
+                             'value': 'orientation_invariant_time_only'},
+                            {'label': '🧭 Orientation-Invariant + FFT (Training only, NOT deployable) - 47 features',
+                             'value': 'orientation_invariant'},
+                            {'label': '🎯 All Features Time-Domain (Deployable) - 90 features',
                              'value': 'time_domain'},
-                            {'label': '🌊 Frequency-Domain Only (48 features)',
+                            {'label': '🎯 All Features + FFT (Training only, NOT deployable) - 138 features',
+                             'value': 'all'},
+                            {'label': '🌊 Frequency-Domain Only (Training only, NOT deployable) - 48 features',
                              'value': 'frequency_domain'},
-                            {'label': '📊 Raw Sensor Axes Only (6 features)',
-                             'value': 'raw'},
-                            {'label': '🧭 Orientation-Invariant (Magnitude + Jerk)',
-                             'value': 'orientation_invariant'}
+                            {'label': '📊 Raw Sensor Axes (Deployable) - 6 features',
+                             'value': 'raw'}
                         ],
-                        value='time_domain',
+                        value='orientation_invariant_time_only',
                         placeholder="Select feature extraction method",
                         clearable=False,
                         style={'margin-bottom': '20px'}
                     ),
+                    html.Div([
+                        html.Strong("⚠️ Important: "),
+                        "FFT features work for training but ",
+                        html.Strong("cannot be deployed to devices"),
+                        " (no FFT implementation in C++). For deployment, use time-domain only options."
+                    ], style={
+                        'padding': '12px',
+                        'backgroundColor': '#fff3cd',
+                        'borderLeft': '4px solid #ffc107',
+                        'borderRadius': '6px',
+                        'fontSize': '13px',
+                        'color': '#856404',
+                        'marginBottom': '15px'
+                    }),
                     html.Div(id='feature-count-display', style={
                         'color': '#666', 'font-size': '14px', 'margin-bottom': '20px'
                     })

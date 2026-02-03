@@ -122,6 +122,30 @@ layout = html.Div([
         'border': '1px solid #e9ecef'
     }),
 
+    # Note: Feature extraction is configured in the Feature Engineering tab
+    # Features are pre-computed and stored in CSV files before training
+
+    # Workflow Information
+    html.Div([
+        html.Div([
+            html.Strong("💡 Important: "),
+            "Feature extraction is configured in the ",
+            html.Strong("Feature Engineering tab"),
+            ". Features are pre-computed and saved to CSV files. ",
+            "The Training tab uses these pre-computed features. ",
+            "To change feature types (e.g., orientation-invariant vs per-axis), ",
+            "go to Feature Engineering tab and regenerate the datasets."
+        ], style={
+            'padding': '15px',
+            'backgroundColor': '#fff3cd',
+            'border-left': '4px solid #ffc107',
+            'border-radius': '6px',
+            'margin-bottom': '25px',
+            'color': '#856404',
+            'fontSize': '14px'
+        })
+    ]),
+
     # Training Controls Section
     html.Div([
         html.H3("🚀 Training Controls", style={
