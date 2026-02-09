@@ -156,9 +156,9 @@ int har_predict(float features[NUM_FEATURES]) {{
         }}
 
         // Apply StandardScaler transformation: (x - mean) / std
-        float std = feature_stds[i];
+        float std = READ_STD(i);
         if (std < 0.0001f) std = 1.0f; // Prevent division by zero
-        scaled_features[i] = (features[i] - feature_means[i]) / std;
+        scaled_features[i] = (features[i] - READ_MEAN(i)) / std;
 
         // Clamp scaled features to reasonable range (after scaling)
         if (scaled_features[i] < -10.0f) scaled_features[i] = -10.0f;
@@ -192,9 +192,13 @@ const char* get_activity_name(int class_id) {{
         return implementation.strip()
 
     def _generate_feature_scaling_arrays(self) -> str:
-        """Generate feature scaling arrays with real parameters."""
-        # Use optimization-specific precision
+        """Generate feature scaling arrays with real parameters.
+        Uses PROGMEM on AVR platforms to store in flash instead of RAM."""
         precision = self.feature_precision
+        
+        # Use PROGMEM for AVR-based Arduino boards (limited RAM)
+        progmem = 'PROGMEM ' if self.platform == 'arduino' else ''
+        read_macro = self._needs_progmem_read()
 
         # Format all feature means
         means_formatted = []
@@ -214,37 +218,85 @@ const char* get_activity_name(int class_id) {{
                 stds_formatted.append(f'{std:.{precision}f}')
         stds_array = ', '.join(stds_formatted)
 
-        return f"""// Feature scaling parameters (extracted from trained model)
+        code = f"""// Feature scaling parameters (extracted from trained model)
 // Precision: {precision} decimal places ({self.optimization} optimization)
-const float feature_means[NUM_FEATURES] = {{
+const float feature_means[NUM_FEATURES] {progmem}= {{
     {means_array}
 }};
 
-const float feature_stds[NUM_FEATURES] = {{
+const float feature_stds[NUM_FEATURES] {progmem}= {{
     {stds_array}
 }};"""
 
+        if read_macro:
+            code += """
+
+// Helper to read float from PROGMEM (AVR only)
+static inline float pgm_read_float_near_safe(const float* addr) {
+    float val;
+    memcpy_P(&val, addr, sizeof(float));
+    return val;
+}
+#define READ_MEAN(i) pgm_read_float_near_safe(&feature_means[i])
+#define READ_STD(i) pgm_read_float_near_safe(&feature_stds[i])"""
+        else:
+            code += """
+
+#define READ_MEAN(i) feature_means[i]
+#define READ_STD(i) feature_stds[i]"""
+
+        return code
+
+    def _needs_progmem_read(self) -> bool:
+        """Check if platform needs PROGMEM read macros (AVR only)."""
+        return self.platform == 'arduino'
+
     def _generate_complete_feature_extraction(self) -> str:
-        """Generate optimization-aware feature extraction function."""
-        # Check for new feature_config (orientation_robust features)
+        """Generate optimization-aware feature extraction function.
+        
+        CRITICAL: The feature extraction algorithm MUST match training exactly.
+        Optimization level affects precision/sampling/window size, NOT the algorithm.
+        If the model was trained with orientation-robust features, C++ MUST use
+        orientation-robust extraction regardless of optimization level.
+        """
+        # Detect feature configuration from multiple sources
+        orientation_robust = False
+        include_per_axis = False
+        include_frequency = False
+        
+        # Source 1: Explicit feature_config in model_info
         try:
             feature_config = self.model_data.get(
                 'model_info', {}).get('feature_config', {})
-            orientation_robust = feature_config.get(
-                'orientation_robust', False)
-            include_per_axis = feature_config.get('include_per_axis', False)
-            include_frequency = feature_config.get('include_frequency', False)
+            if feature_config:
+                orientation_robust = feature_config.get(
+                    'orientation_robust', False)
+                include_per_axis = feature_config.get('include_per_axis', False)
+                include_frequency = feature_config.get('include_frequency', False)
         except Exception:
-            orientation_robust = False
-            include_per_axis = True
-            include_frequency = False
+            pass
 
-        # Legacy support for old feature_method parameter
+        # Source 2: Legacy feature_method parameter
         try:
             feature_method = self.model_data.get(
                 'model_params', {}).get('feature_method')
+            if feature_method in ('orientation_invariant', 'orientation_invariant_time_only'):
+                orientation_robust = True
         except Exception:
-            feature_method = None
+            pass
+
+        # Source 3: Auto-detect from feature names (most reliable)
+        if not orientation_robust and self.feature_names:
+            has_acc_mag = any(str(name).startswith('acc_mag_') for name in self.feature_names)
+            has_gyro_mag = any(str(name).startswith('gyro_mag_') for name in self.feature_names)
+            has_jerk_mag = any(str(name).startswith('acc_jerk_mag_') for name in self.feature_names)
+            if has_acc_mag and has_gyro_mag:
+                orientation_robust = True
+            # Also check for per-axis features
+            has_per_axis = any(str(name).startswith(('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_')) 
+                             for name in self.feature_names)
+            if has_per_axis:
+                include_per_axis = True
 
         # Use orientation-robust features if configured
         if orientation_robust or feature_method == 'orientation_invariant':
@@ -359,15 +411,15 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
     float sorted[WINDOW_SIZE];
     for (int i = 0; i < samples; i++) sorted[i] = mag[i];
 
-    // Simple bubble sort (sufficient for small arrays)
-    for (int i = 0; i < samples - 1; i++) {
-        for (int j = 0; j < samples - i - 1; j++) {
-            if (sorted[j] > sorted[j + 1]) {
-                float temp = sorted[j];
-                sorted[j] = sorted[j + 1];
-                sorted[j + 1] = temp;
-            }
+    // Insertion sort (faster than bubble sort for small/partially-sorted arrays)
+    for (int i = 1; i < samples; i++) {
+        float key = sorted[i];
+        int j = i - 1;
+        while (j >= 0 && sorted[j] > key) {
+            sorted[j + 1] = sorted[j];
+            j--;
         }
+        sorted[j + 1] = key;
     }
 
     float median = (samples % 2 == 0) ?
@@ -382,17 +434,32 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
     features[idx++] = q75;          // 7: q75
     features[idx++] = iqr;          // 8: iqr
 
-    // Skewness and kurtosis
-    float sum_cubed = 0.0f, sum_fourth = 0.0f;
+    // Skewness and kurtosis - bias-corrected (pandas/scipy formula)
+    // Use sample std (Bessel's correction) for standardization
+    float sample_var = variance * n / (n - 1.0f + 0.001f);
+    float sample_std = sqrtf(sample_var > 0 ? sample_var : 0.0001f);
+
+    float m3_sum = 0.0f, m4_sum = 0.0f;
     for (int i = 0; i < samples; i++) {
-        float diff = mag[i] - mean;
-        float diff_sq = diff * diff;
-        sum_cubed += diff * diff_sq;
-        sum_fourth += diff_sq * diff_sq;
+        float z = (mag[i] - mean) / (sample_std + 0.0001f);
+        float z2 = z * z;
+        m3_sum += z * z2;
+        m4_sum += z2 * z2;
     }
 
-    float skewness = (std > 0.0001f) ? (sum_cubed / (n * std * std * std)) : 0.0f;
-    float kurtosis = (std > 0.0001f) ? ((sum_fourth / (n * std * std * std * std)) - 3.0f) : 0.0f;
+    // Skewness with bias correction: sqrt(n*(n-1))/(n-2) * (m3/n)
+    float g1 = m3_sum / n;
+    float skewness = 0.0f;
+    if (samples >= 3) {
+        skewness = sqrtf(n * (n - 1.0f)) / (n - 2.0f) * g1;
+    }
+
+    // Excess kurtosis with bias correction: (n-1)/((n-2)*(n-3)) * ((n+1)*g2 + 6)
+    float g2 = m4_sum / n - 3.0f;
+    float kurtosis = -3.0f;
+    if (samples >= 4) {
+        kurtosis = (n - 1.0f) / ((n - 2.0f) * (n - 3.0f)) * ((n + 1.0f) * g2 + 6.0f);
+    }
 
     features[idx++] = skewness;     // 9: skewness
     features[idx++] = kurtosis;     // 10: kurtosis
@@ -703,23 +770,23 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         features[feature_idx++] = sqrt(sum_sq / samples);    // 11: rms
         features[feature_idx++] = sum_sq;                    // 12: energy
 
-        // Zero-crossings (signal crosses zero)
+        // Zero-crossings (signal crosses zero) - using sign product for consistency
         int zero_crossings = 0;
         for (int i = 1; i < samples; i++) {
-            if ((sensor_data[i-1][axis] > 0) != (sensor_data[i][axis] > 0)) {
+            if (sensor_data[i-1][axis] * sensor_data[i][axis] < 0) {
                 zero_crossings++;
             }
         }
         features[feature_idx++] = (float)zero_crossings;     // 13: zero_crossings
 
-        // Mean-crossing rate (signal crosses mean)
+        // Mean-crossing rate (signal crosses mean) - NORMALIZED
         int mean_crossings = 0;
         for (int i = 1; i < samples; i++) {
-            if ((sensor_data[i-1][axis] > mean) != (sensor_data[i][axis] > mean)) {
+            if ((sensor_data[i-1][axis] - mean) * (sensor_data[i][axis] - mean) < 0) {
                 mean_crossings++;
             }
         }
-        features[feature_idx++] = (float)mean_crossings;     // 14: mean_crossing_rate
+        features[feature_idx++] = (float)mean_crossings / (float)samples;     // 14: mean_crossing_rate (normalized)
     }
 
     // Total features: 15 per axis * 6 axes = 90 time-domain features

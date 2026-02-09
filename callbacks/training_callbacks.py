@@ -669,8 +669,9 @@ def register_callbacks(app):
             base_dir = PERSISTENT_DIR
 
         # Feature opts for metadata (training uses pre-computed features from CSV)
+        # Auto-detect feature configuration from actual feature column names
         feature_opts = {
-            'orientation_robust': True,  # Metadata for deployment
+            'orientation_robust': True,  # Will be updated below
             'include_per_axis': False,
             'include_frequency': True
         }
@@ -714,6 +715,25 @@ def register_callbacks(app):
             all_feature_cols = sorted(list(all_feature_cols))
             print(
                 f"DEBUG: Total unique features across all files: {len(all_feature_cols)}")
+
+            # Auto-detect feature configuration from actual column names
+            has_acc_mag = any(col.startswith('acc_mag_') for col in all_feature_cols)
+            has_gyro_mag = any(col.startswith('gyro_mag_') for col in all_feature_cols)
+            has_per_axis = any(col.startswith(('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_'))
+                               for col in all_feature_cols)
+            has_frequency = any('dominant_frequency' in col or 'spectral_energy' in col
+                                for col in all_feature_cols)
+
+            if has_acc_mag and has_gyro_mag:
+                feature_opts['orientation_robust'] = True
+            elif has_per_axis:
+                feature_opts['orientation_robust'] = False
+            # else keep default True
+
+            feature_opts['include_per_axis'] = has_per_axis
+            feature_opts['include_frequency'] = has_frequency
+
+            print(f"DEBUG: Auto-detected feature_opts: {feature_opts}")
 
             # Second pass: load data and align columns
             for train_file in train_files:
@@ -820,9 +840,9 @@ def register_callbacks(app):
                     f"WARNING: Found {test_df['label'].isna().sum()} NaN labels in test data - removing these rows")
                 test_df = test_df.dropna(subset=['label'])
 
-            X_train = train_df.drop('label', axis=1).values
+            X_train = train_df.drop('label', axis=1)
             y_train = train_df['label'].values
-            X_test = test_df.drop('label', axis=1).values
+            X_test = test_df.drop('label', axis=1)
             y_test = test_df['label'].values
 
             print(f"DEBUG: y_train unique: {np.unique(y_train)}")
@@ -848,7 +868,7 @@ def register_callbacks(app):
                         f"WARNING: Found {val_df['label'].isna().sum()} NaN labels in validation data - removing these rows")
                     val_df = val_df.dropna(subset=['label'])
 
-                X_val = val_df.drop('label', axis=1).values
+                X_val = val_df.drop('label', axis=1)
                 y_val = val_df['label'].values
                 print(f"DEBUG: y_val unique: {np.unique(y_val)}")
 

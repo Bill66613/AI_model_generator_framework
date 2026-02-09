@@ -539,11 +539,13 @@ def extract_orientation_invariant_features(df: pd.DataFrame, sensor_cols: List[s
         features[f'{name}_rms'] = np.sqrt(np.mean(data**2))
         features[f'{name}_energy'] = np.sum(data**2)
 
-        # Signal characteristics
+        # Signal characteristics - sign-product method (consistent with C++ deployment)
         mean_val = np.mean(data)
-        features[f'{name}_zero_crossings'] = len(
-            np.where(np.diff(np.sign(data)))[0])
-        mean_crossings = len(np.where(np.diff(np.sign(data - mean_val)))[0])
+        # Count strict sign changes: data[i-1] * data[i] < 0
+        features[f'{name}_zero_crossings'] = int(
+            np.sum(data[:-1] * data[1:] < 0))
+        centered = data - mean_val
+        mean_crossings = int(np.sum(centered[:-1] * centered[1:] < 0))
         features[f'{name}_mean_crossing_rate'] = mean_crossings / len(data)  # Normalize to rate
 
     # Jerk magnitude (rate of change of acceleration) - also orientation invariant
@@ -660,11 +662,13 @@ def extract_time_domain_features(df: pd.DataFrame, sensor_cols: List[str]) -> pd
         features[f'{col}_rms'] = np.sqrt(np.mean(data**2))
         features[f'{col}_energy'] = np.sum(data**2)
 
-        # Signal characteristics
-        features[f'{col}_zero_crossings'] = len(
-            np.where(np.diff(np.sign(data)))[0])
-        features[f'{col}_mean_crossing_rate'] = len(
-            np.where(np.diff(np.sign(data - np.mean(data))))[0])
+        # Signal characteristics - sign-product method (consistent with C++ deployment)
+        # Count strict sign changes: data[i-1] * data[i] < 0
+        features[f'{col}_zero_crossings'] = int(
+            np.sum(data[:-1] * data[1:] < 0))
+        centered = data - np.mean(data)
+        mean_crossings = int(np.sum(centered[:-1] * centered[1:] < 0))
+        features[f'{col}_mean_crossing_rate'] = mean_crossings / len(data)  # Normalize to rate
 
     return pd.DataFrame([features])
 

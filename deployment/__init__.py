@@ -15,6 +15,7 @@ from .code_generator_factory import (
     generate_and_save_deployment_code,
     get_deployment_info
 )
+from .validation import DeploymentValidator, validate_before_deployment
 
 __all__ = [
     'BaseCodeGenerator',
@@ -26,5 +27,7 @@ __all__ = [
     'generate_deployment_code',
     'analyze_resource_requirements',
     'generate_and_save_deployment_code',
-    'get_deployment_info'
+    'get_deployment_info',
+    'DeploymentValidator',
+    'validate_before_deployment',
 ]

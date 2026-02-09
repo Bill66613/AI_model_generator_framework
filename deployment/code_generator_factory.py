@@ -4,8 +4,9 @@ Factory pattern implementation for creating appropriate code generators
 """
 
 import os
+import numpy as np
 from datetime import datetime
-from typing import Dict, Any, Type, List
+from typing import Dict, Any, Type, List, Optional
 from .base_generator import BaseCodeGenerator, ValidationError, ModelDataError, OptimizationError
 from .random_forest_generator import RandomForestCodeGenerator
 from .neural_network_generator import NeuralNetworkCodeGenerator
@@ -13,8 +14,163 @@ from .svm_generator import SVMCodeGenerator
 from .arm_cortex_generator import ARMCortexMCodeGenerator
 
 
+def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
+    """Get the canonical C++ feature extraction order.
+    
+    The C++ extract_features() function outputs features in a fixed order:
+      - extract_magnitude_stats(acc_mag): 15 features
+      - extract_magnitude_stats(gyro_mag): 15 features  
+      - jerk features: 3 features (mean, std, max)
+    
+    This order may differ from the model's training order (which depends on
+    DataFrame column ordering, typically alphabetical). This function returns
+    the C++ extraction order so we can reorder model parameters to match.
+    """
+    # The 15 stats per magnitude, in the order extract_magnitude_stats() outputs them
+    magnitude_stats = [
+        'mean', 'std', 'min', 'max', 'range',
+        'median', 'q25', 'q75', 'iqr',
+        'skewness', 'kurtosis', 'rms', 'energy',
+        'zero_crossings', 'mean_crossing_rate'
+    ]
+    
+    # Detect which magnitude groups are present from feature names
+    feature_set = set(str(f) for f in feature_names)
+    
+    has_acc_mag = any(f.startswith('acc_mag_') for f in feature_set)
+    has_gyro_mag = any(f.startswith('gyro_mag_') for f in feature_set)
+    has_jerk = any(f.startswith('acc_jerk_mag_') for f in feature_set)
+    
+    # Check for per-axis features (non-orientation-robust)
+    has_per_axis = any(f.startswith(('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_')) for f in feature_set)
+    
+    if has_per_axis:
+        # Per-axis mode: features extracted axis by axis
+        # Cannot reliably determine C++ order for per-axis mode,
+        # so return the original feature names (no reordering)
+        return list(feature_names)
+    
+    cpp_order = []
+    
+    if has_acc_mag:
+        for stat in magnitude_stats:
+            name = f'acc_mag_{stat}'
+            if name in feature_set:
+                cpp_order.append(name)
+    
+    if has_gyro_mag:
+        for stat in magnitude_stats:
+            name = f'gyro_mag_{stat}'
+            if name in feature_set:
+                cpp_order.append(name)
+    
+    if has_jerk:
+        for suffix in ['mean', 'std', 'max']:
+            name = f'acc_jerk_mag_{suffix}'
+            if name in feature_set:
+                cpp_order.append(name)
+    
+    # Verify we captured all features
+    if set(cpp_order) != feature_set:
+        missing = feature_set - set(cpp_order)
+        extra = set(cpp_order) - feature_set
+        print(f"Warning: Feature order mismatch. Missing from C++ order: {missing}, Extra: {extra}")
+        # Fall back to original order if we can't determine C++ order
+        return list(feature_names)
+    
+    return cpp_order
+
+
+def compute_feature_reorder_indices(model_feature_names: List[str], 
+                                      cpp_feature_order: List[str]) -> Optional[List[int]]:
+    """Compute reordering indices to map from model order to C++ order.
+    
+    Returns a list of indices such that:
+        cpp_order_value[i] = model_order_value[indices[i]]
+    
+    i.e., for each position in the C++ output, which model-order index to pull from.
+    Returns None if orders already match (no reordering needed).
+    """
+    model_names = [str(f) for f in model_feature_names]
+    
+    if model_names == cpp_feature_order:
+        return None  # Already in correct order
+    
+    # Build lookup: feature_name -> model index
+    name_to_model_idx = {name: i for i, name in enumerate(model_names)}
+    
+    reorder = []
+    for cpp_name in cpp_feature_order:
+        if cpp_name not in name_to_model_idx:
+            print(f"Warning: C++ feature '{cpp_name}' not found in model features")
+            return None  # Can't reorder safely
+        reorder.append(name_to_model_idx[cpp_name])
+    
+    return reorder
+
+
+def reorder_model_parameters(enhanced_data: Dict[str, Any], 
+                              reorder_indices: List[int],
+                              cpp_feature_order: List[str]) -> Dict[str, Any]:
+    """Reorder all model parameters from model (training) order to C++ extraction order.
+    
+    This ensures that feature_means[i], feature_stds[i], and weight matrix row [i]
+    all correspond to the feature that C++ extract_features() places at position [i].
+    """
+    print(f"Reordering {len(reorder_indices)} features from model order to C++ extraction order")
+    
+    # Reorder scaler parameters
+    if 'feature_means' in enhanced_data:
+        old_means = enhanced_data['feature_means']
+        enhanced_data['feature_means'] = [old_means[i] for i in reorder_indices]
+    
+    if 'feature_stds' in enhanced_data:
+        old_stds = enhanced_data['feature_stds']
+        enhanced_data['feature_stds'] = [old_stds[i] for i in reorder_indices]
+    
+    # Reorder neural network input weights (rows correspond to features)
+    if 'weights' in enhanced_data:
+        weights = enhanced_data['weights']
+        if 'input_weights' in weights:
+            old_w = np.array(weights['input_weights'])  # shape: [n_features, hidden_size]
+            new_w = old_w[reorder_indices, :]  # Reorder rows
+            weights['input_weights'] = new_w.tolist()
+            enhanced_data['weights'] = weights
+    
+    # Reorder Random Forest feature indices in tree splits
+    if 'trees' in enhanced_data:
+        # Build reverse mapping: model_idx -> cpp_idx
+        model_to_cpp = [0] * len(reorder_indices)
+        for cpp_idx, model_idx in enumerate(reorder_indices):
+            model_to_cpp[model_idx] = cpp_idx
+        
+        for tree in enhanced_data['trees']:
+            if 'feature_indices' in tree:
+                old_indices = tree['feature_indices']
+                tree['feature_indices'] = [
+                    model_to_cpp[fi] if fi >= 0 else fi  # -2 means leaf node
+                    for fi in old_indices
+                ]
+    
+    # Reorder SVM support vectors (columns correspond to features)
+    if 'support_vectors' in enhanced_data:
+        old_sv = np.array(enhanced_data['support_vectors'])  # shape: [n_sv, n_features]
+        new_sv = old_sv[:, reorder_indices]  # Reorder columns
+        enhanced_data['support_vectors'] = new_sv.tolist()
+    
+    # Update feature names to C++ order
+    enhanced_data['feature_names'] = cpp_feature_order
+    
+    return enhanced_data
+
+
 def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract actual parameters from trained model object."""
+    """Extract actual parameters from trained model object.
+    
+    Also reorders all parameters to match the C++ feature extraction order,
+    since the model may have been trained with features in a different order
+    (e.g., alphabetical from DataFrame columns) than the C++ code extracts them.
+    """
     model_obj = model_data.get('model_object')
     enhanced_data = model_data.copy()
 
@@ -43,8 +199,26 @@ def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
                     i: label for i, label in enumerate(model_obj.label_encoder.classes_)
                 }
 
+            # Reorder parameters to match C++ feature extraction order
+            feature_names = enhanced_data.get('feature_names', [])
+            if feature_names:
+                cpp_order = get_cpp_feature_order(feature_names)
+                reorder_indices = compute_feature_reorder_indices(feature_names, cpp_order)
+                if reorder_indices is not None:
+                    enhanced_data = reorder_model_parameters(
+                        enhanced_data, reorder_indices, cpp_order)
+                    # Store reorder indices so model-specific generators can also reorder
+                    # their own directly-extracted weights (e.g., NeuralNetworkCodeGenerator
+                    # reads from model_obj.model.coefs_ directly)
+                    enhanced_data['_feature_reorder_indices'] = reorder_indices
+                    print(f"Feature order remapped: model order → C++ extraction order")
+                else:
+                    print(f"Feature order already matches C++ extraction order")
+
         except Exception as e:
             print(f"Warning: Could not extract real model parameters: {e}")
+            import traceback
+            traceback.print_exc()
 
     return enhanced_data
 
@@ -96,29 +270,38 @@ def extract_svm_parameters(svm_model) -> Dict[str, Any]:
             params['intercept'] = svm_model.intercept_.tolist()
 
         # Extract actual gamma value (not 'scale' or 'auto' string)
+        # Priority: 1) _gamma (computed value), 2) numeric gamma param, 3) compute from SVs
+        import numpy as np
+
+        gamma_resolved = None
+
+        # Try the private _gamma attribute first (scikit-learn stores the computed value here)
         if hasattr(svm_model, '_gamma'):
-            # This is the actual computed gamma value used by the model
-            params['gamma'] = float(svm_model._gamma)
-        elif hasattr(svm_model, 'gamma'):
+            try:
+                gamma_resolved = float(svm_model._gamma)
+            except (TypeError, ValueError):
+                pass
+
+        # If _gamma didn't work, check the gamma parameter
+        if gamma_resolved is None and hasattr(svm_model, 'gamma'):
             gamma_val = svm_model.gamma
-            # If gamma is a string ('scale' or 'auto'), we need the computed value
-            if isinstance(gamma_val, str):
-                # Fallback: use default scale formula if available
-                if hasattr(svm_model, 'support_vectors_'):
-                    n_features = svm_model.support_vectors_.shape[1]
-                    if gamma_val == 'scale':
-                        # gamma = 1 / (n_features * X.var())
-                        # Use reasonable default since we don't have X.var()
-                        params['gamma'] = 1.0 / n_features
-                    else:  # 'auto'
-                        # gamma = 1 / n_features
-                        params['gamma'] = 1.0 / n_features
-                else:
-                    params['gamma'] = 0.1  # Reasonable default
-            else:
-                params['gamma'] = float(gamma_val)
+            if isinstance(gamma_val, (int, float)):
+                gamma_resolved = float(gamma_val)
+            elif isinstance(gamma_val, str) and hasattr(svm_model, 'support_vectors_'):
+                n_features = svm_model.support_vectors_.shape[1]
+                if gamma_val == 'scale':
+                    # gamma = 1 / (n_features * X.var())
+                    # Approximate X.var() from support vectors (best available proxy)
+                    sv_var = np.var(svm_model.support_vectors_)
+                    gamma_resolved = 1.0 / (n_features * sv_var) if sv_var > 0 else 1.0 / n_features
+                else:  # 'auto'
+                    gamma_resolved = 1.0 / n_features
+
+        if gamma_resolved is not None:
+            params['gamma'] = gamma_resolved
         else:
             params['gamma'] = 0.1  # Default fallback
+            print("⚠ Could not extract SVM gamma – using default 0.1")
     except Exception as e:
         print(f"Could not extract SVM parameters: {e}")
     return params
@@ -277,7 +460,7 @@ class CodeGeneratorFactory:
     @classmethod
     def get_supported_platforms(cls) -> list:
         """Get list of supported platforms."""
-        return ['arduino', 'arm_cortex_m', 'esp32', 'teensy']
+        return ['arduino', 'arm_cortex_m', 'esp32', 'teensy', 'seeed_xiao']
 
     @classmethod
     def register_generator(cls, model_type: str, generator_class: Type[BaseCodeGenerator]):
@@ -400,10 +583,11 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
     Returns:
         Dictionary with full file paths as keys and success messages as values
     """
-    # Extract additional model information if available
-    if 'model_object' in model_data:
-        # If we have the actual model object, extract real parameters
-        model_data = extract_real_model_parameters(model_data)
+    # NOTE: Do NOT call extract_real_model_parameters() here!
+    # It is already called inside generate_deployment_code() below.
+    # Calling it twice causes a bug: the 1st call reorders feature_names to C++ order,
+    # but the 2nd call re-extracts fresh scaler values (alphabetical order) and then
+    # skips reordering because feature_names already appear to match C++ order.
 
     # Create organized folder structure
     folder_path = create_output_folder_structure(

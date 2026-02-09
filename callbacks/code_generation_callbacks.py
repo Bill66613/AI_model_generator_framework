@@ -14,7 +14,8 @@ import traceback
 
 from config.config import MODELS_DIR, PERSISTENT_DIR, get_model_path, get_models_metadata_path
 from utils.model_training import EdgeMLModel
-from deployment import generate_deployment_code, generate_and_save_deployment_code
+from deployment import (generate_deployment_code, generate_and_save_deployment_code,
+                        validate_before_deployment)
 
 
 def compile_with_arduino_cli(code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose):
@@ -624,12 +625,32 @@ def register_callbacks(app):
                 'feature_names': feature_names or [],
                 'classes': classes,
                 'model_params': model_params,
-                'model_object': model  # Pass actual model for parameter extraction
+                'model_object': model,  # Pass actual model for parameter extraction
+                # Pass full metadata so base_generator can read feature_config
+                'model_info': metadata
             }
 
             # Generate code using proper code generators
             generated_code_files = generate_deployment_code(
                 model_type, model_data, platform, optimization, overlap_fraction
+            )
+
+            # Run pre-deployment validation
+            # Map platform to device key for resource estimation
+            device_key_mapping = {
+                'arduino': 'arduino_uno',
+                'esp32': 'esp32',
+                'seeed_xiao': 'seeed_xiao_nrf52840',
+                'arm_cortex_m': 'stm32f4',
+            }
+            device_key = device_key_mapping.get(platform)
+            
+            # Add optimization and extracted model params for validation
+            validation_model_data = model_data.copy()
+            validation_model_data['optimization'] = optimization
+            
+            validation_report = validate_before_deployment(
+                validation_model_data, generated_code_files, device_key
             )
 
             # Also save to working directory in organized structure
@@ -658,11 +679,38 @@ def register_callbacks(app):
             preview_code = preview_file[1]
             preview_filename = preview_file[0]
 
+            # Build validation summary for display
+            validation_items = []
+            code_checks = validation_report.get('checks', {}).get('code', {})
+            if code_checks:
+                for check in code_checks.get('checks_passed', []):
+                    validation_items.append(html.Li(f"✅ {check}", style={'color': '#155724'}))
+                for issue in code_checks.get('issues', []):
+                    validation_items.append(html.Li(f"❌ {issue}", style={'color': '#721c24', 'font-weight': 'bold'}))
+                for warning in code_checks.get('warnings', []):
+                    validation_items.append(html.Li(f"⚠️ {warning}", style={'color': '#856404'}))
+            
+            validation_passed = validation_report.get('passed', True)
+            validation_div = html.Div([
+                html.Strong(
+                    "🔍 Pre-deployment Validation: " + 
+                    ("PASSED ✅" if validation_passed else "ISSUES FOUND ❌"),
+                    style={'color': '#155724' if validation_passed else '#721c24'}
+                ),
+                html.Ul(validation_items, style={'margin-top': '5px', 'font-size': '12px'})
+                if validation_items else None
+            ], style={
+                'margin-top': '10px', 'padding': '10px',
+                'background': '#d4edda' if validation_passed else '#f8d7da',
+                'border-radius': '4px', 'font-size': '13px'
+            })
+
             status = html.Div([
                 html.H5("✅ Code Generated Successfully!",
                         style={'color': '#28a745'}),
                 html.P(
                     f"Model Type: {model_type.upper()} | Platform: {platform} | Optimization: {optimization.upper()}"),
+                validation_div,
                 html.Div([
                     html.Strong("📁 Generated Files: "),
                     html.Ul([

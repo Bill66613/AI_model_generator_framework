@@ -73,19 +73,14 @@ int predict_tree(const TreeNode* nodes, int tree_start, float* features) {{
 
     def _generate_prediction_function(self) -> str:
         """Generate Random Forest prediction function."""
-        return f"""int har_predict_internal(float features[NUM_FEATURES]) {{
-    // Scale features using training parameters
-    float scaled_features[NUM_FEATURES];
-    for (int i = 0; i < NUM_FEATURES; i++) {{
-        scaled_features[i] = (features[i] - feature_means[i]) / feature_stds[i];
-    }}
-
+        return f"""// Internal prediction function - receives ALREADY SCALED features from har_predict()
+int har_predict_internal(float features[NUM_FEATURES]) {{
     // Random Forest prediction using all trees
     int votes[NUM_CLASSES] = {{0}};
 
     // Predict with each tree and accumulate votes
     for (int tree = 0; tree < NUM_TREES && tree < {min(self.num_trees, 100)}; tree++) {{
-        int tree_prediction = predict_tree(tree_nodes, tree_starts[tree], scaled_features);
+        int tree_prediction = predict_tree(tree_nodes, tree_starts[tree], features);
         if (tree_prediction >= 0 && tree_prediction < NUM_CLASSES) {{
             votes[tree_prediction]++;
         }}

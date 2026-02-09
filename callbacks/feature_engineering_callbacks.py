@@ -11,7 +11,6 @@ import numpy as np
 from pathlib import Path
 from dash import dash_table
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 import glob
 
 from config.config import (
@@ -457,22 +456,13 @@ def register_callbacks(app):
             # Create DataFrame
             df_features = pd.DataFrame(feature_list)
 
-            # Step 3: Apply normalization uniformly (fit on ALL data)
+            # Step 3: Store raw features (NO scaling here - scaling is done during
+            # model training in EdgeMLModel.preprocess_data() to ensure the scaler
+            # is saved with the model and used correctly during deployment)
             X = df_features.drop('activity', axis=1).values
             y = df_features['activity'].values
             feature_names = df_features.drop('activity', axis=1).columns.tolist()
-
-            scaler = None
-            if normalization_method == 'standard':
-                scaler = StandardScaler()
-                X = scaler.fit_transform(X)
-            elif normalization_method == 'minmax':
-                scaler = MinMaxScaler()
-                X = scaler.fit_transform(X)
-            elif normalization_method == 'robust':
-                scaler = RobustScaler()
-                X = scaler.fit_transform(X)
-            # else: no normalization
+            # Note: normalization_method is stored in metadata for reference only
 
             # Step 4: Split AFTER combining (prevents data leakage)
             test_ratio = 1.0 - train_ratio - val_ratio

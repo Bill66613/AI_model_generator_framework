@@ -3,6 +3,7 @@ Neural Network Code Generator
 Generates Arduino C++ code specifically for Neural Network models
 """
 
+import numpy as np
 from typing import Dict, Any
 from .base_generator import BaseCodeGenerator
 
@@ -52,9 +53,19 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
                     self.all_biases = [intercept.tolist()
                                        for intercept in intercepts]
 
+                    # Apply feature reorder to input weights if needed
+                    # (model features may be in different order than C++ extraction)
+                    reorder_indices = self.model_data.get('_feature_reorder_indices')
+                    if reorder_indices is not None:
+                        reordered_coef0 = coefs[0][reorder_indices, :]
+                        self.all_weights[0] = reordered_coef0.tolist()
+                        print(f"  Applied feature reorder to input weight matrix")
+                    else:
+                        reordered_coef0 = coefs[0]
+
                     # For backwards compatibility, set common attributes
                     if len(coefs) >= 1:
-                        self.input_weights = coefs[0].tolist()
+                        self.input_weights = reordered_coef0.tolist()
                         self.hidden_biases = intercepts[0].tolist()
                         self.hidden_size = len(intercepts[0])
 
