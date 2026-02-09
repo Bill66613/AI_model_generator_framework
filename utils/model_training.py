@@ -543,8 +543,8 @@ def extract_orientation_invariant_features(df: pd.DataFrame, sensor_cols: List[s
         mean_val = np.mean(data)
         features[f'{name}_zero_crossings'] = len(
             np.where(np.diff(np.sign(data)))[0])
-        features[f'{name}_mean_crossing_rate'] = len(
-            np.where(np.diff(np.sign(data - mean_val)))[0])
+        mean_crossings = len(np.where(np.diff(np.sign(data - mean_val)))[0])
+        features[f'{name}_mean_crossing_rate'] = mean_crossings / len(data)  # Normalize to rate
 
     # Jerk magnitude (rate of change of acceleration) - also orientation invariant
     acc_jerk_mag = np.sqrt(

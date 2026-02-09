@@ -1,0 +1,227 @@
+================================================================================
+DEPLOYMENT CODE VALIDATION
+================================================================================
+Loading model: d:\Workspaces\Master\ComputerScience\Thesis\GUI_app\persistent_data_new\models\neural_network_har_model_20260204_232342.joblib
+Γ£ô Model type: neural_network
+Γ£ô Features: Unknown
+Γ£ô Classes: ['running', 'still', 'walking', 'walking_downstairs', 'walking_upstairs']
+
+Loading training data: d:\Workspaces\Master\ComputerScience\Thesis\GUI_app\persistent_data_new\training\running_still_walking_and_2_more_train.csv
+Γ£ô Training samples: 354
+
+================================================================================
+TEST 1: Training Data Validation
+================================================================================
+
+================================================================================
+VALIDATION: Training Data Samples
+================================================================================
+  Sample  220: True=Sample_220           | Pred=walking_upstairs     Γ¥î
+  Sample   30: True=Sample_30            | Pred=walking_upstairs     Γ¥î
+  Sample   14: True=Sample_14            | Pred=running              Γ£à
+  Sample  259: True=Sample_259           | Pred=running              Γ£à
+  Sample  154: True=Sample_154           | Pred=running              Γ£à
+  Sample  151: True=Sample_151           | Pred=walking_upstairs     Γ¥î
+  Sample    6: True=Sample_6             | Pred=running              Γ£à
+  Sample  258: True=Sample_258           | Pred=walking              Γ¥î
+  Sample   37: True=Sample_37            | Pred=walking_downstairs   Γ£à
+  Sample  174: True=Sample_174           | Pred=running              Γ£à
+  Sample  338: True=Sample_338           | Pred=walking_downstairs   Γ¥î
+  Sample  350: True=Sample_350           | Pred=walking_downstairs   Γ¥î
+  Sample  157: True=Sample_157           | Pred=walking              Γ¥î
+  Sample   71: True=Sample_71            | Pred=walking_downstairs   Γ¥î
+  Sample   35: True=Sample_35            | Pred=walking              Γ¥î
+  Sample  215: True=Sample_215           | Pred=running              Γ£à
+  Sample  178: True=Sample_178           | Pred=running              Γ£à
+  Sample  288: True=Sample_288           | Pred=walking_downstairs   Γ¥î
+  Sample   87: True=Sample_87            | Pred=walking_downstairs   Γ¥î
+  Sample  256: True=Sample_256           | Pred=walking_downstairs   Γ¥î
+
+≡ƒôè Training Sample Accuracy: 40.0%
+
+================================================================================
+TEST 2: Synthetic Sensor Data
+================================================================================
+
+================================================================================
+Testing Activity: STILL
+================================================================================
+Found raw data: D:\Workspaces\Master\ComputerScience\Thesis\GUI_app\data\persistent_data-fixed-windows-1500ms\still - Copy.csv
+Found raw data: D:\Workspaces\Master\ComputerScience\Thesis\GUI_app\data\100hz\still.csv
+ΓÜá Could not find raw sensor data for 'still'
+Will generate synthetic test data instead...
+
+================================================================================
+VALIDATION: Single Window Test
+================================================================================
+
+≡ƒôè Input Sensor Data:
+  Samples: 150
+  Acc magnitude:  mean=9.81, std=0.05, range=[9.70, 9.92]
+  Gyro magnitude: mean=0.79, std=0.34, range=[0.07, 1.66]
+
+1∩╕ÅΓâú Python Feature Extraction:
+  Γ£ô Extracted 33 features
+  First 5: [9.81299485 0.04732798 9.70408683 9.91955568 0.21546885]
+  Last 5: [0.00000000e+00 7.10000000e+01 1.11277770e-01 4.70355638e-02
+ 2.49127880e-01]
+
+2∩╕ÅΓâú C++ Simulated Feature Extraction:
+  Γ£ô Extracted 33 features
+  First 5: [9.81299485 0.04732798 9.70408683 9.91955568 0.21546885]
+  Last 5: [0.         0.47333333 0.11127777 0.04703556 0.24912788]
+
+3∩╕ÅΓâú Feature Extraction Comparison:
+  Γ¥î Features differ!
+  Max difference: 71.520000 at index 14
+    Python: 72.000000
+    C++:    0.480000
+
+  Top 5 differences:
+    [14] Feature_14: Python=72.000000, C++=0.480000, diff=71.520000
+    [29] Feature_29: Python=71.000000, C++=0.473333, diff=70.526667
+    [32] Feature_32: Python=0.249128, C++=0.249128, diff=0.000000
+    [30] Feature_30: Python=0.111278, C++=0.111278, diff=0.000000
+    [31] Feature_31: Python=0.047036, C++=0.047036, diff=0.000000
+
+4∩╕ÅΓâú Feature Scaling:
+  Scaler mean (first 5): [-0.0047716   0.00170918 -0.00095379  0.0105779   0.00418862]
+  Scaler scale (first 5): [0.99720234 1.01071101 1.0008275  1.02683    1.01117209]
+  Python scaled (first 5): [9.84531029 0.04513535 9.6970163  9.6500665  0.20894587]
+  C++ scaled (first 5): [9.84531029 0.04513535 9.6970163  9.6500665  0.20894587]
+
+5∩╕ÅΓâú Model Prediction:
+  Python prediction: running (class 0)
+    Probabilities: {'running': np.float64(1.0), 'still': np.float64(0.0), 'walking': np.float64(0.0), 'walking_downstairs': np.float64(0.0), 'walking_upstairs': np.float64(0.0)}
+  C++ prediction: running (class 0)
+    Probabilities: {'running': np.float64(1.0), 'still': np.float64(0.0), 'walking': np.float64(0.0), 'walking_downstairs': np.float64(0.0), 'walking_upstairs': np.float64(0.0)}
+
+6∩╕ÅΓâú Validation Result:
+  Expected: still
+  Python: running Γ¥î
+  C++:    running Γ¥î
+
+================================================================================
+Testing Activity: WALKING
+================================================================================
+Found raw data: D:\Workspaces\Master\ComputerScience\Thesis\GUI_app\data\persistent_data-fixed-windows-1500ms\walking - Copy.csv
+Found raw data: D:\Workspaces\Master\ComputerScience\Thesis\GUI_app\data\100hz\walking.csv
+ΓÜá Could not find raw sensor data for 'walking'
+Will generate synthetic test data instead...
+
+================================================================================
+VALIDATION: Single Window Test
+================================================================================
+
+≡ƒôè Input Sensor Data:
+  Samples: 150
+  Acc magnitude:  mean=9.99, std=0.75, range=[8.68, 11.33]
+  Gyro magnitude: mean=20.47, std=5.43, range=[7.86, 34.87]
+
+1∩╕ÅΓâú Python Feature Extraction:
+  Γ£ô Extracted 33 features
+  First 5: [ 9.98648707  0.74959202  8.6812835  11.33376249  2.65247899]
+  Last 5: [ 0.         71.          0.49717015  0.21406619  1.11250168]
+
+2∩╕ÅΓâú C++ Simulated Feature Extraction:
+  Γ£ô Extracted 33 features
+  First 5: [ 9.98648707  0.74959202  8.6812835  11.33376249  2.65247899]
+  Last 5: [0.         0.47333333 0.49717015 0.21406619 1.11250168]
+
+3∩╕ÅΓâú Feature Extraction Comparison:
+  Γ¥î Features differ!
+  Max difference: 70.526667 at index 29
+    Python: 71.000000
+    C++:    0.473333
+
+  Top 5 differences:
+    [29] Feature_29: Python=71.000000, C++=0.473333, diff=70.526667
+    [14] Feature_14: Python=10.000000, C++=0.066667, diff=9.933333
+    [32] Feature_32: Python=1.112502, C++=1.112502, diff=0.000000
+    [30] Feature_30: Python=0.497170, C++=0.497170, diff=0.000000
+    [31] Feature_31: Python=0.214066, C++=0.214066, diff=0.000000
+
+4∩╕ÅΓâú Feature Scaling:
+  Scaler mean (first 5): [-0.0047716   0.00170918 -0.00095379  0.0105779   0.00418862]
+  Scaler scale (first 5): [0.99720234 1.01071101 1.0008275  1.02683    1.01117209]
+  Python scaled (first 5): [10.01928924  0.73995716  8.67505864 11.02732155  2.61903031]
+  C++ scaled (first 5): [10.01928924  0.73995716  8.67505864 11.02732155  2.61903031]
+
+5∩╕ÅΓâú Model Prediction:
+  Python prediction: walking (class 2)
+    Probabilities: {'running': np.float64(0.0), 'still': np.float64(0.0), 'walking': np.float64(1.0), 'walking_downstairs': np.float64(0.0), 'walking_upstairs': np.float64(0.0)}
+  C++ prediction: walking (class 2)
+    Probabilities: {'running': np.float64(0.0), 'still': np.float64(0.0), 'walking': np.float64(1.0), 'walking_downstairs': np.float64(0.0), 'walking_upstairs': np.float64(0.0)}
+
+6∩╕ÅΓâú Validation Result:
+  Expected: walking
+  Python: walking Γ£à
+  C++:    walking Γ£à
+
+================================================================================
+Testing Activity: RUNNING
+================================================================================
+Found raw data: D:\Workspaces\Master\ComputerScience\Thesis\GUI_app\data\persistent_data-fixed-windows-1500ms\running - Copy.csv
+Found raw data: D:\Workspaces\Master\ComputerScience\Thesis\GUI_app\data\100hz\running.csv
+ΓÜá Could not find raw sensor data for 'running'
+Will generate synthetic test data instead...
+
+================================================================================
+VALIDATION: Single Window Test
+================================================================================
+
+≡ƒôè Input Sensor Data:
+  Samples: 150
+  Acc magnitude:  mean=11.09, std=1.91, range=[7.95, 14.45]
+  Gyro magnitude: mean=49.62, std=10.19, range=[20.90, 80.12]
+
+1∩╕ÅΓâú Python Feature Extraction:
+  Γ£ô Extracted 33 features
+  First 5: [11.08662657  1.90286251  7.95047668 14.44772461  6.49724793]
+  Last 5: [ 0.         76.          1.42881564  0.56340165  3.15020371]
+
+2∩╕ÅΓâú C++ Simulated Feature Extraction:
+  Γ£ô Extracted 33 features
+  First 5: [11.08662657  1.90286251  7.95047668 14.44772461  6.49724793]
+  Last 5: [0.         0.50666667 1.42881564 0.56340165 3.15020371]
+
+3∩╕ÅΓâú Feature Extraction Comparison:
+  Γ¥î Features differ!
+  Max difference: 75.493333 at index 29
+    Python: 76.000000
+    C++:    0.506667
+
+  Top 5 differences:
+    [29] Feature_29: Python=76.000000, C++=0.506667, diff=75.493333
+    [14] Feature_14: Python=10.000000, C++=0.066667, diff=9.933333
+    [32] Feature_32: Python=3.150204, C++=3.150204, diff=0.000000
+    [30] Feature_30: Python=1.428816, C++=1.428816, diff=0.000000
+    [31] Feature_31: Python=0.563402, C++=0.563402, diff=0.000000
+
+4∩╕ÅΓâú Feature Scaling:
+  Scaler mean (first 5): [-0.0047716   0.00170918 -0.00095379  0.0105779   0.00418862]
+  Scaler scale (first 5): [0.99720234 1.01071101 1.0008275  1.02683    1.01117209]
+  Python scaled (first 5): [11.12251519  1.88100587  7.94485606 14.05991908  6.42131972]
+  C++ scaled (first 5): [11.12251519  1.88100587  7.94485606 14.05991908  6.42131972]
+
+5∩╕ÅΓâú Model Prediction:
+  Python prediction: walking (class 2)
+    Probabilities: {'running': np.float64(0.0), 'still': np.float64(0.0), 'walking': np.float64(1.0), 'walking_downstairs': np.float64(0.0), 'walking_upstairs': np.float64(0.0)}
+  C++ prediction: walking (class 2)
+    Probabilities: {'running': np.float64(0.0), 'still': np.float64(0.0), 'walking': np.float64(1.0), 'walking_downstairs': np.float64(0.0), 'walking_upstairs': np.float64(0.0)}
+
+6∩╕ÅΓâú Validation Result:
+  Expected: running
+  Python: walking Γ¥î
+  C++:    walking Γ¥î
+
+================================================================================
+VALIDATION COMPLETE
+================================================================================
+
+≡ƒôï Next Steps:
+  1. If Python predictions are correct but C++ differs ΓåÆ Feature extraction bug
+  2. If both Python and C++ are wrong ΓåÆ Model training issue
+  3. If training samples are correct ΓåÆ Need real sensor data for validation
+
+  Run this script to diagnose the issue systematically.

@@ -159,7 +159,7 @@ int har_predict(float features[NUM_FEATURES]) {{
         float std = feature_stds[i];
         if (std < 0.0001f) std = 1.0f; // Prevent division by zero
         scaled_features[i] = (features[i] - feature_means[i]) / std;
-        
+
         // Clamp scaled features to reasonable range (after scaling)
         if (scaled_features[i] < -10.0f) scaled_features[i] = -10.0f;
         if (scaled_features[i] > 10.0f) scaled_features[i] = 10.0f;
@@ -228,28 +228,33 @@ const float feature_stds[NUM_FEATURES] = {{
         """Generate optimization-aware feature extraction function."""
         # Check for new feature_config (orientation_robust features)
         try:
-            feature_config = self.model_data.get('model_info', {}).get('feature_config', {})
-            orientation_robust = feature_config.get('orientation_robust', False)
+            feature_config = self.model_data.get(
+                'model_info', {}).get('feature_config', {})
+            orientation_robust = feature_config.get(
+                'orientation_robust', False)
             include_per_axis = feature_config.get('include_per_axis', False)
             include_frequency = feature_config.get('include_frequency', False)
         except Exception:
             orientation_robust = False
             include_per_axis = True
             include_frequency = False
-        
+
         # Legacy support for old feature_method parameter
         try:
             feature_method = self.model_data.get(
                 'model_params', {}).get('feature_method')
         except Exception:
             feature_method = None
-        
+
         # Use orientation-robust features if configured
         if orientation_robust or feature_method == 'orientation_invariant':
-            return """void extract_features(float sensor_data[][6], int samples, float features[]) {
+            return """// Forward declaration for helper function
+int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx);
+
+void extract_features(float sensor_data[][6], int samples, float features[]) {
     // Orientation-robust features (33 magnitude-based features)
     // Matches Python extract_orientation_invariant_features()
-    // Features per magnitude (acc_mag, gyro_mag): mean, std, min, max, range, median, q25, q75, iqr, 
+    // Features per magnitude (acc_mag, gyro_mag): mean, std, min, max, range, median, q25, q75, iqr,
     // skewness, kurtosis, rms, energy, zero_crossings, mean_crossing_rate (15 × 2 = 30)
     // Plus jerk magnitude: mean, std, max (3 features) = 33 total
 
@@ -262,12 +267,12 @@ const float feature_stds[NUM_FEATURES] = {{
     float acc_mag[WINDOW_SIZE];
     float gyro_mag[WINDOW_SIZE];
     float jerk_mag[WINDOW_SIZE];
-    
+
     // Calculate magnitude vectors
     float prev_ax = sensor_data[0][0];
     float prev_ay = sensor_data[0][1];
     float prev_az = sensor_data[0][2];
-    
+
     for (int i = 0; i < samples; i++) {
         float ax = sensor_data[i][0];
         float ay = sensor_data[i][1];
@@ -278,26 +283,26 @@ const float feature_stds[NUM_FEATURES] = {{
 
         acc_mag[i] = sqrtf(ax*ax + ay*ay + az*az);
         gyro_mag[i] = sqrtf(gx*gx + gy*gy + gz*gz);
-        
+
         if (i > 0) {
             float dax = ax - prev_ax;
             float day = ay - prev_ay;
             float daz = az - prev_az;
             jerk_mag[i-1] = sqrtf(dax*dax + day*day + daz*daz);
         }
-        
+
         prev_ax = ax; prev_ay = ay; prev_az = az;
     }
-    
+
     int n_jerk = samples - 1;
     int idx = 0;
-    
+
     // Extract 15 features from acc_mag
     idx = extract_magnitude_stats(acc_mag, samples, features, idx);
-    
+
     // Extract 15 features from gyro_mag
     idx = extract_magnitude_stats(gyro_mag, samples, features, idx);
-    
+
     // Extract 3 jerk magnitude features (mean, std, max)
     float jerk_sum = 0.0f, jerk_sum_sq = 0.0f, jerk_max = -1e9f;
     for (int i = 0; i < n_jerk; i++) {
@@ -305,15 +310,15 @@ const float feature_stds[NUM_FEATURES] = {{
         jerk_sum_sq += jerk_mag[i] * jerk_mag[i];
         if (jerk_mag[i] > jerk_max) jerk_max = jerk_mag[i];
     }
-    
+
     float jerk_mean = (n_jerk > 0) ? (jerk_sum / n_jerk) : 0.0f;
     float jerk_var = (n_jerk > 0) ? ((jerk_sum_sq / n_jerk) - jerk_mean * jerk_mean) : 0.0f;
     float jerk_std = sqrtf(jerk_var > 0 ? jerk_var : 0.0f);
-    
+
     features[idx++] = jerk_mean;
     features[idx++] = jerk_std;
     features[idx++] = jerk_max;
-    
+
     // Fill remaining features with zeros
     for (; idx < NUM_FEATURES; idx++) features[idx] = 0.0f;
 }
@@ -321,12 +326,12 @@ const float feature_stds[NUM_FEATURES] = {{
 // Helper function to extract statistical features from magnitude vector
 int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx) {
     // Calculate all statistical features for one magnitude vector
-    // Returns: mean, std, min, max, range, median, q25, q75, iqr, 
+    // Returns: mean, std, min, max, range, median, q25, q75, iqr,
     //          skewness, kurtosis, rms, energy, zero_crossings, mean_crossing_rate (15 features)
-    
+
     int idx = start_idx;
     float n = (float)samples;
-    
+
     // First pass: sum, sum_sq, min, max
     float sum = 0.0f, sum_sq = 0.0f;
     float min_val = 1e9f, max_val = -1e9f;
@@ -336,24 +341,24 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         if (mag[i] < min_val) min_val = mag[i];
         if (mag[i] > max_val) max_val = mag[i];
     }
-    
+
     float mean = sum / n;
     float variance = (sum_sq / n) - (mean * mean);
     float std = sqrtf(variance > 0 ? variance : 0.0f);
     float rms = sqrtf(sum_sq / n);
     float energy = sum_sq;
     float range = max_val - min_val;
-    
+
     features[idx++] = mean;         // 0: mean
     features[idx++] = std;          // 1: std
     features[idx++] = min_val;      // 2: min
     features[idx++] = max_val;      // 3: max
     features[idx++] = range;        // 4: range
-    
+
     // Median and quartiles (requires sorting a copy)
     float sorted[WINDOW_SIZE];
     for (int i = 0; i < samples; i++) sorted[i] = mag[i];
-    
+
     // Simple bubble sort (sufficient for small arrays)
     for (int i = 0; i < samples - 1; i++) {
         for (int j = 0; j < samples - i - 1; j++) {
@@ -364,19 +369,19 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
             }
         }
     }
-    
-    float median = (samples % 2 == 0) ? 
-        (sorted[samples/2 - 1] + sorted[samples/2]) / 2.0f : 
+
+    float median = (samples % 2 == 0) ?
+        (sorted[samples/2 - 1] + sorted[samples/2]) / 2.0f :
         sorted[samples/2];
     float q25 = sorted[samples/4];
     float q75 = sorted[(3*samples)/4];
     float iqr = q75 - q25;
-    
+
     features[idx++] = median;       // 5: median
     features[idx++] = q25;          // 6: q25
     features[idx++] = q75;          // 7: q75
     features[idx++] = iqr;          // 8: iqr
-    
+
     // Skewness and kurtosis
     float sum_cubed = 0.0f, sum_fourth = 0.0f;
     for (int i = 0; i < samples; i++) {
@@ -385,15 +390,15 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         sum_cubed += diff * diff_sq;
         sum_fourth += diff_sq * diff_sq;
     }
-    
+
     float skewness = (std > 0.0001f) ? (sum_cubed / (n * std * std * std)) : 0.0f;
     float kurtosis = (std > 0.0001f) ? ((sum_fourth / (n * std * std * std * std)) - 3.0f) : 0.0f;
-    
+
     features[idx++] = skewness;     // 9: skewness
     features[idx++] = kurtosis;     // 10: kurtosis
     features[idx++] = rms;          // 11: rms
     features[idx++] = energy;       // 12: energy
-    
+
     // Zero crossings and mean crossing rate
     int zero_crossings = 0;
     int mean_crossings = 0;
@@ -401,10 +406,10 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         if ((mag[i-1] * mag[i]) < 0) zero_crossings++;
         if ((mag[i-1] - mean) * (mag[i] - mean) < 0) mean_crossings++;
     }
-    
+
     features[idx++] = (float)zero_crossings;       // 13: zero_crossings
     features[idx++] = (float)mean_crossings / n;   // 14: mean_crossing_rate
-    
+
     return idx;
 }
 """
@@ -615,7 +620,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         for (int i = 0; i < samples; i++) {
             sorted_data[i] = sensor_data[i][axis];
         }
-        
+
         // Simple bubble sort for median/quartile calculation
         for (int i = 0; i < samples - 1; i++) {
             for (int j = 0; j < samples - i - 1; j++) {
@@ -626,7 +631,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
                 }
             }
         }
-        
+
         // Standard statistical calculations
         float sum = 0, sum_sq = 0;
         float min_val = sensor_data[0][axis];
@@ -643,7 +648,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         float mean = sum / samples;
         float variance = (sum_sq / samples) - (mean * mean);
         float std_dev = sqrt(variance > 0 ? variance : 0.001f);
-        
+
         // Calculate median and quartiles from sorted data
         int mid = samples / 2;
         float median = (samples % 2 == 0) ? (sorted_data[mid-1] + sorted_data[mid]) / 2.0f : sorted_data[mid];
@@ -667,7 +672,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         // Skewness and kurtosis - simplified to match sklearn/pandas behavior
         // Using sample formulas (n-1 denominator for std)
         float sample_std = sqrt(variance * samples / (samples - 1 + 0.001f));
-        
+
         float m3_sum = 0, m4_sum = 0;
         for (int i = 0; i < samples; i++) {
             float z = (sensor_data[i][axis] - mean) / (sample_std + 0.001f);
@@ -675,22 +680,22 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
             m3_sum += z * z2;
             m4_sum += z2 * z2;
         }
-        
+
         // Skewness with bias correction (pandas/scipy formula)
         float g1 = m3_sum / samples;
         float skewness = 0;
         if (samples >= 3) {
             skewness = sqrt((float)(samples * (samples - 1))) / (samples - 2) * g1;
         }
-        
-        // Excess kurtosis with bias correction (pandas/scipy formula) 
+
+        // Excess kurtosis with bias correction (pandas/scipy formula)
         float g2 = m4_sum / samples - 3.0f;
         float kurtosis = -3.0f;
         if (samples >= 4) {
             float n = (float)samples;
             kurtosis = (n - 1) / ((n - 2) * (n - 3)) * ((n + 1) * g2 + 6.0f);
         }
-        
+
         features[feature_idx++] = skewness;                  // 9: skewness
         features[feature_idx++] = kurtosis;                  // 10: kurtosis
 
@@ -706,7 +711,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
             }
         }
         features[feature_idx++] = (float)zero_crossings;     // 13: zero_crossings
-        
+
         // Mean-crossing rate (signal crosses mean)
         int mean_crossings = 0;
         for (int i = 1; i < samples; i++) {
@@ -960,7 +965,7 @@ MPU6886 IMU;  // Create IMU instance""",
 const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
                 'imu_init': """    // Initialize I2C
     Wire.begin();
-    
+
     // Initialize IMU sensor
     Serial.println("Initializing IMU sensor...");
     if (IMU.Init() != 0) {
@@ -972,7 +977,7 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
         float aX, aY, aZ, gX, gY, gZ;
         IMU.getAccelData(&aX, &aY, &aZ);
         IMU.getGyroData(&gX, &gY, &gZ);
-        
+
         // Convert to m/s²
         aX *= CONVERT_G_TO_MS2;
         aY *= CONVERT_G_TO_MS2;
@@ -1000,7 +1005,7 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
 const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
                 'imu_init': """    // Initialize I2C
     Wire.begin();
-    
+
     // Initialize IMU sensor
     Serial.println("Initializing IMU sensor...");
     // Add your IMU initialization code here
@@ -1058,7 +1063,9 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
                 self.sampling_rate = base_sampling
 
             self.window_size = min(50, max(20, int(40 / complexity_factor)))
-            self.feature_precision = max(1, min(2, int(3 - complexity_factor)))
+            # Increased min precision from 1 to 3 - scaler values are tiny (0.004-0.017)
+            # and rounding to 1 decimal makes them all 0.0, breaking normalization
+            self.feature_precision = max(3, min(4, int(5 - complexity_factor)))
             self.debug_enabled = False  # No debugging to save power
             self.buffer_optimization = True
         else:  # balanced

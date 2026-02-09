@@ -13,6 +13,78 @@ Các Đơn vị Đo lường Quán tính (IMUs)—kết hợp gia tốc kế và
 \section{Theo dõi Chuyển động Dựa trên Thị giác}
 Các phương pháp thị giác máy tính sử dụng camera lập thể, theo dõi không dấu và ước lượng tư thế cung cấp các biểu diễn không gian phong phú về chuyển động con người \cite{article:motion_tracking_using_vision}. Trong khi các hệ thống thị giác cho phép tái tạo toàn thân (phát hiện 17+ điểm khóa tại 30 FPS \cite{web:Google_Mediapipe}) và được sử dụng trong hoạt hình và phân tích lâm sàng, chúng gặp phải các thách thức về che khuất (suy giảm độ chính xác 15-30\% trong các cảnh đông đúc), biến đổi môi trường (ánh sáng, thời tiết), lo ngại về quyền riêng tư và tiêu thụ điện năng (500-2000 mW so với 20-50 mW cho hệ thống IMU). Các tiến bộ gần đây bao gồm MediaPipe pose \cite{web:Google_Mediapipe} (133 mốc tư thế, độ chính xác 95\% trên các khớp nhìn thấy) và OpenPose đã cải thiện khả năng tiếp cận nhưng vẫn ít khả thi hơn cho các thiết bị đeo công suất siêu thấp. Các hệ thống kết hợp IMU-thị giác \cite{wan2021deep_har_review} kết hợp các điểm mạnh bổ sung—độ bền vững của IMU với che khuất, độ chính xác không gian của thị giác—nhưng yêu cầu đồng bộ hóa cảm biến và tăng độ phức tạp hệ thống. Đối với giám sát đeo liên tục ưu tiên tuổi thọ pin (ngày đến tuần), các giải pháp IMU thuần túy vẫn chiếm ưu thế.
 
+\section{Thiết bị đeo trong bài toán nhận dạng hoạt động con người}
+
+Thiết bị đeo (wearable devices) ngày càng được sử dụng rộng rãi trong các hệ thống nhận dạng hoạt động con người (Human Activity Recognition -- HAR) nhờ khả năng thu thập dữ liệu chuyển động liên tục và chi tiết trực tiếp từ cơ thể người dùng. So với các hệ thống dựa trên thị giác hoặc cảm biến môi trường, thiết bị đeo cung cấp phép đo chuyển động trực tiếp, ít phụ thuộc vào điều kiện môi trường, do đó đặc biệt phù hợp cho các ứng dụng thực tế và các hệ thống edge AI.
+
+Các hệ thống HAR sử dụng thiết bị đeo thường dựa trên các cảm biến được tích hợp trong các thiết bị nhỏ gọn gắn trên cơ thể người. Các cảm biến này tạo ra dữ liệu chuỗi thời gian (time-series data), sau đó được xử lý bằng các thuật toán machine learning hoặc deep learning để suy luận hoạt động của con người. Phần này phân tích thiết bị đeo theo ba khía cạnh chính: loại cảm biến, vị trí đeo trên cơ thể và dạng thiết bị (form factor), đồng thời thảo luận tác động của chúng đến thiết kế hệ thống HAR.
+
+\subsection{Các loại cảm biến trong thiết bị đeo}
+
+\subsubsection{Thiết bị đeo sử dụng Inertial Measurement Unit (IMU)}
+
+Inertial Measurement Unit (IMU) là loại cảm biến được sử dụng phổ biến nhất trong các hệ thống HAR dựa trên thiết bị đeo. Một IMU thường bao gồm cảm biến gia tốc ba trục (tri-axial accelerometer) và con quay hồi chuyển ba trục (tri-axial gyroscope), và trong một số trường hợp có thêm cảm biến từ kế (magnetometer). Cảm biến gia tốc đo gia tốc tuyến tính theo ba trục không gian, trong khi con quay hồi chuyển đo vận tốc góc, cho phép ghi nhận cả chuyển động tịnh tiến và chuyển động quay.
+
+Dữ liệu từ thiết bị đeo IMU thường được biểu diễn dưới dạng chuỗi thời gian đa biến:
+\[
+\{a_x, a_y, a_z, g_x, g_y, g_z\}
+\]
+trong đó \(a_x, a_y, a_z\) là các thành phần gia tốc và \(g_x, g_y, g_z\) là các thành phần vận tốc góc.
+
+Ưu điểm chính của thiết bị đeo IMU bao gồm tiêu thụ năng lượng thấp, tần số lấy mẫu cao, hoạt động độc lập với môi trường bên ngoài và phù hợp cho triển khai trên các hệ thống edge AI. Những đặc điểm này khiến IMU trở thành lựa chọn lý tưởng cho các ứng dụng theo dõi chuyển động liên tục và nhận dạng hoạt động theo thời gian thực.
+
+Tuy nhiên, cảm biến IMU dễ bị nhiễu, hiện tượng trôi cảm biến (sensor drift), đặc biệt ở gyroscope, và phụ thuộc vào hướng gắn thiết bị. Do đó, dữ liệu IMU thường yêu cầu các bước preprocessing như filtering, normalization và segmentation trước khi được sử dụng để huấn luyện mô hình.
+
+\subsubsection{Thiết bị đeo sử dụng cảm biến sinh lý}
+
+Bên cạnh các cảm biến quán tính, một số thiết bị đeo còn tích hợp các cảm biến sinh lý như electromyography (EMG), electrocardiography (ECG), cảm biến nhịp tim hoặc cảm biến nhiệt độ da. Các cảm biến này cung cấp thông tin bổ sung về trạng thái sinh học hoặc hoạt động cơ bắp, giúp cải thiện độ chính xác trong một số ứng dụng như phục hồi chức năng hoặc theo dõi y tế.
+
+Mặc dù mang lại nhiều lợi ích, các cảm biến sinh lý thường có tính xâm lấn cao hơn, dễ bị nhiễu và yêu cầu quy trình xử lý tín hiệu phức tạp. Vì lý do này, chúng thường được sử dụng kết hợp với IMU thay vì hoạt động độc lập trong các hệ thống HAR.
+
+\subsubsection{Hệ thống thiết bị đeo đa cảm biến (Multimodal Wearables)}
+
+Hệ thống thiết bị đeo đa cảm biến kết hợp IMU với các loại cảm biến khác như EMG, cảm biến áp suất hoặc cảm biến nhịp tim. Việc kết hợp nhiều nguồn dữ liệu giúp tăng độ bền vững (robustness) và độ chính xác của hệ thống nhận dạng hoạt động, đặc biệt trong các kịch bản phức tạp.
+
+Tuy nhiên, các hệ thống multimodal làm tăng độ phức tạp trong đồng bộ dữ liệu (sensor synchronization), chi phí tính toán và mức tiêu thụ năng lượng, điều này cần được cân nhắc kỹ khi thiết kế các framework HAR chạy trên thiết bị edge.
+
+\subsection{Vị trí đeo thiết bị trên cơ thể}
+
+Vị trí gắn thiết bị đeo trên cơ thể có ảnh hưởng trực tiếp đến đặc điểm dữ liệu thu thập được và loại hoạt động có thể nhận dạng hiệu quả.
+
+\subsubsection{Thiết bị đeo ở cổ tay}
+
+Thiết bị đeo ở cổ tay, chẳng hạn như smartwatch hoặc fitness tracker, là dạng phổ biến nhất hiện nay. Vị trí này phù hợp để nhận dạng các hoạt động liên quan đến cử động tay và các hoạt động vận động cơ bản như đi bộ hoặc chạy. Tuy nhiên, dữ liệu thu thập tại cổ tay dễ bị nhiễu do các chuyển động không liên quan đến hoạt động chính.
+
+\subsubsection{Thiết bị đeo ở cổ chân hoặc bàn chân}
+
+Thiết bị gắn ở cổ chân hoặc bàn chân thường được sử dụng trong phân tích dáng đi (gait analysis), phát hiện ngã và các hoạt động liên quan đến chuyển động chân. Nhờ vị trí gần mặt đất, các thiết bị này thu thập được tín hiệu có tính chu kỳ và ổn định cao, rất phù hợp cho các nghiên cứu về chuyển động.
+
+\subsubsection{Thiết bị đeo ở hông hoặc thắt lưng}
+
+Thiết bị đeo ở hông hoặc thắt lưng đại diện tương đối tốt cho chuyển động của trọng tâm cơ thể. Vị trí này cho phép nhận dạng đa dạng hoạt động toàn thân, tuy nhiên sự thay đổi hướng gắn thiết bị có thể ảnh hưởng đến tính nhất quán của dữ liệu.
+
+\subsubsection{Thiết bị đeo ở phần thân trên}
+
+Thiết bị đeo ở ngực, vai hoặc cánh tay thường được sử dụng trong các ứng dụng phân tích thể thao, phục hồi chức năng và nhận dạng cử chỉ. Các vị trí này cho phép phân tích chi tiết chuyển động thân trên nhưng kém hiệu quả hơn đối với các hoạt động chủ yếu liên quan đến chân.
+
+\subsection{Dạng thiết bị đeo (Form Factor)}
+
+\subsubsection{Nền tảng nhúng phục vụ nghiên cứu}
+
+Các nền tảng nhúng tích hợp IMU, chẳng hạn như các bo mạch vi điều khiển nhỏ gọn, thường được sử dụng trong nghiên cứu HAR. Những nền tảng này cho phép truy cập trực tiếp dữ liệu cảm biến thô, tùy chỉnh firmware linh hoạt và hỗ trợ giao tiếp không dây, rất phù hợp cho các nghiên cứu thực nghiệm và triển khai edge AI.
+
+\subsubsection{Thiết bị đeo thương mại}
+
+Thiết bị đeo thương mại như smartwatch hoặc vòng đeo tay thông minh có mức độ chấp nhận cao từ người dùng. Tuy nhiên, quyền truy cập dữ liệu thô và khả năng kiểm soát tần số lấy mẫu thường bị giới hạn bởi các hệ điều hành và API độc quyền, gây khó khăn cho các nghiên cứu HAR tùy chỉnh.
+
+\subsubsection{Thiết bị đeo thế hệ mới}
+
+Các thiết bị đeo mới như smart textile, smart shoes hoặc quần áo tích hợp cảm biến đang là hướng nghiên cứu tích cực. Mặc dù mang lại sự thoải mái và tự nhiên, các thiết bị này vẫn đối mặt với nhiều thách thức liên quan đến độ bền, chất lượng dữ liệu và khả năng mở rộng.
+
+\subsection{Tác động đến thiết kế hệ thống HAR}
+
+Việc lựa chọn loại thiết bị đeo, cảm biến và vị trí gắn có ảnh hưởng trực tiếp đến pipeline preprocessing, chiến lược trích xuất đặc trưng (feature extraction) và kiến trúc mô hình trong các hệ thống HAR. Trong đó, thiết bị đeo dựa trên IMU cung cấp sự cân bằng hợp lý giữa độ chính xác, hiệu quả năng lượng, bảo vệ quyền riêng tư và khả năng triển khai trên thiết bị edge, do đó là nền tảng phù hợp cho các framework HAR linh hoạt và có khả năng mở rộng.
+
 \section{AI trong Theo dõi Chuyển động}
 Các mô hình AI chuyển đổi dữ liệu chuyển động thô thành các diễn giải ngữ nghĩa—phân loại hoạt động, nhận dạng tư thế và dự báo quỹ đạo. Các phương pháp học máy truyền thống bao gồm Support Vector Machines (SVM) \cite{cortes1995svm} và Random Forests \cite{breiman2001random} đã được sử dụng rộng rãi, đạt độ chính xác 88-93\% trên các benchmark HAR chuẩn (UCI-HAR, WISDM) với dấu chân thời gian chạy nhỏ gọn (50-200 KB) phù hợp cho các thiết bị biên \cite{wang2024har_comparative}. Các kiến trúc học sâu đã tiến bộ dần dần hiệu suất HAR: CNNs (độ chính xác 92-95\%, trích xuất đặc trưng không gian từ các cửa sổ cảm biến), RNN/LSTMs (độ chính xác 94-97\%, bắt giữ các phụ thuộc thời gian \cite{xia2020lstm_har}), và transformers dựa trên attention (độ chính xác 96-98\% trên các tập dữ liệu phức tạp \cite{singh2023har_transformers}). Tuy nhiên, các mô hình học sâu đòi hỏi các tập dữ liệu được chú thích lớn hơn (10.000+ mẫu so với 1.000-5.000 cho ML cổ điển), bộ nhớ cao hơn (500 KB-2 MB so với 50-200 KB) và các chiến lược lượng tử hóa không tầm thường (8-bit hoặc độ chính xác hỗn hợp) trong triển khai biên \cite{lin2022mcunet}. Các nghiên cứu so sánh gần đây \cite{wang2024har_comparative} cho thấy các mô hình ML cổ điển đạt độ chính xác 90-93\% với dấu chân bộ nhớ nhỏ hơn 10$\times$ và suy luận nhanh hơn 5-20$\times$ (12-18 ms so với 60-120 ms mỗi cửa sổ) trên các mục tiêu Cortex-M4. Framework được đề xuất hỗ trợ chiến lược cả hai mô hình—mô hình cổ điển cho các kịch bản bị giới hạn tài nguyên, mạng nơ-ron nhẹ cho các ứng dụng quan trọng độ chính xác—với tối ưu hóa đa mục tiêu cho phép khám phá đánh đổi có nguyên tắc.
 
