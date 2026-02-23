@@ -7,6 +7,7 @@ from .base_generator import BaseCodeGenerator
 from .random_forest_generator import RandomForestCodeGenerator
 from .neural_network_generator import NeuralNetworkCodeGenerator
 from .svm_generator import SVMCodeGenerator
+from .cnn_generator import CNNCodeGenerator
 from .arm_cortex_generator import ARMCortexMCodeGenerator
 from .micropython_generator import MicroPythonCodeGenerator
 from .zephyr_generator import ZephyrCodeGenerator
@@ -24,6 +25,7 @@ __all__ = [
     'RandomForestCodeGenerator',
     'NeuralNetworkCodeGenerator',
     'SVMCodeGenerator',
+    'CNNCodeGenerator',
     'ARMCortexMCodeGenerator',
     'MicroPythonCodeGenerator',
     'ZephyrCodeGenerator',

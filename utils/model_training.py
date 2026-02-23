@@ -17,6 +17,10 @@ import os
 import json
 import logging
 
+from utils.pytorch_models import (
+    is_pytorch_available, PyTorchTrainer, HARMLP, HARCNN
+)
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,7 +48,7 @@ class EdgeMLModel:
                     'min_samples_split', 5),
                 min_samples_leaf=self.model_params.get('min_samples_leaf', 2),
                 class_weight=self.model_params.get(
-                    'class_weight', 'balanced'),  # Balance classes automatically
+                    'class_weight', 'balanced'),
                 random_state=42
             )
         elif self.model_type == 'svm':
@@ -53,9 +57,9 @@ class EdgeMLModel:
                 kernel=self.model_params.get('kernel', 'rbf'),
                 gamma=self.model_params.get('gamma', 'scale'),
                 class_weight=self.model_params.get(
-                    'class_weight', 'balanced'),  # Balance classes automatically
+                    'class_weight', 'balanced'),
                 random_state=42,
-                probability=True  # Enable probability estimates
+                probability=True
             )
         elif self.model_type == 'neural_network':
             hidden_layers = self.model_params.get(
@@ -71,9 +75,38 @@ class EdgeMLModel:
                 random_state=42,
                 early_stopping=True,
                 validation_fraction=0.1
-                # Note: MLPClassifier doesn't support class_weight directly
-                # Use balanced training data or manual sample weighting if needed
             )
+        elif self.model_type == 'pytorch_mlp':
+            if not is_pytorch_available():
+                raise RuntimeError("PyTorch is required for pytorch_mlp. "
+                                   "Install via: pip install torch")
+            # Actual model creation is deferred to train() because we need
+            # input_size and num_classes which are only known after
+            # preprocessing.  Store config for now.
+            self.model = None  # placeholder
+            self._pytorch_config = {
+                'hidden_sizes': self.model_params.get(
+                    'hidden_layer_sizes', (128, 64)),
+                'dropout': self.model_params.get('dropout', 0.3),
+                'epochs': self.model_params.get('max_iter', 200),
+                'batch_size': self.model_params.get('batch_size', 32),
+                'lr': self.model_params.get('learning_rate', 1e-3),
+                'patience': self.model_params.get('patience', 15),
+            }
+        elif self.model_type == 'pytorch_cnn':
+            if not is_pytorch_available():
+                raise RuntimeError("PyTorch is required for pytorch_cnn. "
+                                   "Install via: pip install torch")
+            self.model = None  # placeholder
+            self._pytorch_config = {
+                'dropout': self.model_params.get('dropout', 0.3),
+                'epochs': self.model_params.get('max_iter', 200),
+                'batch_size': self.model_params.get('batch_size', 32),
+                'lr': self.model_params.get('learning_rate', 1e-3),
+                'patience': self.model_params.get('patience', 15),
+                'window_size': self.model_params.get('window_size', 150),
+                'n_channels': self.model_params.get('n_channels', 6),
+            }
         else:
             raise ValueError(f"Unsupported model type: {self.model_type}")
 
@@ -196,12 +229,55 @@ class EdgeMLModel:
             self.performance_metrics['early_stopped'] = (
                 patience_counter >= patience)
 
+        elif self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+            # ---- PyTorch training path ----
+            cfg = self._pytorch_config
+            num_classes = len(set(y_encoded))
+            input_size = X_scaled.shape[1]
+
+            if self.model_type == 'pytorch_mlp':
+                import torch.nn as _nn
+                net = HARMLP(
+                    input_size=input_size,
+                    hidden_sizes=cfg['hidden_sizes'],
+                    num_classes=num_classes,
+                    dropout=cfg['dropout'],
+                )
+            else:  # pytorch_cnn
+                # CNN expects (batch, window_size, channels) not flat features
+                # For CNN, X_scaled is already raw windows, not extracted features
+                net = HARCNN(
+                    window_size=cfg['window_size'],
+                    n_channels=cfg['n_channels'],
+                    num_classes=num_classes,
+                    dropout=cfg['dropout'],
+                )
+
+            trainer = PyTorchTrainer(net)
+            pt_metrics = trainer.train(
+                X_scaled, y_encoded,
+                X_val=X_val_scaled, y_val=y_val_encoded,
+                epochs=cfg['epochs'],
+                batch_size=cfg['batch_size'],
+                lr=cfg['lr'],
+                patience=cfg['patience'],
+            )
+
+            # Store the trainer so evaluate/predict/save can use it
+            self._pytorch_trainer = trainer
+            # Make self.model point to the PyTorch net so save_model can
+            # detect that it's a PyTorch model
+            self.model = net
+
+            self.performance_metrics.update(pt_metrics)
+
         else:
             # Standard training for other models or when no validation set
             self.model.fit(X_scaled, y_encoded)
 
         # Cross-validation for model evaluation (if requested and no validation used)
-        if use_cross_validation and X_val is None:
+        if use_cross_validation and X_val is None and self.model_type not in (
+                'pytorch_mlp', 'pytorch_cnn'):
             cv_scores = cross_val_score(self.model, X_scaled, y_encoded, cv=5)
             self.performance_metrics['cv_mean_accuracy'] = cv_scores.mean()
             self.performance_metrics['cv_std_accuracy'] = cv_scores.std()
@@ -209,14 +285,48 @@ class EdgeMLModel:
                 f"Cross-validation accuracy: {cv_scores.mean():.4f} (±{cv_scores.std():.4f})")
 
         # Training accuracy
-        train_predictions = self.model.predict(X_scaled)
-        train_accuracy = accuracy_score(y_encoded, train_predictions)
+        train_predictions = self.predict(X_train)
+        y_encoded_for_acc = self.label_encoder.transform(y_train)
+        train_accuracy = accuracy_score(y_encoded_for_acc, train_predictions)
         self.performance_metrics['train_accuracy'] = train_accuracy
 
         logger.info(
             f"Training completed. Training accuracy: {train_accuracy:.4f}")
 
         return self.performance_metrics
+
+    def predict(self, X) -> np.ndarray:
+        """Predict class labels (encoded). Works for both sklearn and PyTorch."""
+        if isinstance(X, pd.DataFrame):
+            X_array = X.values
+        else:
+            X_array = np.asarray(X)
+        # Scale
+        if self.scaler is not None:
+            X_scaled = self.scaler.transform(X_array)
+        else:
+            X_scaled = X_array
+
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+            return self._pytorch_trainer.predict(X_scaled)
+        return self.model.predict(X_scaled)
+
+    def predict_proba(self, X) -> Optional[np.ndarray]:
+        """Return class probabilities. Works for both sklearn and PyTorch."""
+        if isinstance(X, pd.DataFrame):
+            X_array = X.values
+        else:
+            X_array = np.asarray(X)
+        if self.scaler is not None:
+            X_scaled = self.scaler.transform(X_array)
+        else:
+            X_scaled = X_array
+
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+            return self._pytorch_trainer.predict_proba(X_scaled)
+        if hasattr(self.model, 'predict_proba'):
+            return self.model.predict_proba(X_scaled)
+        return None
 
     def evaluate(self, X_test: pd.DataFrame, y_test: pd.Series) -> Dict[str, Any]:
         """Evaluate the trained model on test data."""
@@ -226,10 +336,14 @@ class EdgeMLModel:
         # Preprocess test data
         X_scaled, y_encoded = self.preprocess_data(X_test, y_test)
 
-        # Make predictions
-        y_pred = self.model.predict(X_scaled)
-        y_pred_proba = self.model.predict_proba(X_scaled) if hasattr(
-            self.model, 'predict_proba') else None
+        # Make predictions (use unified predict path)
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+            y_pred = self._pytorch_trainer.predict(X_scaled)
+            y_pred_proba = self._pytorch_trainer.predict_proba(X_scaled)
+        else:
+            y_pred = self.model.predict(X_scaled)
+            y_pred_proba = self.model.predict_proba(X_scaled) if hasattr(
+                self.model, 'predict_proba') else None
 
         # Calculate metrics with original label names
         accuracy = accuracy_score(y_encoded, y_pred)
@@ -425,6 +539,9 @@ class EdgeMLModel:
                 'learning_rate_init': [0.001, 0.01, 0.1]
                 # Note: MLPClassifier doesn't support class_weight parameter
             }
+        elif self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+            # PyTorch models don't support sklearn GridSearchCV
+            return {}
         else:
             return {}
 
@@ -442,6 +559,19 @@ class EdgeMLModel:
             'model_params': self.model_params,
             'performance_metrics': self.performance_metrics
         }
+
+        # For PyTorch models, also save the exported weights and trainer
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+            import torch
+            trainer = getattr(self, '_pytorch_trainer', None)
+            if trainer is not None:
+                if self.model_type == 'pytorch_mlp':
+                    model_data['pytorch_weights'] = trainer.export_mlp_weights()
+                else:
+                    model_data['pytorch_weights'] = trainer.export_cnn_weights()
+                # Save PyTorch state_dict separately for exact reloading
+                model_data['pytorch_state_dict'] = self.model.state_dict()
+                model_data['pytorch_config'] = getattr(self, '_pytorch_config', {})
 
         joblib.dump(model_data, filepath)
         logger.info(f"Model saved to {filepath}")
@@ -465,6 +595,17 @@ class EdgeMLModel:
         instance.label_encoder = model_data['label_encoder']
         instance.feature_names = model_data['feature_names']
         instance.performance_metrics = model_data['performance_metrics']
+
+        # Restore PyTorch trainer if available
+        if model_data['model_type'] in ('pytorch_mlp', 'pytorch_cnn'):
+            pytorch_config = model_data.get('pytorch_config', {})
+            state_dict = model_data.get('pytorch_state_dict')
+            if state_dict is not None and is_pytorch_available():
+                instance._pytorch_config = pytorch_config
+                # The model object was already restored via joblib
+                # but we need to rebuild the trainer wrapper
+                trainer = PyTorchTrainer(instance.model)
+                instance._pytorch_trainer = trainer
 
         logger.info(f"Model loaded from {filepath}")
         return instance
@@ -827,7 +968,8 @@ def prepare_training_data(window_files: List[str], labels: List[str],
 # Model factory function
 def create_model(model_type: str, **kwargs) -> EdgeMLModel:
     """Factory function to create edge ML models."""
-    supported_models = ['random_forest', 'svm', 'neural_network']
+    supported_models = ['random_forest', 'svm', 'neural_network',
+                        'pytorch_mlp', 'pytorch_cnn']
 
     if model_type not in supported_models:
         raise ValueError(

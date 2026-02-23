@@ -36,7 +36,11 @@ layout = html.Div([
                         {'label': '🧠 Neural Network (High Accuracy)',
                          'value': 'neural_network'},
                         {'label': '⚡ Support Vector Machine (Fast Training)',
-                         'value': 'svm'}
+                         'value': 'svm'},
+                        {'label': '🔥 PyTorch MLP (Better Training)',
+                         'value': 'pytorch_mlp'},
+                        {'label': '📊 PyTorch 1D-CNN (Raw Sensor Input)',
+                         'value': 'pytorch_cnn'}
                     ],
                     placeholder="Select a machine learning model",
                     value='random_forest',
@@ -110,7 +114,53 @@ layout = html.Div([
                     'width': '32%',
                     'display': 'inline-block',
                     'vertical-align': 'top'
-                })
+                }),
+
+                # PyTorch model cards (second row)
+                html.Div([
+                    html.Div([
+                        html.H5("🔥 PyTorch MLP", style={
+                                'color': '#EE4C2C', 'margin-bottom': '10px'}),
+                        html.P("MLP with batch training, LR scheduling, and dropout", style={
+                               'margin-bottom': '8px'}),
+                        html.Ul([
+                            html.Li("AdamW + cosine LR schedule"),
+                            html.Li("True mini-batch training"),
+                            html.Li("Early stopping on validation"),
+                            html.Li("Deploys like sklearn NN")
+                        ], style={'font-size': '14px', 'color': '#666'})
+                    ], style={
+                        'background-color': '#fff5f3',
+                        'padding': '15px',
+                        'border-radius': '8px',
+                        'border-left': '4px solid #EE4C2C',
+                        'width': '32%',
+                        'display': 'inline-block',
+                        'vertical-align': 'top',
+                        'margin-right': '2%'
+                    }),
+
+                    html.Div([
+                        html.H5("📊 PyTorch 1D-CNN", style={
+                                'color': '#7B2D8E', 'margin-bottom': '10px'}),
+                        html.P("Convolutional network on raw sensor windows — no feature extraction", style={
+                               'margin-bottom': '8px'}),
+                        html.Ul([
+                            html.Li("Learns features automatically"),
+                            html.Li("3 Conv layers + pooling"),
+                            html.Li("Best on large datasets"),
+                            html.Li("Higher memory requirement")
+                        ], style={'font-size': '14px', 'color': '#666'})
+                    ], style={
+                        'background-color': '#f8f0ff',
+                        'padding': '15px',
+                        'border-radius': '8px',
+                        'border-left': '4px solid #7B2D8E',
+                        'width': '32%',
+                        'display': 'inline-block',
+                        'vertical-align': 'top'
+                    })
+                ], style={'margin-top': '15px'})
             ])
         ])
     ], style={

@@ -14,6 +14,7 @@ from .svm_generator import SVMCodeGenerator
 from .arm_cortex_generator import ARMCortexMCodeGenerator
 from .micropython_generator import MicroPythonCodeGenerator
 from .zephyr_generator import ZephyrCodeGenerator
+from .cnn_generator import CNNCodeGenerator
 
 
 def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
@@ -69,6 +70,32 @@ def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
     if has_jerk:
         for suffix in ['mean', 'std', 'max']:
             name = f'acc_jerk_mag_{suffix}'
+            if name in feature_set:
+                cpp_order.append(name)
+    
+    # Frequency-domain features (DFT on magnitudes) - 7 features per signal
+    # Order matches C extract_frequency_features(): dominant_frequency,
+    # dominant_frequency_magnitude, spectral_centroid, energy_low_freq,
+    # energy_mid_freq, energy_high_freq, spectral_rolloff
+    freq_stats = [
+        'dominant_frequency', 'dominant_frequency_magnitude',
+        'spectral_centroid', 'energy_low_freq', 'energy_mid_freq',
+        'energy_high_freq', 'spectral_rolloff'
+    ]
+    has_acc_freq = any(f.startswith('acc_mag_dominant_') or f.startswith('acc_mag_spectral_') 
+                       or f.startswith('acc_mag_energy_low') for f in feature_set)
+    has_gyro_freq = any(f.startswith('gyro_mag_dominant_') or f.startswith('gyro_mag_spectral_')
+                        or f.startswith('gyro_mag_energy_low') for f in feature_set)
+
+    if has_acc_freq:
+        for stat in freq_stats:
+            name = f'acc_mag_{stat}'
+            if name in feature_set:
+                cpp_order.append(name)
+
+    if has_gyro_freq:
+        for stat in freq_stats:
+            name = f'gyro_mag_{stat}'
             if name in feature_set:
                 cpp_order.append(name)
     
@@ -190,6 +217,24 @@ def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
             elif model_obj.model_type == 'neural_network':
                 enhanced_data['weights'] = extract_neural_network_weights(
                     model_obj.model)
+            elif model_obj.model_type == 'pytorch_mlp':
+                # PyTorch MLP — export weights in sklearn-compatible format
+                if hasattr(model_obj, '_pytorch_trainer'):
+                    mlp_export = model_obj._pytorch_trainer.export_mlp_weights()
+                    enhanced_data['weights'] = {
+                        'input_weights': mlp_export['coefs_'][0].tolist() if hasattr(mlp_export['coefs_'][0], 'tolist') else mlp_export['coefs_'][0],
+                        'hidden_biases': mlp_export['intercepts_'][0].tolist() if hasattr(mlp_export['intercepts_'][0], 'tolist') else mlp_export['intercepts_'][0],
+                        'hidden_size': mlp_export['hidden_layer_sizes'][0] if mlp_export['hidden_layer_sizes'] else 64,
+                    }
+                    # Store full coefs/intercepts for multi-layer extraction
+                    enhanced_data['pytorch_coefs'] = mlp_export['coefs_']
+                    enhanced_data['pytorch_intercepts'] = mlp_export['intercepts_']
+                    enhanced_data['pytorch_hidden_layer_sizes'] = mlp_export['hidden_layer_sizes']
+            elif model_obj.model_type == 'pytorch_cnn':
+                # PyTorch CNN — export layer descriptions for CNNCodeGenerator
+                if hasattr(model_obj, '_pytorch_trainer'):
+                    cnn_export = model_obj._pytorch_trainer.export_cnn_weights()
+                    enhanced_data['cnn_weights'] = cnn_export
             elif model_obj.model_type == 'svm':
                 # Extract and merge SVM parameters
                 svm_params = extract_svm_parameters(model_obj.model)
@@ -202,8 +247,9 @@ def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
                 }
 
             # Reorder parameters to match C++ feature extraction order
+            # (skip for CNN which operates on raw sensor windows)
             feature_names = enhanced_data.get('feature_names', [])
-            if feature_names:
+            if feature_names and model_obj.model_type not in ('pytorch_cnn',):
                 cpp_order = get_cpp_feature_order(feature_names)
                 reorder_indices = compute_feature_reorder_indices(feature_names, cpp_order)
                 if reorder_indices is not None:
@@ -261,20 +307,87 @@ def extract_neural_network_weights(nn_model) -> Dict[str, Any]:
 
 
 def extract_svm_parameters(svm_model) -> Dict[str, Any]:
-    """Extract support vectors and parameters from SVM model."""
+    """Extract support vectors and parameters from SVM model.
+
+    IMPORTANT: scikit-learn's SVC uses One-vs-One (OvO) internally, where
+    ``dual_coef_`` has shape ``[n_classes-1, n_SV]`` — a packed format that
+    does NOT correspond to a simple per-class coefficient matrix.
+
+    The generated C / MicroPython code uses a One-vs-Rest (OvR) decision
+    scheme: for each class *k* the score is a linear combination of kernel
+    evaluations plus an intercept, and the predicted class is ``argmax``.
+
+    To bridge the gap, this function converts the OvO representation into
+    "effective OvR" coefficients by summing the signed per-pair decision
+    functions for each class.  The result is:
+
+        dual_coefficients  – shape [n_classes, n_SV]
+        intercept          – shape [n_classes]
+
+    which the C code can use directly with ``argmax(scores)``.
+    """
     params = {}
     try:
-        if hasattr(svm_model, 'support_vectors_'):
-            params['support_vectors'] = svm_model.support_vectors_.tolist()
-        if hasattr(svm_model, 'dual_coef_'):
-            params['dual_coefficients'] = svm_model.dual_coef_.tolist()
-        if hasattr(svm_model, 'intercept_'):
-            params['intercept'] = svm_model.intercept_.tolist()
-
-        # Extract actual gamma value (not 'scale' or 'auto' string)
-        # Priority: 1) _gamma (computed value), 2) numeric gamma param, 3) compute from SVs
         import numpy as np
 
+        if not hasattr(svm_model, 'support_vectors_'):
+            return params
+
+        params['support_vectors'] = svm_model.support_vectors_.tolist()
+
+        # ----------------------------------------------------------------
+        # Convert OvO dual_coef_ → OvR dual coefficients
+        # ----------------------------------------------------------------
+        n_classes = len(svm_model.classes_)
+        n_sv = len(svm_model.support_vectors_)
+        n_support = list(int(x) for x in svm_model.n_support_)
+
+        # Build cumulative start index per class in the SV array
+        class_start = [0]
+        for ns in n_support:
+            class_start.append(class_start[-1] + ns)
+
+        ovr_coef = np.zeros((n_classes, n_sv))
+        ovr_intercept = np.zeros(n_classes)
+
+        # For each OvO pair (ci, cj) with ci < cj, the decision function is:
+        #   f(x) = sum_s pair_coef[s] * K(x, sv_s) + intercept_[pair_idx]
+        # If f(x) > 0, class ci wins; otherwise class cj wins.
+        #
+        # Per-pair dual coefficients are extracted from libsvm's packed
+        # dual_coef_ matrix:
+        #   - SVs of class ci: row = cj - 1
+        #   - SVs of class cj: row = ci
+        pair_idx = 0
+        for ci in range(n_classes):
+            for cj in range(ci + 1, n_classes):
+                pair_coef = np.zeros(n_sv)
+
+                # Coefficients for class ci's support vectors
+                for s in range(class_start[ci], class_start[ci + 1]):
+                    pair_coef[s] = svm_model.dual_coef_[cj - 1, s]
+
+                # Coefficients for class cj's support vectors
+                for s in range(class_start[cj], class_start[cj + 1]):
+                    pair_coef[s] = svm_model.dual_coef_[ci, s]
+
+                # Accumulate: class ci gets +decision, class cj gets -decision
+                ovr_coef[ci] += pair_coef
+                ovr_intercept[ci] += svm_model.intercept_[pair_idx]
+                ovr_coef[cj] -= pair_coef
+                ovr_intercept[cj] -= svm_model.intercept_[pair_idx]
+
+                pair_idx += 1
+
+        params['dual_coefficients'] = ovr_coef.tolist()
+        params['intercept'] = ovr_intercept.tolist()
+
+        print(f"SVM OvO→OvR conversion: {n_classes} classes, {n_sv} SVs, "
+              f"{pair_idx} pairs → OvR coef [{n_classes}×{n_sv}]")
+
+        # ----------------------------------------------------------------
+        # Extract actual gamma value
+        # ----------------------------------------------------------------
         gamma_resolved = None
 
         # Try the private _gamma attribute first (scikit-learn stores the computed value here)
@@ -289,11 +402,9 @@ def extract_svm_parameters(svm_model) -> Dict[str, Any]:
             gamma_val = svm_model.gamma
             if isinstance(gamma_val, (int, float)):
                 gamma_resolved = float(gamma_val)
-            elif isinstance(gamma_val, str) and hasattr(svm_model, 'support_vectors_'):
+            elif isinstance(gamma_val, str):
                 n_features = svm_model.support_vectors_.shape[1]
                 if gamma_val == 'scale':
-                    # gamma = 1 / (n_features * X.var())
-                    # Approximate X.var() from support vectors (best available proxy)
                     sv_var = np.var(svm_model.support_vectors_)
                     gamma_resolved = 1.0 / (n_features * sv_var) if sv_var > 0 else 1.0 / n_features
                 else:  # 'auto'
@@ -302,10 +413,13 @@ def extract_svm_parameters(svm_model) -> Dict[str, Any]:
         if gamma_resolved is not None:
             params['gamma'] = gamma_resolved
         else:
-            params['gamma'] = 0.1  # Default fallback
+            params['gamma'] = 0.1
             print("⚠ Could not extract SVM gamma – using default 0.1")
+
     except Exception as e:
         print(f"Could not extract SVM parameters: {e}")
+        import traceback
+        traceback.print_exc()
     return params
 
 
@@ -416,6 +530,8 @@ class CodeGeneratorFactory:
     _generators: Dict[str, Type[BaseCodeGenerator]] = {
         'random_forest': RandomForestCodeGenerator,
         'neural_network': NeuralNetworkCodeGenerator,
+        'pytorch_mlp': NeuralNetworkCodeGenerator,  # MLP weights exported in sklearn format
+        'pytorch_cnn': CNNCodeGenerator,
         'svm': SVMCodeGenerator,
         'arm_cortex_m': ARMCortexMCodeGenerator,
         'micropython': MicroPythonCodeGenerator,

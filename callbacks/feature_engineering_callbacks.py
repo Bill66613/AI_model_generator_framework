@@ -171,14 +171,34 @@ def register_callbacks(app):
         Display the total number of features based on the selection method.
         """
         feature_counts = {
-            'all': ('138 features', 'Time-domain (90) + Frequency-domain (48)'),
-            'time_domain': ('90 features', 'Time-domain only (mean, std, max, min, etc.)'),
-            'frequency_domain': ('48 features', 'Frequency-domain only (FFT features)'),
-            'raw': ('6 features', 'Raw sensor axes (aX, aY, aZ, gX, gY, gZ)'),
+            'orientation_invariant_time_only': (
+                '33 features',
+                'Orientation-robust magnitudes: 15 stats × (acc_mag + gyro_mag) + 3 jerk stats. '
+                'RECOMMENDED for deployment (C / MicroPython).'
+            ),
             'orientation_invariant': (
-                '12-18 features',
-                'Rotation-robust: accel/gyro magnitude + jerk magnitude stats (optional: min/max)'
-            )
+                '47 features',
+                'Orientation-robust magnitudes (33 time) + DFT on magnitudes (14 freq). '
+                'Fully deployable — DFT runs on-device.'
+            ),
+            'time_domain': (
+                '90 features',
+                'Per-axis time-domain: 15 stats × 6 axes (aX, aY, aZ, gX, gY, gZ). Deployable.'
+            ),
+            'all': (
+                '138 features',
+                'Per-axis time-domain (90) + frequency-domain (48). '
+                '⚠️ Per-axis FFT NOT yet deployable (use orientation_invariant for freq features).'
+            ),
+            'frequency_domain': (
+                '48 features',
+                'Per-axis frequency-domain only (FFT features). '
+                '⚠️ Per-axis FFT NOT yet deployable.'
+            ),
+            'raw': (
+                '6 features',
+                'Raw sensor axes mean per window (aX, aY, aZ, gX, gY, gZ).'
+            ),
         }
 
         if feature_selection in feature_counts:
@@ -318,64 +338,6 @@ def register_callbacks(app):
 
             # Step 3: Extract features uniformly (with zero-padding applied)
 
-            def _compute_orientation_invariant_features(df_window: pd.DataFrame) -> dict:
-                # Magnitudes
-                acc_mag = np.sqrt(df_window['aX']**2 +
-                                  df_window['aY']**2 + df_window['aZ']**2)
-                gyro_mag = np.sqrt(
-                    df_window['gX']**2 + df_window['gY']**2 + df_window['gZ']**2)
-
-                # Jerk magnitude (finite difference of acceleration)
-                acc_diff = df_window[['aX', 'aY', 'aZ']].diff().fillna(0.0)
-                jerk_mag = np.sqrt(acc_diff['aX']**2 +
-                                   acc_diff['aY']**2 + acc_diff['aZ']**2)
-
-                feats = {
-                    # Acc magnitude stats
-                    'acc_mag_mean': float(np.mean(acc_mag)),
-                    'acc_mag_std': float(np.std(acc_mag)),
-                    'acc_mag_rms': float(np.sqrt(np.mean(acc_mag**2))),
-                    'acc_mag_energy': float(np.sum(acc_mag**2)),
-                    # Gyro magnitude stats
-                    'gyro_mag_mean': float(np.mean(gyro_mag)),
-                    'gyro_mag_std': float(np.std(gyro_mag)),
-                    'gyro_mag_rms': float(np.sqrt(np.mean(gyro_mag**2))),
-                    'gyro_mag_energy': float(np.sum(gyro_mag**2)),
-                    # Jerk magnitude stats
-                    'jerk_mag_mean': float(np.mean(jerk_mag)),
-                    'jerk_mag_std': float(np.std(jerk_mag)),
-                    'jerk_mag_rms': float(np.sqrt(np.mean(jerk_mag**2))),
-                    'jerk_mag_energy': float(np.sum(jerk_mag**2)),
-                }
-                # Optional: extremal stats (keep count consistent)
-                feats['acc_mag_min'] = float(np.min(acc_mag))
-                feats['acc_mag_max'] = float(np.max(acc_mag))
-                feats['gyro_mag_min'] = float(np.min(gyro_mag))
-                feats['gyro_mag_max'] = float(np.max(gyro_mag))
-                feats['jerk_mag_max'] = float(np.max(jerk_mag))
-                return feats
-
-            def _random_rotation_matrix():
-                # Uniform random Euler angles
-                ax, ay, az = np.random.uniform(-np.pi, np.pi, size=3)
-                cx, sx = np.cos(ax), np.sin(ax)
-                cy, sy = np.cos(ay), np.sin(ay)
-                cz, sz = np.cos(az), np.sin(az)
-                # ZYX rotation
-                Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
-                Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
-                Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
-                return Rz @ Ry @ Rx
-
-            def _apply_rotation(df_window: pd.DataFrame) -> pd.DataFrame:
-                R = _random_rotation_matrix()
-                acc = df_window[['aX', 'aY', 'aZ']].values @ R.T
-                gyro = df_window[['gX', 'gY', 'gZ']].values @ R.T
-                df_rot = df_window.copy()
-                df_rot[['aX', 'aY', 'aZ']] = acc
-                df_rot[['gX', 'gY', 'gZ']] = gyro
-                return df_rot
-
             feature_list = []
             for df_window, label in zip(padded_windows, all_labels):
                 # Map feature_method to create_feature_vector parameters
@@ -464,24 +426,42 @@ def register_callbacks(app):
             feature_names = df_features.drop('activity', axis=1).columns.tolist()
             # Note: normalization_method is stored in metadata for reference only
 
+            # Also save raw windowed sensor data for CNN training
+            # Shape: (n_windows, window_size_samples, 6)
+            raw_windows = np.array([
+                w[sensor_cols].values[:target_window_samples]
+                for w in padded_windows
+            ], dtype=np.float32)
+            raw_labels = np.array(all_labels)
+
             # Step 4: Split AFTER combining (prevents data leakage)
             test_ratio = 1.0 - train_ratio - val_ratio
 
+            # Use indices to keep raw windows in sync with feature splits
+            indices = np.arange(len(X))
+
             # First split: train+val vs test
-            X_trainval, X_test, y_trainval, y_test = train_test_split(
-                X, y, test_size=test_ratio, random_state=random_state, stratify=y
+            idx_trainval, idx_test, y_trainval, y_test = train_test_split(
+                indices, y, test_size=test_ratio, random_state=random_state, stratify=y
             )
+            X_trainval, X_test = X[idx_trainval], X[idx_test]
+            rw_trainval, rw_test = raw_windows[idx_trainval], raw_windows[idx_test]
 
             # Second split: train vs val
             if val_ratio > 0:
                 val_ratio_adjusted = val_ratio / (train_ratio + val_ratio)
-                X_train, X_val, y_train, y_val = train_test_split(
-                    X_trainval, y_trainval, test_size=val_ratio_adjusted,
+                sub_idx_train, sub_idx_val, y_train, y_val = train_test_split(
+                    np.arange(len(X_trainval)), y_trainval,
+                    test_size=val_ratio_adjusted,
                     random_state=random_state, stratify=y_trainval
                 )
+                X_train, X_val = X_trainval[sub_idx_train], X_trainval[sub_idx_val]
+                rw_train, rw_val = rw_trainval[sub_idx_train], rw_trainval[sub_idx_val]
             else:
                 X_train, y_train = X_trainval, y_trainval
+                rw_train = rw_trainval
                 X_val, y_val = np.array([]), np.array([])
+                rw_val = np.array([])
 
             # Step 5: Save results to files
             # Create training directory if it doesn't exist
@@ -515,6 +495,43 @@ def register_callbacks(app):
             if len(X_val) > 0:
                 val_file = os.path.join(training_dir, f"{dataset_name}_val.csv")
                 df_val.to_csv(val_file, index=False)
+
+            # Save raw windowed sensor data for CNN training (numpy arrays)
+            np.save(os.path.join(training_dir, f"{dataset_name}_raw_train.npy"), rw_train)
+            np.save(os.path.join(training_dir, f"{dataset_name}_raw_test.npy"), rw_test)
+            np.save(os.path.join(training_dir, f"{dataset_name}_raw_train_labels.npy"), y_train)
+            np.save(os.path.join(training_dir, f"{dataset_name}_raw_test_labels.npy"), y_test)
+            if len(rw_val) > 0:
+                np.save(os.path.join(training_dir, f"{dataset_name}_raw_val.npy"), rw_val)
+                np.save(os.path.join(training_dir, f"{dataset_name}_raw_val_labels.npy"), y_val)
+
+            # Save feature-engineering metadata so that the training &
+            # code-generation stages can recover window_size, sampling_rate,
+            # feature_method, etc.  One JSON per dataset in the training dir.
+            fe_metadata = {
+                'window_size_ms': target_window_size,
+                'sampling_rate': sampling_rate,
+                'window_size_samples': target_window_samples,
+                'feature_method': feature_method,
+                'normalization_method': normalization_method,
+                'feature_names': feature_names,
+                'num_features': len(feature_names),
+                'selected_labels': selected_labels,
+                'orientation_robust': feature_method in (
+                    'orientation_invariant', 'orientation_invariant_time_only'),
+                'include_per_axis': feature_method in (
+                    'all', 'time_domain', 'frequency_domain'),
+                'include_frequency': feature_method in (
+                    'all', 'orientation_invariant', 'frequency_domain'),
+                'train_split': train_ratio,
+                'val_split': val_ratio,
+                'test_split': test_ratio,
+                'random_state': random_state,
+            }
+            fe_meta_file = os.path.join(
+                training_dir, f"{dataset_name}_fe_metadata.json")
+            with open(fe_meta_file, 'w') as f:
+                json.dump(fe_metadata, f, indent=2)
 
             # Also save to engineered-dataset-store for backwards compatibility
             engineered_data = {

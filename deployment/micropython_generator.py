@@ -465,26 +465,35 @@ def _predict_internal(features):
         """Generate feature extraction matching the C++ version exactly."""
         # Check if orientation-robust
         orientation_robust = False
+        include_frequency = False
         feature_names = self.feature_names or []
         has_acc_mag = any(str(n).startswith('acc_mag_') for n in feature_names)
         has_gyro_mag = any(str(n).startswith('gyro_mag_') for n in feature_names)
         if has_acc_mag and has_gyro_mag:
             orientation_robust = True
 
+        # Auto-detect frequency features from names
+        freq_suffixes = ('_dominant_frequency', '_spectral_centroid',
+                         '_energy_low_freq', '_spectral_rolloff')
+        if any(str(n).endswith(freq_suffixes) for n in feature_names):
+            include_frequency = True
+
         # Also check feature_config
         try:
             fc = self.model_data.get('model_info', {}).get('feature_config', {})
             if fc.get('orientation_robust', False):
                 orientation_robust = True
+            if fc.get('include_frequency', False):
+                include_frequency = True
         except Exception:
             pass
 
         if orientation_robust:
-            return self._py_orientation_robust_extraction()
+            return self._py_orientation_robust_extraction(include_frequency)
         return self._py_per_axis_extraction()
 
-    def _py_orientation_robust_extraction(self) -> str:
-        return '''
+    def _py_orientation_robust_extraction(self, include_frequency=False) -> str:
+        code = '''
 def _magnitude_stats(mag):
     """Extract 15 statistical features from a magnitude vector."""
     n = len(mag)
@@ -540,9 +549,84 @@ def _magnitude_stats(mag):
     return [mean, std, mn, mx, rng, median, q25, q75, iqr,
             skew, kurt, rms, energy, float(zc), mc / n]
 
+'''
+        # Add DFT frequency feature extraction if needed
+        if include_frequency:
+            code += '''
+def _frequency_features(signal, sampling_rate):
+    """Extract 7 frequency features via DFT (matches C extract_frequency_features)."""
+    n = len(signal)
+    half_n = n // 2
+    freq_step = sampling_rate / n
+    two_pi_over_n = 6.283185307 / n
 
+    max_mag = 0.0
+    max_idx = 0
+    mag_sum = 0.0
+    weighted_freq_sum = 0.0
+    dft_mag = []
+
+    for k in range(1, half_n + 1):
+        re = 0.0
+        im = 0.0
+        angle_step = two_pi_over_n * k
+        for i in range(n):
+            angle = angle_step * i
+            re += signal[i] * math.cos(angle)
+            im -= signal[i] * math.sin(angle)
+        mag = math.sqrt(re * re + im * im)
+        dft_mag.append(mag)
+
+        freq = k * freq_step
+        if mag > max_mag:
+            max_mag = mag
+            max_idx = k - 1
+        mag_sum += mag
+        weighted_freq_sum += freq * mag
+
+    feats = []
+    # 0: Dominant frequency
+    feats.append((max_idx + 1) * freq_step)
+    # 1: Dominant frequency magnitude
+    feats.append(max_mag)
+    # 2: Spectral centroid
+    feats.append(weighted_freq_sum / mag_sum if mag_sum > 0 else 0.0)
+
+    # Energy in bands: 0-2 Hz, 2-5 Hz, 5+ Hz
+    e_low = 0.0
+    e_mid = 0.0
+    e_high = 0.0
+    for k in range(half_n):
+        freq = (k + 1) * freq_step
+        e = dft_mag[k] * dft_mag[k]
+        if freq < 2.0:
+            e_low += e
+        elif freq < 5.0:
+            e_mid += e
+        else:
+            e_high += e
+    feats.append(e_low)
+    feats.append(e_mid)
+    feats.append(e_high)
+
+    # 6: Spectral rolloff (85%)
+    threshold = 0.85 * mag_sum
+    cumsum = 0.0
+    rolloff = half_n * freq_step
+    for k in range(half_n):
+        cumsum += dft_mag[k]
+        if cumsum >= threshold:
+            rolloff = (k + 1) * freq_step
+            break
+    feats.append(rolloff)
+
+    return feats
+
+'''
+
+        code += '''
 def extract_features(sensor_data, samples):
-    """Orientation-robust feature extraction (33 features).
+    """Orientation-robust feature extraction.
 
     Args:
         sensor_data: list of [aX, aY, aZ, gX, gY, gZ] lists
@@ -582,12 +666,22 @@ def extract_features(sensor_data, samples):
         feats.append(max(jerk_mag))
     else:
         feats.extend([0.0, 0.0, 0.0])
+'''
+        # Add frequency feature extraction call if needed
+        if include_frequency:
+            code += '''
+    # Frequency features (7 per magnitude via DFT)
+    feats.extend(_frequency_features(acc_mag, SAMPLING_RATE))
+    feats.extend(_frequency_features(gyro_mag, SAMPLING_RATE))
+'''
 
+        code += '''
     # Pad / truncate to NUM_FEATURES
     while len(feats) < NUM_FEATURES:
         feats.append(0.0)
     return feats[:NUM_FEATURES]
 '''
+        return code
 
     def _py_per_axis_extraction(self) -> str:
         return '''

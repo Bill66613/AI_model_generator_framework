@@ -428,12 +428,17 @@ static inline float pgm_read_float_near_safe(const float* addr) {
             pass
 
         # Source 3: Auto-detect from feature names (most reliable)
-        if not orientation_robust and self.feature_names:
+        if self.feature_names:
             has_acc_mag = any(str(name).startswith('acc_mag_') for name in self.feature_names)
             has_gyro_mag = any(str(name).startswith('gyro_mag_') for name in self.feature_names)
             has_jerk_mag = any(str(name).startswith('acc_jerk_mag_') for name in self.feature_names)
             if has_acc_mag and has_gyro_mag:
                 orientation_robust = True
+            # Auto-detect frequency features from names
+            freq_suffixes = ('_dominant_frequency', '_spectral_centroid',
+                             '_energy_low_freq', '_spectral_rolloff')
+            if any(str(name).endswith(freq_suffixes) for name in self.feature_names):
+                include_frequency = True
             # Also check for per-axis features
             has_per_axis = any(str(name).startswith(('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_')) 
                              for name in self.feature_names)
@@ -442,7 +447,7 @@ static inline float pgm_read_float_near_safe(const float* addr) {
 
         # Use orientation-robust features if configured
         if orientation_robust or feature_method == 'orientation_invariant':
-            return self._generate_orientation_robust_extraction()
+            return self._generate_orientation_robust_extraction(include_frequency)
 
         # Per-axis feature extraction — ALWAYS extracts the same 15 features/axis
         # that match training, regardless of optimization level.
@@ -454,22 +459,107 @@ static inline float pgm_read_float_near_safe(const float* addr) {
     # Orientation-robust feature extraction (magnitude-based, 33 features)
     # ------------------------------------------------------------------
 
-    def _generate_orientation_robust_extraction(self) -> str:
+    def _generate_orientation_robust_extraction(self, include_frequency=False) -> str:
         """Generate orientation-robust (magnitude-based) feature extraction.
         
-        Always produces the same 33 features regardless of optimization level.
-        Optimization only affects computational shortcuts (e.g., sorting algorithm).
+        Produces 33 time-domain features, plus optionally 14 frequency-domain
+        features (7 per magnitude) via DFT when include_frequency=True (47 total).
         """
-        return """// Forward declaration for helper function
+        code = ""
+        
+        # DFT helper function (only included when frequency features are needed)
+        if include_frequency:
+            code += """
+// --- DFT-based frequency feature extraction ----------------------------
+// Computes 7 frequency features from a magnitude signal via a direct DFT.
+// For N=150 this takes ~11k multiply-adds, well under 5 ms on ESP32.
+int extract_frequency_features(float* signal, int samples, float sampling_rate,
+                               float* features, int start_idx) {
+    int idx = start_idx;
+    int half_n = samples / 2;  // positive-frequency bins
+    float freq_step = sampling_rate / (float)samples;
+
+    float max_mag = 0.0f;
+    int max_idx = 0;
+    float mag_sum = 0.0f;
+    float weighted_freq_sum = 0.0f;
+
+    // Precompute 2*PI/N
+    float two_pi_over_n = 6.283185307f / (float)samples;
+
+    // Temporary array for DFT magnitudes (only positive freqs)
+    float dft_mag[WINDOW_SIZE / 2 + 1];
+
+    for (int k = 1; k <= half_n; k++) {
+        float re = 0.0f, im = 0.0f;
+        float angle_step = two_pi_over_n * (float)k;
+        for (int n = 0; n < samples; n++) {
+            float angle = angle_step * (float)n;
+            re += signal[n] * cosf(angle);
+            im -= signal[n] * sinf(angle);
+        }
+        float mag = sqrtf(re * re + im * im);
+        dft_mag[k - 1] = mag;
+
+        float freq = (float)k * freq_step;
+        if (mag > max_mag) {
+            max_mag = mag;
+            max_idx = k - 1;
+        }
+        mag_sum += mag;
+        weighted_freq_sum += freq * mag;
+    }
+
+    // 0: Dominant frequency (Hz)
+    features[idx++] = (float)(max_idx + 1) * freq_step;
+    // 1: Dominant frequency magnitude
+    features[idx++] = max_mag;
+    // 2: Spectral centroid
+    features[idx++] = (mag_sum > 0) ? (weighted_freq_sum / mag_sum) : 0.0f;
+
+    // Energy in frequency bands: 0-2 Hz, 2-5 Hz, 5+ Hz
+    float energy_low = 0.0f, energy_mid = 0.0f, energy_high = 0.0f;
+    for (int k = 0; k < half_n; k++) {
+        float freq = (float)(k + 1) * freq_step;
+        float e = dft_mag[k] * dft_mag[k];
+        if (freq < 2.0f)            energy_low  += e;
+        else if (freq < 5.0f)       energy_mid  += e;
+        else                         energy_high += e;
+    }
+    // 3-5: Band energies
+    features[idx++] = energy_low;
+    features[idx++] = energy_mid;
+    features[idx++] = energy_high;
+
+    // 6: Spectral rolloff (freq below which 85% of total magnitude)
+    float rolloff_threshold = 0.85f * mag_sum;
+    float cumsum = 0.0f;
+    float rolloff_freq = (float)half_n * freq_step;
+    for (int k = 0; k < half_n; k++) {
+        cumsum += dft_mag[k];
+        if (cumsum >= rolloff_threshold) {
+            rolloff_freq = (float)(k + 1) * freq_step;
+            break;
+        }
+    }
+    features[idx++] = rolloff_freq;
+
+    return idx;
+}
+
+"""
+
+        code += """// Forward declaration for helper function
 int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx);
 
 void extract_features(float sensor_data[][6], int samples, float features[]) {
-    // Orientation-robust features (33 magnitude-based features)
-    // Matches Python extract_orientation_invariant_features()
-    // Features per magnitude (acc_mag, gyro_mag): mean, std, min, max, range, median, q25, q75, iqr,
-    // skewness, kurtosis, rms, energy, zero_crossings, mean_crossing_rate (15 × 2 = 30)
-    // Plus jerk magnitude: mean, std, max (3 features) = 33 total
+    // Orientation-robust features (magnitude-based)
+    // Time-domain: 15 stats x 2 magnitudes + 3 jerk = 33 features
+"""
+        if include_frequency:
+            code += "    // Frequency-domain: 7 features x 2 magnitudes = 14 features (total: 47)\n"
 
+        code += """
     if (samples <= 1) {
         for (int i = 0; i < NUM_FEATURES; i++) features[i] = 0.0f;
         return;
@@ -530,17 +620,24 @@ void extract_features(float sensor_data[][6], int samples, float features[]) {
     features[idx++] = jerk_mean;
     features[idx++] = jerk_std;
     features[idx++] = jerk_max;
+"""
+        # Insert frequency feature extraction after jerk features
+        if include_frequency:
+            code += """
+    // Extract 7 frequency features from acc_mag via DFT
+    idx = extract_frequency_features(acc_mag, samples, (float)SAMPLING_RATE, features, idx);
 
+    // Extract 7 frequency features from gyro_mag via DFT
+    idx = extract_frequency_features(gyro_mag, samples, (float)SAMPLING_RATE, features, idx);
+"""
+
+        code += """
     // Fill remaining features with zeros
     for (; idx < NUM_FEATURES; idx++) features[idx] = 0.0f;
 }
 
 // Helper function to extract statistical features from magnitude vector
 int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx) {
-    // Calculate all statistical features for one magnitude vector
-    // Returns: mean, std, min, max, range, median, q25, q75, iqr,
-    //          skewness, kurtosis, rms, energy, zero_crossings, mean_crossing_rate (15 features)
-
     int idx = start_idx;
     float n = (float)samples;
 
@@ -571,7 +668,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
     float sorted[WINDOW_SIZE];
     for (int i = 0; i < samples; i++) sorted[i] = mag[i];
 
-    // Insertion sort (faster than bubble sort for small/partially-sorted arrays)
+    // Insertion sort
     for (int i = 1; i < samples; i++) {
         float key = sorted[i];
         int j = i - 1;
@@ -595,7 +692,6 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
     features[idx++] = iqr;          // 8: iqr
 
     // Skewness and kurtosis - bias-corrected (pandas/scipy formula)
-    // Use sample std (Bessel's correction) for standardization
     float sample_var = variance * n / (n - 1.0f + 0.001f);
     float sample_std = sqrtf(sample_var > 0 ? sample_var : 0.0001f);
 
@@ -607,14 +703,12 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         m4_sum += z2 * z2;
     }
 
-    // Skewness with bias correction: sqrt(n*(n-1))/(n-2) * (m3/n)
     float g1 = m3_sum / n;
     float skewness = 0.0f;
     if (samples >= 3) {
         skewness = sqrtf(n * (n - 1.0f)) / (n - 2.0f) * g1;
     }
 
-    // Excess kurtosis with bias correction: (n-1)/((n-2)*(n-3)) * ((n+1)*g2 + 6)
     float g2 = m4_sum / n - 3.0f;
     float kurtosis = -3.0f;
     if (samples >= 4) {
@@ -640,6 +734,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
     return idx;
 }
 """
+        return code
 
     # ------------------------------------------------------------------
     # Per-axis feature extraction (15 features × 6 axes = 90 features)
@@ -1242,60 +1337,68 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
             }
 
     def _set_optimization_parameters(self):
-        """Set parameters based on optimization strategy and model complexity."""
-        # Calculate complexity factors
-        num_features = len(self.feature_names)
-        num_classes = len(self.classes)
+        """Set parameters based on optimization strategy and model complexity.
+
+        CRITICAL: ``window_size`` and ``sampling_rate`` MUST match training.
+        Changing them would alter feature distributions and break prediction
+        accuracy.  These values are read from model metadata if available;
+        otherwise sensible defaults (100 Hz, 150 samples = 1.5 s) are used.
+        The optimization level only affects **precision**, **debug output**,
+        and **buffer strategy** — never the data acquisition parameters.
+        """
+        # ----------------------------------------------------------------
+        # 1. Read training-time acquisition params from model metadata
+        # ----------------------------------------------------------------
+        model_params = self.model_data.get('model_params', {})
+        model_info = self.model_data.get('model_info', {})
+        fe_config = model_info.get('fe_config', {})
+
+        # Prefer fe_config (written by Feature Engineering tab) over model_params
+        stored_sampling_rate = (
+            fe_config.get('sampling_rate')
+            or model_params.get('sampling_rate')
+        )
+        stored_window_size_ms = (
+            fe_config.get('window_size_ms')
+            or model_params.get('window_size_ms')
+        )
+
+        if stored_sampling_rate and stored_window_size_ms:
+            self.sampling_rate = int(stored_sampling_rate)
+            self.window_size = int(
+                (stored_window_size_ms / 1000) * self.sampling_rate)
+        else:
+            # Fallback: use standard HAR defaults
+            self.sampling_rate = 100
+            self.window_size = 150  # 1.5 s @ 100 Hz
+
+        # ----------------------------------------------------------------
+        # 2. Set optimization-specific parameters (NEVER touch window/rate)
+        # ----------------------------------------------------------------
         complexity_factor = self._calculate_complexity_factor()
 
         if self.optimization == 'accuracy':
-            self.sampling_rate = 100  # Higher sampling for better accuracy
-            self.window_size = min(
-                100, max(50, int(100 * complexity_factor)))  # Adaptive window
-            self.feature_precision = 6  # Higher precision for features
-            self.debug_enabled = True  # Enable detailed debugging
+            self.feature_precision = 6
+            self.debug_enabled = True
             self.buffer_optimization = False
         elif self.optimization == 'speed':
-            # Adaptive speed optimization based on complexity
-            base_sampling = 50
-            if complexity_factor > 2.0:  # Very complex model
-                self.sampling_rate = max(25, int(base_sampling / 1.5))
-            elif complexity_factor > 1.5:  # Moderately complex
-                self.sampling_rate = max(30, int(base_sampling / 1.2))
-            else:
-                self.sampling_rate = base_sampling
-
-            self.window_size = min(50, max(25, int(50 / complexity_factor)))
             self.feature_precision = max(2, min(3, int(4 - complexity_factor)))
-            self.debug_enabled = False  # Disable debugging for speed
+            self.debug_enabled = False
             self.buffer_optimization = True
         elif self.optimization == 'power':
-            # Ultra-conservative for power, more aggressive for complex models
-            base_sampling = 25
-            if complexity_factor > 2.0:  # Very complex model
-                self.sampling_rate = max(15, int(base_sampling / 1.5))
-            else:
-                self.sampling_rate = base_sampling
-
-            self.window_size = min(50, max(20, int(40 / complexity_factor)))
-            # Increased min precision from 1 to 3 - scaler values are tiny (0.004-0.017)
-            # and rounding to 1 decimal makes them all 0.0, breaking normalization
+            # Min precision of 3 — scaler values are tiny (0.004–0.017)
+            # and rounding to 1 decimal makes them 0.0, breaking normalisation
             self.feature_precision = max(3, min(4, int(5 - complexity_factor)))
-            self.debug_enabled = False  # No debugging to save power
+            self.debug_enabled = False
             self.buffer_optimization = True
         else:  # balanced
-            # Balanced approach - use 100 Hz for consistency with training data
-            # Window size of 150 samples = 1.5 seconds at 100 Hz
-            self.sampling_rate = 100  # Standard sampling rate for HAR
-            # 1.5 second windows (increased from 75 for better accuracy)
-            self.window_size = 150
-            self.feature_precision = 3  # Balanced precision
-            self.debug_enabled = False  # No debugging by default
+            self.feature_precision = 3
+            self.debug_enabled = False
             self.buffer_optimization = False
 
-        # Apply final bounds checking
+        # Final bounds
         self.sampling_rate = max(10, min(200, self.sampling_rate))
-        self.window_size = max(20, min(200, self.window_size))
+        self.window_size = max(20, min(500, self.window_size))
         self.feature_precision = max(1, min(8, self.feature_precision))
 
     def _calculate_complexity_factor(self) -> float:
@@ -1365,8 +1468,8 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
                 raise ModelDataError(f"Field '{field}' cannot be empty")
 
         # Validate model_type
-        valid_model_types = ['random_forest',
-                             'neural_network', 'svm', 'arm_cortex_m']
+        valid_model_types = ['random_forest', 'neural_network', 'svm',
+                             'pytorch_mlp', 'pytorch_cnn', 'arm_cortex_m']
         if model_data['model_type'] not in valid_model_types:
             raise ModelDataError(f"Invalid model_type: '{model_data['model_type']}'. "
                                  f"Valid types: {valid_model_types}")

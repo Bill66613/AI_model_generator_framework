@@ -31,6 +31,16 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
         if 'model_object' in self.model_data:
             model_obj = self.model_data['model_object']
             try:
+                # --- PyTorch MLP path (export_mlp_weights returns sklearn-compatible format) ---
+                if hasattr(model_obj, '_pytorch_trainer'):
+                    mlp_export = model_obj._pytorch_trainer.export_mlp_weights()
+                    coefs = mlp_export['coefs_']
+                    intercepts = mlp_export['intercepts_']
+                    self.hidden_layer_sizes = list(mlp_export.get('hidden_layer_sizes', ()))
+                    self._populate_from_coefs(coefs, intercepts)
+                    return
+
+                # --- scikit-learn MLPClassifier path ---
                 if hasattr(model_obj, 'model') and hasattr(model_obj.model, 'coefs_'):
                     # Extract weights from scikit-learn MLPClassifier
                     coefs = model_obj.model.coefs_
@@ -45,48 +55,7 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
                             self.hidden_layer_sizes = [
                                 model_obj.model.hidden_layer_sizes]
 
-                    self.num_hidden_layers = len(
-                        self.hidden_layer_sizes) if self.hidden_layer_sizes else len(coefs) - 1
-
-                    # Extract ALL weight matrices and biases
-                    self.all_weights = [coef.tolist() for coef in coefs]
-                    self.all_biases = [intercept.tolist()
-                                       for intercept in intercepts]
-
-                    # Apply feature reorder to input weights if needed
-                    # (model features may be in different order than C++ extraction)
-                    reorder_indices = self.model_data.get('_feature_reorder_indices')
-                    if reorder_indices is not None:
-                        reordered_coef0 = coefs[0][reorder_indices, :]
-                        self.all_weights[0] = reordered_coef0.tolist()
-                        print(f"  Applied feature reorder to input weight matrix")
-                    else:
-                        reordered_coef0 = coefs[0]
-
-                    # For backwards compatibility, set common attributes
-                    if len(coefs) >= 1:
-                        self.input_weights = reordered_coef0.tolist()
-                        self.hidden_biases = intercepts[0].tolist()
-                        self.hidden_size = len(intercepts[0])
-
-                    if len(coefs) >= 2:
-                        self.output_weights = coefs[1].tolist()
-                        self.output_biases = intercepts[1].tolist()
-
-                    # For multi-hidden-layer networks
-                    if len(coefs) >= 3:
-                        # Hidden1 -> Hidden2
-                        self.hidden2_weights = coefs[1].tolist()
-                        self.hidden2_biases = intercepts[1].tolist()
-                        self.hidden2_size = len(intercepts[1])
-                        # Hidden2 -> Output
-                        self.final_weights = coefs[2].tolist()
-                        self.final_biases = intercepts[2].tolist()
-                        print(
-                            f"✅ Extracted {len(coefs)}-layer NN: {[c.shape for c in coefs]}")
-                    else:
-                        print(
-                            f"✅ Extracted {len(coefs)}-layer NN: {coefs[0].shape[0]}→{coefs[0].shape[1]}→{coefs[1].shape[1] if len(coefs) > 1 else '?'}")
+                    self._populate_from_coefs(coefs, intercepts)
                     return
 
             except Exception as e:
@@ -116,6 +85,56 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
         self.hidden_biases = []
         self.output_weights = []
         self.output_biases = []
+
+    def _populate_from_coefs(self, coefs, intercepts):
+        """Populate weight attributes from coefs/intercepts arrays.
+
+        Works identically for sklearn MLPClassifier weights and PyTorch
+        export_mlp_weights() output (both use the same array shapes).
+        """
+        import numpy as np
+
+        self.num_hidden_layers = len(
+            self.hidden_layer_sizes) if self.hidden_layer_sizes else len(coefs) - 1
+
+        # Ensure numpy arrays for indexing
+        coefs = [np.asarray(c) for c in coefs]
+        intercepts = [np.asarray(b) for b in intercepts]
+
+        self.all_weights = [c.tolist() for c in coefs]
+        self.all_biases = [b.tolist() for b in intercepts]
+
+        # Apply feature reorder to input weights if needed
+        reorder_indices = self.model_data.get('_feature_reorder_indices')
+        if reorder_indices is not None:
+            reordered_coef0 = coefs[0][reorder_indices, :]
+            self.all_weights[0] = reordered_coef0.tolist()
+            print(f"  Applied feature reorder to input weight matrix")
+        else:
+            reordered_coef0 = coefs[0]
+
+        # For backwards compatibility, set common attributes
+        if len(coefs) >= 1:
+            self.input_weights = reordered_coef0.tolist()
+            self.hidden_biases = intercepts[0].tolist()
+            self.hidden_size = len(intercepts[0])
+
+        if len(coefs) >= 2:
+            self.output_weights = coefs[1].tolist()
+            self.output_biases = intercepts[1].tolist()
+
+        # For multi-hidden-layer networks
+        if len(coefs) >= 3:
+            self.hidden2_weights = coefs[1].tolist()
+            self.hidden2_biases = intercepts[1].tolist()
+            self.hidden2_size = len(intercepts[1])
+            self.final_weights = coefs[2].tolist()
+            self.final_biases = intercepts[2].tolist()
+            print(f"✅ Extracted {len(coefs)}-layer NN: {[c.shape for c in coefs]}")
+        else:
+            print(f"✅ Extracted {len(coefs)}-layer NN: "
+                  f"{coefs[0].shape[0]}→{coefs[0].shape[1]}→"
+                  f"{coefs[1].shape[1] if len(coefs) > 1 else '?'}")
 
     def _get_model_specific_declarations(self) -> str:
         """Generate Neural Network specific declarations."""

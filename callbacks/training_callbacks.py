@@ -676,6 +676,10 @@ def register_callbacks(app):
             'include_frequency': True
         }
 
+        # Feature-engineering acquisition parameters (window_size, sampling_rate)
+        # Used by code generators to set matching #define WINDOW_SIZE / SAMPLING_RATE
+        fe_config = {}
+
         try:
             from config.config import get_training_data_path
 
@@ -734,6 +738,25 @@ def register_callbacks(app):
             feature_opts['include_frequency'] = has_frequency
 
             print(f"DEBUG: Auto-detected feature_opts: {feature_opts}")
+
+            # Load FE metadata (window_size_ms, sampling_rate, etc.) if available
+            fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
+            if fe_meta_files:
+                try:
+                    with open(fe_meta_files[0], 'r') as f:
+                        fe_config = json.load(f)
+                    print(f"DEBUG: Loaded FE metadata: window={fe_config.get('window_size_ms')}ms, "
+                          f"rate={fe_config.get('sampling_rate')}Hz, "
+                          f"method={fe_config.get('feature_method')}")
+                    # Also override feature_opts from FE metadata if present
+                    if 'orientation_robust' in fe_config:
+                        feature_opts['orientation_robust'] = fe_config['orientation_robust']
+                    if 'include_per_axis' in fe_config:
+                        feature_opts['include_per_axis'] = fe_config['include_per_axis']
+                    if 'include_frequency' in fe_config:
+                        feature_opts['include_frequency'] = fe_config['include_frequency']
+                except Exception as e:
+                    print(f"WARNING: Could not load FE metadata: {e}")
 
             # Second pass: load data and align columns
             for train_file in train_files:
@@ -875,13 +898,47 @@ def register_callbacks(app):
             # Create model
             model = EdgeMLModel(model_type)
 
+            # For CNN: load raw windowed data instead of features
+            if model_type == 'pytorch_cnn':
+                training_dir = os.path.join(base_dir, 'training')
+                # Find raw window .npy files
+                raw_train_files = glob.glob(os.path.join(training_dir, '*_raw_train.npy'))
+                if not raw_train_files:
+                    return (html.Div([
+                        html.H4("❌ No raw window data found for CNN", style={'color': 'red'}),
+                        html.P("Please re-run Feature Engineering to generate raw window data."),
+                    ]), no_update)
+                # Load and concatenate if multiple datasets
+                rw_trains, rw_tests, rw_vals = [], [], []
+                rl_trains, rl_tests, rl_vals = [], [], []
+                for rf in raw_train_files:
+                    prefix = rf.replace('_raw_train.npy', '')
+                    rw_trains.append(np.load(rf))
+                    rl_trains.append(np.load(prefix + '_raw_train_labels.npy', allow_pickle=True))
+                    test_f = prefix + '_raw_test.npy'
+                    if os.path.exists(test_f):
+                        rw_tests.append(np.load(test_f))
+                        rl_tests.append(np.load(prefix + '_raw_test_labels.npy', allow_pickle=True))
+                    val_f = prefix + '_raw_val.npy'
+                    if os.path.exists(val_f):
+                        rw_vals.append(np.load(val_f))
+                        rl_vals.append(np.load(prefix + '_raw_val_labels.npy', allow_pickle=True))
+
+                X_train = np.concatenate(rw_trains, axis=0)
+                y_train = np.concatenate(rl_trains, axis=0)
+                X_test = np.concatenate(rw_tests, axis=0) if rw_tests else X_train[:1]
+                y_test = np.concatenate(rl_tests, axis=0) if rl_tests else y_train[:1]
+                X_val = np.concatenate(rw_vals, axis=0) if rw_vals else None
+                y_val = np.concatenate(rl_vals, axis=0) if rw_vals else None
+                print(f"CNN raw windows: train={X_train.shape}, test={X_test.shape}")
+
             if button_id == 'start-training-btn':
-                return perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val, base_dir, feature_opts)
+                return perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val, base_dir, feature_opts, fe_config)
             elif button_id == 'optimize-hyperparams-btn':
-                return perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val, base_dir, feature_opts)
+                return perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val, base_dir, feature_opts, fe_config)
             elif button_id == 'cross-validate-btn':
                 # CV doesn't use validation set
-                return perform_cross_validation(model, X_train, y_train, model_type, base_dir, feature_opts)
+                return perform_cross_validation(model, X_train, y_train, model_type, base_dir, feature_opts, fe_config)
 
         except Exception as e:
             import traceback
@@ -893,7 +950,7 @@ def register_callbacks(app):
                          'font-size': '10px', 'max-height': '200px', 'overflow': 'auto'})
             ]), no_update)
 
-    def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None, base_dir=None, feature_opts=None):
+    def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None, base_dir=None, feature_opts=None, fe_config=None):
         """Perform basic model training with optional validation set."""
         if not base_dir:
             base_dir = PERSISTENT_DIR
@@ -959,7 +1016,10 @@ def register_callbacks(app):
             'training_time': training_time,
             'timestamp': timestamp,
             # Feature configuration for deployment
-            'feature_config': feature_opts
+            'feature_config': feature_opts,
+            # Feature-engineering acquisition parameters (window_size_ms, sampling_rate)
+            # Used by code generators to match training conditions exactly
+            'fe_config': fe_config if fe_config else {}
         }
 
         # Store model metadata
@@ -971,7 +1031,7 @@ def register_callbacks(app):
         updated_options = load_trained_model_options(base_dir)
         return training_output, updated_options
 
-    def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None, base_dir=None, feature_opts=None):
+    def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None, base_dir=None, feature_opts=None, fe_config=None):
         """Perform hyperparameter optimization with optional validation set."""
         if not base_dir:
             base_dir = PERSISTENT_DIR
@@ -1044,7 +1104,8 @@ def register_callbacks(app):
             'timestamp': timestamp,
             'optimized': True,
             # Feature configuration for deployment
-            'feature_config': feature_opts
+            'feature_config': feature_opts,
+            'fe_config': fe_config if fe_config else {}
         }
 
         save_model_metadata(model_filename, model_info, base_dir)
@@ -1229,7 +1290,7 @@ def register_callbacks(app):
         updated_options = load_trained_model_options(base_dir)
         return optimization_output, updated_options
 
-    def perform_cross_validation(model, X_train, y_train, model_type, base_dir=None, feature_opts=None):
+    def perform_cross_validation(model, X_train, y_train, model_type, base_dir=None, feature_opts=None, fe_config=None):
         """Perform cross-validation analysis and optionally save the trained model."""
         if not base_dir:
             base_dir = PERSISTENT_DIR
@@ -1297,7 +1358,8 @@ def register_callbacks(app):
             'timestamp': timestamp,
             'cv_std_accuracy': training_results.get('cv_std_accuracy', 0),
             # Feature configuration for deployment
-            'feature_config': feature_opts
+            'feature_config': feature_opts,
+            'fe_config': fe_config if fe_config else {}
         }
 
         save_model_metadata(model_filename, model_info, base_dir)
