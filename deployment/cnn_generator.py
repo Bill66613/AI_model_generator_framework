@@ -46,6 +46,7 @@ class CNNCodeGenerator(BaseCodeGenerator):
                     self.layers = cnn_export.get('layers', [])
                     if self.layers:
                         print(f"✅ Extracted CNN layers: {[l['type'] for l in self.layers]}")
+                        self._normalise_layers()
                         return
             except Exception as e:
                 print(f"Warning: could not extract CNN weights from model object: {e}")
@@ -56,9 +57,24 @@ class CNNCodeGenerator(BaseCodeGenerator):
             self.layers = cnn_weights.get('layers', [])
             if self.layers:
                 print(f"✅ Loaded CNN layers from saved weights: {[l['type'] for l in self.layers]}")
+                self._normalise_layers()
                 return
 
         print("⚠️ No CNN weights found — generating placeholder code")
+
+    def _normalise_layers(self):
+        """Ensure every layer dict has all expected keys with defaults."""
+        for layer in self.layers:
+            if layer['type'] == 'conv1d':
+                layer.setdefault('padding', 0)
+                layer.setdefault('out_channels', len(layer.get('weights', [[]])))
+                layer.setdefault('in_channels', len(layer.get('weights', [[[]]])[0]) if layer.get('weights') else 0)
+                layer.setdefault('kernel_size', len(layer.get('weights', [[[]]])[0][0]) if layer.get('weights') else 3)
+            elif layer['type'] == 'maxpool1d':
+                layer.setdefault('kernel_size', 2)
+            elif layer['type'] == 'dense':
+                layer.setdefault('in_features', 0)
+                layer.setdefault('out_features', 0)
 
     # ------------------------------------------------------------------ #
     # Header
@@ -259,10 +275,19 @@ const char* get_activity_name(int class_id) {{
     # ------------------------------------------------------------------ #
 
     def generate_example_sketch(self, header_filename: str = None) -> str:
-        """Generate an example sketch that reads sensor data and classifies."""
+        """Generate a platform-appropriate example sketch that reads sensor data and classifies."""
         import os
         header_include = os.path.basename(header_filename) if header_filename else "har_cnn_model.h"
 
+        if self.platform in ('generic_c', 'generic_cpp'):
+            return self._generate_cnn_generic_example(header_include)
+        elif self.platform == 'esp_idf':
+            return self._generate_cnn_esp_idf_example(header_include)
+        else:
+            return self._generate_cnn_arduino_example(header_include)
+
+    def _generate_cnn_arduino_example(self, header_include: str) -> str:
+        """Arduino-style setup()/loop() sketch for CNN."""
         sketch = f"""/*
  * HAR 1D-CNN Example Sketch
  * Reads IMU data into a sliding window and runs CNN inference.
@@ -326,6 +351,64 @@ void loop() {{
 }}
 """
         return sketch
+
+    def _generate_cnn_generic_example(self, header_include: str) -> str:
+        """Portable C/C++ main() example for CNN."""
+        is_cpp = self.platform == 'generic_cpp'
+        ext = 'cpp' if is_cpp else 'c'
+        io_include = '<cstdio>' if is_cpp else '<stdio.h>'
+
+        return f"""/*
+ * HAR 1D-CNN \u2014 Portable {('C++' if is_cpp else 'C')} Example
+ * Compile: {'g++' if is_cpp else 'gcc'} -O2 -o har_cnn_example example.{ext} har_cnn_model.{ext} -lm
+ */
+
+#include "{header_include}"
+#include {io_include}
+
+static int read_sensor_window(float window[][N_CHANNELS]) {{
+    /* REPLACE with real sensor/file reading code */
+    for (int i = 0; i < WINDOW_SIZE; i++)
+        for (int c = 0; c < N_CHANNELS; c++)
+            window[i][c] = 0.0f;
+    return 0;
+}}
+
+int main(void) {{
+    har_init();
+    printf("HAR 1D-CNN model ready\\n");
+
+    float window[WINDOW_SIZE][N_CHANNELS];
+    if (read_sensor_window(window) == 0) {{
+        int cls = har_predict_from_window(window);
+        printf("Prediction: %s\\n", get_activity_name(cls));
+    }}
+    return 0;
+}}
+"""
+
+    def _generate_cnn_esp_idf_example(self, header_include: str) -> str:
+        """ESP-IDF app_main() example for CNN."""
+        return f"""/*
+ * HAR 1D-CNN \u2014 ESP-IDF Example
+ */
+
+#include "{header_include}"
+#include "esp_log.h"
+
+static const char *TAG = "HAR_CNN";
+
+void app_main(void) {{
+    har_init();
+    ESP_LOGI(TAG, "HAR 1D-CNN model ready");
+
+    float window[WINDOW_SIZE][N_CHANNELS];
+    /* TODO: fill window from IMU */
+
+    int cls = har_predict_from_window(window);
+    ESP_LOGI(TAG, "Prediction: %s", get_activity_name(cls));
+}}
+"""
 
     # ------------------------------------------------------------------ #
     # ---- internal helpers ---

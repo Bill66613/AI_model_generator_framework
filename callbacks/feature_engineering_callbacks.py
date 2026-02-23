@@ -381,14 +381,11 @@ def register_callbacks(app):
                         include_per_axis=True
                     )
                 elif feature_method == 'frequency_domain':
-                    # Per-axis frequency features only
+                    # Per-axis frequency features ONLY (no time-domain)
                     # 48 features
                     # WARNING: NOT supported in C++ deployment
-                    feature_df = create_feature_vector(
-                        df_window, sensor_cols, sampling_rate,
-                        include_frequency=True,
-                        orientation_robust=False,
-                        include_per_axis=True
+                    feature_df = extract_frequency_domain_features(
+                        df_window, sensor_cols, sampling_rate
                     )
                 elif feature_method == 'raw':
                     # Raw sensor values (mean of window) - 6 features

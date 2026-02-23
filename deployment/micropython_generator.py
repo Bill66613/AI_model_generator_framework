@@ -24,6 +24,13 @@ class MicroPythonCodeGenerator(BaseCodeGenerator):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'micropython',
                  optimization: str = 'balanced', overlap: float = 0.5):
+        # CNN models don't use traditional features — provide placeholders
+        model_type_name = model_data.get('model_type', 'unknown')
+        if model_type_name == 'pytorch_cnn' and not model_data.get('feature_names'):
+            model_data = dict(model_data)
+            n_ch = model_data.get('n_channels', 6)
+            model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
+
         super().__init__(model_data, platform, optimization, overlap)
 
         self.model_type_name = model_data.get('model_type', 'unknown')
@@ -48,7 +55,7 @@ class MicroPythonCodeGenerator(BaseCodeGenerator):
 
     def _extract_nn_params(self):
         """Extract NN weights from model_object or pre-extracted weights dict."""
-        if self.model_type_name != 'neural_network':
+        if self.model_type_name not in ('neural_network', 'pytorch_mlp'):
             return
 
         model_obj = self.model_data.get('model_object')
@@ -224,10 +231,12 @@ Optimization : {self.optimization}
     def _py_model_data(self) -> str:
         if self.model_type_name == 'random_forest':
             return self._py_rf_data()
-        elif self.model_type_name == 'neural_network':
+        elif self.model_type_name in ('neural_network', 'pytorch_mlp'):
             return self._py_nn_data()
         elif self.model_type_name == 'svm':
             return self._py_svm_data()
+        elif self.model_type_name == 'pytorch_cnn':
+            return "# CNN models are not yet supported on MicroPython\n"
         return "# No model-specific data\n"
 
     def _py_rf_data(self) -> str:
@@ -355,7 +364,7 @@ def har_predict(features):
     def _py_predict_internal(self) -> str:
         if self.model_type_name == 'random_forest':
             return self._py_rf_predict()
-        elif self.model_type_name == 'neural_network':
+        elif self.model_type_name in ('neural_network', 'pytorch_mlp'):
             return self._py_nn_predict()
         elif self.model_type_name == 'svm':
             return self._py_svm_predict()

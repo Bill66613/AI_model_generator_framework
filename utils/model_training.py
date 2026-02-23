@@ -118,10 +118,12 @@ class EdgeMLModel:
             self.feature_names = X.columns.tolist()
             X_array = X.values
         else:
-            X_array = X
+            X_array = np.asarray(X) if not isinstance(X, np.ndarray) else X
 
-        # Initialize and fit scaler if not exists
-        if self.scaler is None:
+        # CNN uses raw 3D windows — skip scaling entirely
+        if self.model_type == 'pytorch_cnn':
+            X_scaled = X_array
+        elif self.scaler is None:
             if scaler_type == 'standard':
                 self.scaler = StandardScaler()
             elif scaler_type == 'minmax':
@@ -284,10 +286,10 @@ class EdgeMLModel:
             logger.info(
                 f"Cross-validation accuracy: {cv_scores.mean():.4f} (±{cv_scores.std():.4f})")
 
-        # Training accuracy
+        # Training accuracy — predict() returns decoded strings, compare
+        # against original string labels for consistency
         train_predictions = self.predict(X_train)
-        y_encoded_for_acc = self.label_encoder.transform(y_train)
-        train_accuracy = accuracy_score(y_encoded_for_acc, train_predictions)
+        train_accuracy = accuracy_score(y_train, train_predictions)
         self.performance_metrics['train_accuracy'] = train_accuracy
 
         logger.info(
@@ -296,28 +298,44 @@ class EdgeMLModel:
         return self.performance_metrics
 
     def predict(self, X) -> np.ndarray:
-        """Predict class labels (encoded). Works for both sklearn and PyTorch."""
+        """Predict class labels. Returns decoded string labels.
+
+        Works for sklearn, PyTorch MLP, and PyTorch CNN models.
+        """
         if isinstance(X, pd.DataFrame):
             X_array = X.values
         else:
-            X_array = np.asarray(X)
-        # Scale
-        if self.scaler is not None:
+            X_array = np.asarray(X) if not isinstance(X, np.ndarray) else X
+
+        # Scale (skip for CNN which uses raw 3D data)
+        if self.scaler is not None and self.model_type != 'pytorch_cnn':
             X_scaled = self.scaler.transform(X_array)
         else:
             X_scaled = X_array
 
+        # Get encoded predictions
         if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
-            return self._pytorch_trainer.predict(X_scaled)
-        return self.model.predict(X_scaled)
+            encoded_preds = self._pytorch_trainer.predict(X_scaled)
+        else:
+            encoded_preds = self.model.predict(X_scaled)
+
+        # Decode to original string labels
+        if self.label_encoder is not None:
+            return self.label_encoder.inverse_transform(encoded_preds)
+        return encoded_preds
 
     def predict_proba(self, X) -> Optional[np.ndarray]:
-        """Return class probabilities. Works for both sklearn and PyTorch."""
+        """Return class probabilities.
+
+        Works for sklearn, PyTorch MLP, and PyTorch CNN models.
+        """
         if isinstance(X, pd.DataFrame):
             X_array = X.values
         else:
-            X_array = np.asarray(X)
-        if self.scaler is not None:
+            X_array = np.asarray(X) if not isinstance(X, np.ndarray) else X
+
+        # Scale (skip for CNN which uses raw 3D data)
+        if self.scaler is not None and self.model_type != 'pytorch_cnn':
             X_scaled = self.scaler.transform(X_array)
         else:
             X_scaled = X_array
@@ -328,15 +346,15 @@ class EdgeMLModel:
             return self.model.predict_proba(X_scaled)
         return None
 
-    def evaluate(self, X_test: pd.DataFrame, y_test: pd.Series) -> Dict[str, Any]:
+    def evaluate(self, X_test, y_test) -> Dict[str, Any]:
         """Evaluate the trained model on test data."""
         if self.model is None:
             raise ValueError("Model must be trained before evaluation")
 
-        # Preprocess test data
+        # Preprocess test data (handles CNN 3D data via preprocess_data)
         X_scaled, y_encoded = self.preprocess_data(X_test, y_test)
 
-        # Make predictions (use unified predict path)
+        # Make predictions — get encoded integer labels
         if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
             y_pred = self._pytorch_trainer.predict(X_scaled)
             y_pred_proba = self._pytorch_trainer.predict_proba(X_scaled)
@@ -427,6 +445,13 @@ class EdgeMLModel:
         """
         if param_grid is None:
             param_grid = self._get_default_param_grid()
+
+        # PyTorch models don't support sklearn-style hyperparameter search
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+            logger.warning("Hyperparameter optimization is not supported for "
+                           f"{self.model_type}. Adjust parameters manually.")
+            return {'best_params': {}, 'best_score': 0.0,
+                    'method': 'not_supported'}
 
         # Preprocess data
         X_scaled, y_encoded = self.preprocess_data(X_train, y_train)
@@ -610,30 +635,7 @@ class EdgeMLModel:
         logger.info(f"Model loaded from {filepath}")
         return instance
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Make predictions on new data."""
-        if self.model is None:
-            raise ValueError("Model must be trained before making predictions")
-
-        X_scaled, _ = self.preprocess_data(X)
-        predictions = self.model.predict(X_scaled)
-
-        # Convert back to original labels if label encoder exists
-        if self.label_encoder:
-            predictions = self.label_encoder.inverse_transform(predictions)
-
-        return predictions
-
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
-        """Get prediction probabilities if available."""
-        if self.model is None:
-            raise ValueError("Model must be trained before making predictions")
-
-        if not hasattr(self.model, 'predict_proba'):
-            return None
-
-        X_scaled, _ = self.preprocess_data(X)
-        return self.model.predict_proba(X_scaled)
+    # predict() and predict_proba() defined above (unified for all model types)
 
 
 def extract_orientation_invariant_features(df: pd.DataFrame, sensor_cols: List[str] = None) -> pd.DataFrame:

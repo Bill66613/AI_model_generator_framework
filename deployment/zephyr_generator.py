@@ -27,18 +27,42 @@ class ZephyrCodeGenerator(BaseCodeGenerator):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'zephyr',
                  optimization: str = 'balanced', overlap: float = 0.5):
+        # CNN models don't use traditional features — provide placeholders
+        model_type_name = model_data.get('model_type', '')
+        if model_type_name == 'pytorch_cnn' and not model_data.get('feature_names'):
+            model_data = dict(model_data)
+            n_ch = model_data.get('n_channels', 6)
+            model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
+
         super().__init__(model_data, platform, optimization, overlap)
         self.model_type_name = model_data.get('model_type', '')
 
         # Create inner model-specific generator
         if self.model_type_name == 'random_forest':
             self._inner = RandomForestCodeGenerator(model_data, platform, optimization, overlap)
-        elif self.model_type_name == 'neural_network':
+        elif self.model_type_name in ('neural_network', 'pytorch_mlp'):
             self._inner = NeuralNetworkCodeGenerator(model_data, platform, optimization, overlap)
         elif self.model_type_name == 'svm':
             self._inner = SVMCodeGenerator(model_data, platform, optimization, overlap)
+        elif self.model_type_name == 'pytorch_cnn':
+            from .cnn_generator import CNNCodeGenerator
+            self._inner = CNNCodeGenerator(model_data, platform, optimization, overlap)
         else:
             self._inner = None
+
+    # ------------------------------------------------------------------ #
+    #  For CNN models, bypass the composition pattern and delegate fully  #
+    # ------------------------------------------------------------------ #
+
+    def generate_header(self) -> str:
+        if self.model_type_name == 'pytorch_cnn' and self._inner is not None:
+            return self._inner.generate_header()
+        return super().generate_header()
+
+    def generate_implementation(self, header_filename: str = None) -> str:
+        if self.model_type_name == 'pytorch_cnn' and self._inner is not None:
+            return self._inner.generate_implementation(header_filename)
+        return super().generate_implementation(header_filename)
 
     # ------------------------------------------------------------------ #
     #  Delegated abstract methods                                         #
@@ -99,7 +123,11 @@ void har_print_system_info(void) {
 
         Uses the Zephyr sensor subsystem (``zephyr/drivers/sensor.h``) for
         IMU access and ``k_sleep`` for timing.
+        For CNN models, delegates to the CNN generator.
         """
+        if self.model_type_name == 'pytorch_cnn' and self._inner is not None:
+            return self._inner.generate_example_sketch(header_filename)
+
         import os
         header_include = os.path.basename(header_filename) if header_filename else "har_model.h"
 

@@ -12,6 +12,7 @@ from .base_generator import BaseCodeGenerator
 from .random_forest_generator import RandomForestCodeGenerator
 from .neural_network_generator import NeuralNetworkCodeGenerator
 from .svm_generator import SVMCodeGenerator
+from .cnn_generator import CNNCodeGenerator
 
 
 class ARMCortexMCodeGenerator(BaseCodeGenerator):
@@ -21,6 +22,13 @@ class ARMCortexMCodeGenerator(BaseCodeGenerator):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'arm_cortex_m',
                  optimization: str = 'balanced', overlap: float = 0.5):
+        # CNN models don't use traditional features — provide placeholders
+        model_type = model_data.get('model_type', '')
+        if model_type == 'pytorch_cnn' and not model_data.get('feature_names'):
+            model_data = dict(model_data)
+            n_ch = model_data.get('n_channels', 6)
+            model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
+
         super().__init__(model_data, platform, optimization, overlap)
         self.optimization_level = optimization
 
@@ -28,15 +36,39 @@ class ARMCortexMCodeGenerator(BaseCodeGenerator):
         model_type = model_data.get('model_type', '')
         if model_type == 'random_forest':
             self._inner = RandomForestCodeGenerator(model_data, platform, optimization, overlap)
-        elif model_type == 'neural_network':
+        elif model_type in ('neural_network', 'pytorch_mlp'):
             self._inner = NeuralNetworkCodeGenerator(model_data, platform, optimization, overlap)
         elif model_type == 'svm':
             self._inner = SVMCodeGenerator(model_data, platform, optimization, overlap)
+        elif model_type == 'pytorch_cnn':
+            self._inner = CNNCodeGenerator(model_data, platform, optimization, overlap)
         else:
             # Fallback: no inner generator – will use parent's abstract stubs
             self._inner = None
             print(f"⚠ ARM Cortex-M generator: unknown model type '{model_type}', "
                   f"model-specific prediction will not be generated.")
+
+    # ------------------------------------------------------------------ #
+    #  For CNN models, bypass the composition pattern and delegate fully  #
+    # ------------------------------------------------------------------ #
+
+    def generate_header(self) -> str:
+        """For CNN, use the inner CNN generator's header directly."""
+        if isinstance(self._inner, CNNCodeGenerator):
+            return self._inner.generate_header()
+        return super().generate_header()
+
+    def generate_implementation(self, header_filename: str = None) -> str:
+        """For CNN, use the inner CNN generator's implementation directly."""
+        if isinstance(self._inner, CNNCodeGenerator):
+            return self._inner.generate_implementation(header_filename)
+        return super().generate_implementation(header_filename)
+
+    def generate_example_sketch(self, header_filename: str = None) -> str:
+        """For CNN, use the inner CNN generator's sketch directly."""
+        if isinstance(self._inner, CNNCodeGenerator):
+            return self._inner.generate_example_sketch(header_filename)
+        return super().generate_example_sketch(header_filename)
 
     # ------------------------------------------------------------------ #
     #  Model-specific sections – delegated to inner generator              #

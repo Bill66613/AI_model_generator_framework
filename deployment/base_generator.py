@@ -405,6 +405,7 @@ static inline float pgm_read_float_near_safe(const float* addr) {
         orientation_robust = False
         include_per_axis = False
         include_frequency = False
+        feature_method = None  # initialise before try blocks to avoid NameError
         
         # Source 1: Explicit feature_config in model_info
         try:
