@@ -8,6 +8,8 @@ from .random_forest_generator import RandomForestCodeGenerator
 from .neural_network_generator import NeuralNetworkCodeGenerator
 from .svm_generator import SVMCodeGenerator
 from .arm_cortex_generator import ARMCortexMCodeGenerator
+from .micropython_generator import MicroPythonCodeGenerator
+from .zephyr_generator import ZephyrCodeGenerator
 from .code_generator_factory import (
     CodeGeneratorFactory, 
     generate_deployment_code, 
@@ -23,6 +25,8 @@ __all__ = [
     'NeuralNetworkCodeGenerator',
     'SVMCodeGenerator',
     'ARMCortexMCodeGenerator',
+    'MicroPythonCodeGenerator',
+    'ZephyrCodeGenerator',
     'CodeGeneratorFactory',
     'generate_deployment_code',
     'analyze_resource_requirements',

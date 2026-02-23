@@ -117,20 +117,16 @@ int har_predict_internal(float features[NUM_FEATURES]) {
 // ---- ARM Cortex-M Platform Utilities ----
 
 void print_system_info() {
-    Serial.println("ARM Cortex-M HAR System");
-    Serial.print("Optimization: ");
-    Serial.println("ARM_CORTEX_M");
+    HAR_LOG("ARM Cortex-M HAR System");
 
 #ifdef USE_ARM_DSP
-    Serial.println("ARM DSP: Enabled");
+    HAR_LOG("ARM DSP: Enabled");
 #else
-    Serial.println("ARM DSP: Disabled");
+    HAR_LOG("ARM DSP: Disabled");
 #endif
 
-    Serial.print("Features: ");
-    Serial.println(NUM_FEATURES);
-    Serial.print("Classes: ");
-    Serial.println(NUM_CLASSES);
+    HAR_LOG_FLOAT("Features", (float)NUM_FEATURES);
+    HAR_LOG_FLOAT("Classes", (float)NUM_CLASSES);
 }
 
 // Performance monitoring
@@ -143,29 +139,7 @@ void start_prediction_timer() {
 
 void end_prediction_timer() {
     prediction_end_time = micros();
-    Serial.print("Prediction time (us): ");
-    Serial.println(prediction_end_time - prediction_start_time);
+    HAR_LOG_FLOAT("Prediction time (us)", (float)(prediction_end_time - prediction_start_time));
 }
 """
         return utils
-
-    def generate_header_file(self) -> str:
-        """Generate ARM Cortex-M specific header file."""
-        header = super().generate_header_file()
-
-        # Add ARM-specific includes and definitions
-        arm_specific = """
-#ifdef __ARM_ARCH
-    #include "arm_math.h"
-    #define ARM_CORTEX_M_OPTIMIZED 1
-#endif
-
-// Performance monitoring functions
-void start_prediction_timer();
-void end_prediction_timer();
-"""
-
-        # Insert ARM-specific content before the closing endif
-        header = header.replace('#endif', arm_specific + '\n#endif')
-
-        return header

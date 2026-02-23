@@ -12,6 +12,8 @@ from .random_forest_generator import RandomForestCodeGenerator
 from .neural_network_generator import NeuralNetworkCodeGenerator
 from .svm_generator import SVMCodeGenerator
 from .arm_cortex_generator import ARMCortexMCodeGenerator
+from .micropython_generator import MicroPythonCodeGenerator
+from .zephyr_generator import ZephyrCodeGenerator
 
 
 def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
@@ -341,14 +343,24 @@ def create_organized_filename(model_type: str, platform: str, file_type: str,
     # Add optimization level
     base_name += f"_{optimization}"
 
-    # Add file extension based on type
+    # Add file extension based on type and platform
     if file_type == 'header':
         return f"{base_name}.h"
     elif file_type == 'source':
+        if platform == 'micropython':
+            return f"{base_name}.py"
+        elif platform in ('generic_c', 'esp_idf', 'zephyr'):
+            return f"{base_name}.c"
         return f"{base_name}.cpp"
     elif file_type == 'cortex_source':
         return f"{base_name}.c"
     elif file_type == 'sketch':
+        if platform in ('generic_c', 'esp_idf', 'zephyr'):
+            return f"{base_name}_example.c"
+        elif platform == 'generic_cpp':
+            return f"{base_name}_example.cpp"
+        elif platform == 'micropython':
+            return f"{base_name}_example.py"
         # Arduino .ino file must match folder name - no _example suffix
         return f"{base_name}.ino"
     else:
@@ -382,6 +394,10 @@ def create_output_folder_structure(base_output_dir: str, model_type: str,
         folder_name = f"har_{model_type}_{platform}_f{num_features}_c{num_classes}_{optimization}"
         folder_path = os.path.join(
             base_output_dir, f"{model_type}_models", folder_name)
+    elif platform in ('generic_c', 'generic_cpp', 'esp_idf', 'micropython', 'zephyr'):
+        # For generic / non-Arduino platforms, use platform-named folder
+        folder_path = os.path.join(
+            base_output_dir, f"{model_type}_models", platform)
     else:
         # For non-Arduino platforms, use generic platform folder
         folder_path = os.path.join(
@@ -402,6 +418,8 @@ class CodeGeneratorFactory:
         'neural_network': NeuralNetworkCodeGenerator,
         'svm': SVMCodeGenerator,
         'arm_cortex_m': ARMCortexMCodeGenerator,
+        'micropython': MicroPythonCodeGenerator,
+        'zephyr': ZephyrCodeGenerator,
     }
 
     @classmethod
@@ -434,10 +452,19 @@ class CodeGeneratorFactory:
             if platform == 'arm_cortex_m':
                 return cls._generators['arm_cortex_m'](model_data, platform, optimization, overlap)
 
+            # For MicroPython platform, use MicroPython generator
+            if platform == 'micropython':
+                return cls._generators['micropython'](model_data, platform, optimization, overlap)
+
+            # For Zephyr RTOS platform, use Zephyr generator
+            if platform == 'zephyr':
+                return cls._generators['zephyr'](model_data, platform, optimization, overlap)
+
             # For other platforms, use model-specific generators
             if model_type not in cls._generators:
                 available_types = [
-                    t for t in cls._generators.keys() if t != 'arm_cortex_m']
+                    t for t in cls._generators.keys()
+                    if t not in ('arm_cortex_m', 'micropython', 'zephyr')]
                 raise ValueError(f"Unsupported model type: '{model_type}'. "
                                  f"Supported types: {available_types}")
 
@@ -455,12 +482,15 @@ class CodeGeneratorFactory:
     @classmethod
     def get_supported_models(cls) -> list:
         """Get list of supported model types."""
-        return [model for model in cls._generators.keys() if model != 'arm_cortex_m']
+        # Exclude platform-specific generators that aren't model types
+        platform_generators = {'arm_cortex_m', 'micropython', 'zephyr'}
+        return [model for model in cls._generators.keys() if model not in platform_generators]
 
     @classmethod
     def get_supported_platforms(cls) -> list:
         """Get list of supported platforms."""
-        return ['arduino', 'arm_cortex_m', 'esp32', 'teensy', 'seeed_xiao']
+        return ['arduino', 'arm_cortex_m', 'esp32', 'teensy', 'seeed_xiao',
+                'generic_c', 'generic_cpp', 'esp_idf', 'micropython', 'zephyr']
 
     @classmethod
     def register_generator(cls, model_type: str, generator_class: Type[BaseCodeGenerator]):
@@ -515,8 +545,18 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
                 cortex_filename: generator.generate_implementation(
                     cortex_filename)
             }
+        elif platform == 'micropython':
+            # MicroPython: module (.py) + example (.py)
+            source_filename = create_organized_filename(
+                model_type, platform, 'source', model_data, optimization)
+            sketch_filename = create_organized_filename(
+                model_type, platform, 'sketch', model_data, optimization)
+            return {
+                source_filename: generator.generate_implementation(source_filename),
+                sketch_filename: generator.generate_example_sketch(source_filename),
+            }
         else:
-            # Arduino-based platforms
+            # All other platforms: header + source + example (extensions vary by platform)
             header_filename = create_organized_filename(
                 model_type, platform, 'header', model_data, optimization)
             source_filename = create_organized_filename(

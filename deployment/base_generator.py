@@ -67,7 +67,7 @@ class BaseCodeGenerator(ABC):
 #ifndef HAR_MODEL_H
 #define HAR_MODEL_H
 
-#include <Arduino.h>
+{self._get_platform_includes()}
 
 // Model configuration
 #define NUM_FEATURES {len(self.feature_names)}
@@ -82,16 +82,13 @@ class BaseCodeGenerator(ABC):
 #define DEBUG_ENABLED {1 if self.debug_enabled else 0}
 #define BUFFER_OPTIMIZATION {1 if self.buffer_optimization else 0}
 
+{self._get_logging_macros()}
+
 // Activity classes
-enum ActivityClass {{
-    {', '.join([f'{cls.upper()} = {i}' for i, cls in enumerate(self.classes)])}
-}};
+{self._get_enum_or_define_classes()}
 
 // Function declarations
-void har_init();
-int har_predict(float features[NUM_FEATURES]);
-void extract_features(float sensor_data[][6], int samples, float features[]);
-const char* get_activity_name(int class_id);
+{self._get_function_declarations()}
 
 #endif // HAR_MODEL_H
 """
@@ -118,7 +115,7 @@ const char* get_activity_name(int class_id);
  */
 
 #include "{header_include}"
-#include <math.h>
+{self._get_impl_includes()}
 
 // Forward declaration of internal prediction function
 int har_predict_internal(float features[NUM_FEATURES]);
@@ -190,6 +187,151 @@ const char* get_activity_name(int class_id) {{
 {self._generate_utility_functions()}
 """
         return implementation.strip()
+
+    # ------------------------------------------------------------------
+    # Platform-aware helpers for header / implementation generation
+    # ------------------------------------------------------------------
+
+    def _is_generic_platform(self) -> bool:
+        """Return True if platform is a generic (non-Arduino) target."""
+        return self.platform in ('generic_c', 'generic_cpp', 'esp_idf', 'zephyr')
+
+    def _get_impl_includes(self) -> str:
+        """Additional includes for the .c/.cpp implementation file."""
+        if self.platform in ('generic_c',):
+            return '#include <math.h>\n#include <stdlib.h>\n#include <stdio.h>'
+        elif self.platform in ('generic_cpp',):
+            return '#include <cmath>\n#include <cstdlib>\n#include <cstdio>'
+        elif self.platform == 'esp_idf':
+            return '#include <math.h>\n#include "esp_log.h"'
+        else:
+            return '#include <math.h>'
+
+    def _get_platform_includes(self) -> str:
+        """Return the appropriate #include directives for the target platform."""
+        if self.platform in ('generic_c',):
+            return (
+                '#include <stdint.h>\n'
+                '#include <stddef.h>\n'
+                '#include <math.h>\n'
+                '#include <string.h>\n'
+                '#include <float.h>'
+            )
+        elif self.platform in ('generic_cpp',):
+            return (
+                '#include <cstdint>\n'
+                '#include <cstddef>\n'
+                '#include <cmath>\n'
+                '#include <cstring>\n'
+                '#include <cfloat>'
+            )
+        elif self.platform == 'esp_idf':
+            return (
+                '#include <stdint.h>\n'
+                '#include <math.h>\n'
+                '#include <string.h>\n'
+                '#include "esp_log.h"\n'
+                '#include "freertos/FreeRTOS.h"\n'
+                '#include "freertos/task.h"'
+            )
+        elif self.platform == 'zephyr':
+            return (
+                '#include <stdint.h>\n'
+                '#include <math.h>\n'
+                '#include <string.h>\n'
+                '#include <zephyr/kernel.h>\n'
+                '#include <zephyr/logging/log.h>'
+            )
+        elif self.platform == 'arm_cortex_m':
+            return (
+                '#include <stdint.h>\n'
+                '#include <math.h>\n'
+                '#include <string.h>\n'
+                '#ifdef __ARM_ARCH\n'
+                '    #include "arm_math.h"\n'
+                '#endif'
+            )
+        else:
+            # Arduino / ESP32 / seeed_xiao / teensy
+            return '#include <Arduino.h>'
+
+    def _get_enum_or_define_classes(self) -> str:
+        """Generate activity class constants — enum in C++, #defines in pure C."""
+        # Sanitize class names for use as C identifiers
+        safe_names = []
+        for cls in self.classes:
+            safe = cls.upper().replace(' ', '_').replace('-', '_')
+            # Strip non-alnum/underscore chars
+            safe = ''.join(c for c in safe if c.isalnum() or c == '_')
+            if safe and safe[0].isdigit():
+                safe = '_' + safe
+            safe_names.append(safe)
+
+        if self.platform == 'generic_c':
+            # Pure C: use #define constants (no enum class)
+            lines = [f'#define ACTIVITY_{name} {i}'
+                     for i, name in enumerate(safe_names)]
+            return '\n'.join(lines)
+        else:
+            entries = ', '.join([f'{name} = {i}' for i, name in enumerate(safe_names)])
+            return f'enum ActivityClass {{\n    {entries}\n}};'
+
+    def _get_function_declarations(self) -> str:
+        """Generate function declarations appropriate for the platform language."""
+        if self.platform == 'generic_c':
+            return (
+                '#ifdef __cplusplus\n'
+                'extern "C" {\n'
+                '#endif\n\n'
+                'void har_init(void);\n'
+                'int har_predict(float features[NUM_FEATURES]);\n'
+                'void extract_features(float sensor_data[][6], int samples, float features[]);\n'
+                'const char* get_activity_name(int class_id);\n\n'
+                '#ifdef __cplusplus\n'
+                '}\n'
+                '#endif'
+            )
+        else:
+            return (
+                'void har_init();\n'
+                'int har_predict(float features[NUM_FEATURES]);\n'
+                'void extract_features(float sensor_data[][6], int samples, float features[]);\n'
+                'const char* get_activity_name(int class_id);'
+            )
+
+    def _get_logging_macros(self) -> str:
+        """Generate platform-portable logging macros.
+        
+        Provides HAR_LOG(fmt, ...) so utility/debug functions compile on all
+        platforms without changing the body of the code.
+        """
+        if self.platform in ('generic_c', 'generic_cpp'):
+            return (
+                '// Platform-portable logging\n'
+                '#include <stdio.h>\n'
+                '#define HAR_LOG(fmt, ...) printf(fmt "\\n", ##__VA_ARGS__)\n'
+                '#define HAR_LOG_FLOAT(label, val) printf("%s: %f\\n", (label), (double)(val))'
+            )
+        elif self.platform == 'esp_idf':
+            return (
+                '// Platform-portable logging\n'
+                '#define HAR_LOG(fmt, ...) ESP_LOGI("HAR", fmt, ##__VA_ARGS__)\n'
+                '#define HAR_LOG_FLOAT(label, val) ESP_LOGI("HAR", "%s: %f", (label), (double)(val))'
+            )
+        elif self.platform == 'zephyr':
+            return (
+                '// Platform-portable logging\n'
+                'LOG_MODULE_REGISTER(har, LOG_LEVEL_INF);\n'
+                '#define HAR_LOG(fmt, ...) LOG_INF(fmt, ##__VA_ARGS__)\n'
+                '#define HAR_LOG_FLOAT(label, val) LOG_INF("%s: " #val, (label))'
+            )
+        else:
+            # Arduino and Arduino-like (ESP32, Seeed XIAO, Teensy, ARM Cortex-M)
+            return (
+                '// Platform-portable logging (Arduino)\n'
+                '#define HAR_LOG(fmt, ...) do { Serial.println(fmt); } while(0)\n'
+                '#define HAR_LOG_FLOAT(label, val) do { Serial.print(label); Serial.print(": "); Serial.println(val, 4); } while(0)'
+            )
 
     def _generate_feature_scaling_arrays(self) -> str:
         """Generate feature scaling arrays with real parameters.
@@ -300,7 +442,25 @@ static inline float pgm_read_float_near_safe(const float* addr) {
 
         # Use orientation-robust features if configured
         if orientation_robust or feature_method == 'orientation_invariant':
-            return """// Forward declaration for helper function
+            return self._generate_orientation_robust_extraction()
+
+        # Per-axis feature extraction — ALWAYS extracts the same 15 features/axis
+        # that match training, regardless of optimization level.
+        # Optimization only affects computation method (precision, sorting algorithm)
+        # but NEVER changes which features are produced.
+        return self._generate_per_axis_extraction()
+
+    # ------------------------------------------------------------------
+    # Orientation-robust feature extraction (magnitude-based, 33 features)
+    # ------------------------------------------------------------------
+
+    def _generate_orientation_robust_extraction(self) -> str:
+        """Generate orientation-robust (magnitude-based) feature extraction.
+        
+        Always produces the same 33 features regardless of optimization level.
+        Optimization only affects computational shortcuts (e.g., sorting algorithm).
+        """
+        return """// Forward declaration for helper function
 int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx);
 
 void extract_features(float sensor_data[][6], int samples, float features[]) {
@@ -481,322 +641,148 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
 }
 """
 
-        if self.optimization == 'speed':
-            # Simplified feature extraction for speed
-            return """void extract_features(float sensor_data[][6], int samples, float features[]) {
-    // Simplified feature extraction for SPEED optimization with bounds checking
-    // Extracts only essential statistical features
+    # ------------------------------------------------------------------
+    # Per-axis feature extraction (15 features × 6 axes = 90 features)
+    # ------------------------------------------------------------------
 
-    // Input validation and bounds checking
-    if (samples <= 0 || samples > WINDOW_SIZE) {
-        // Handle error - fill with zeros
-        for (int i = 0; i < NUM_FEATURES; i++) {
-            features[i] = 0.0f;
-        }
+    def _generate_per_axis_extraction(self) -> str:
+        """Generate per-axis feature extraction that ALWAYS matches training.
+        
+        CRITICAL: All optimization levels produce the SAME 15 features per axis
+        in the SAME order. The optimization level only affects:
+          - Sorting algorithm (insertion sort vs bubble sort)
+          - Floating-point precision (float vs double accumulation)
+          - Input validation strictness
+        It NEVER changes which features are extracted.
+        """
+        # Use double-precision accumulation for accuracy mode
+        use_double = self.optimization == 'accuracy'
+        acc_type = 'double' if use_double else 'float'
+
+        return f"""void extract_features(float sensor_data[][6], int samples, float features[]) {{
+    // Per-axis feature extraction — 15 features per axis × 6 axes = 90 features
+    // MUST match training feature extraction exactly regardless of optimization level.
+    // Optimization: {self.optimization.upper()} ({'double-precision' if use_double else 'single-precision'} accumulation)
+
+    // Input validation
+    if (samples <= 1 || samples > WINDOW_SIZE) {{
+        for (int i = 0; i < NUM_FEATURES; i++) features[i] = 0.0f;
         return;
-    }
-
-    if (sensor_data == NULL || features == NULL) {
-        return; // Safety check for null pointers
-    }
+    }}
 
     int feature_idx = 0;
 
     // For each sensor axis (aX, aY, aZ, gX, gY, gZ)
-    for (int axis = 0; axis < 6; axis++) {
-        float sum = 0, sum_sq = 0;
-        float min_val = sensor_data[0][axis];
-        float max_val = sensor_data[0][axis];
-
-        // Fast statistical calculation with overflow protection
-        for (int i = 0; i < samples; i++) {
-            float val = sensor_data[i][axis];
-
-            // Sanity check for sensor values
-            if (val < -1000.0f || val > 1000.0f) {
-                val = 0.0f; // Clamp extreme values
-            }
-
-            sum += val;
-            sum_sq += val * val;
-            if (val < min_val) min_val = val;
-            if (val > max_val) max_val = val;
-        }
-
-        float mean = sum / samples;
-        float variance = (sum_sq / samples) - (mean * mean);
-        float std_dev = sqrt(variance > 0 ? variance : 0.001f);
-
-        // Store only essential features (4 per axis = 24 total) with bounds checking
-        if (feature_idx < NUM_FEATURES) features[feature_idx++] = mean;
-        if (feature_idx < NUM_FEATURES) features[feature_idx++] = std_dev;
-        if (feature_idx < NUM_FEATURES) features[feature_idx++] = max_val - min_val; // Range
-        if (feature_idx < NUM_FEATURES) features[feature_idx++] = sqrt(sum_sq / samples); // RMS
-    }
-
-    // Fill remaining features with zeros
-    while (feature_idx < NUM_FEATURES) {
-        features[feature_idx++] = 0.0f;
-    }
-}"""
-
-        elif self.optimization == 'power':
-            # Ultra-minimal feature extraction for power efficiency
-            return """void extract_features(float sensor_data[][6], int samples, float features[]) {
-    // Minimal feature extraction for POWER optimization with safety checks
-    // Reduces computational complexity to save battery
-
-    // Input validation and bounds checking
-    if (samples <= 0 || samples > WINDOW_SIZE) {
-        // Handle error - fill with zeros
-        for (int i = 0; i < NUM_FEATURES; i++) {
-            features[i] = 0.0f;
-        }
-        return;
-    }
-
-    if (sensor_data == NULL || features == NULL) {
-        return; // Safety check for null pointers
-    }
-
-    int feature_idx = 0;
-
-    // Sample every other data point to reduce computation
-    int step = (samples > 50) ? 2 : 1;
-
-    for (int axis = 0; axis < 6; axis++) {
-        float sum = 0;
-        int count = 0;
-
-        // Simple mean calculation with reduced samples and bounds checking
-        for (int i = 0; i < samples; i += step) {
-            float val = sensor_data[i][axis];
-
-            // Sanity check for sensor values (more lenient for power mode)
-            if (val < -500.0f || val > 500.0f) {
-                val = 0.0f; // Clamp extreme values
-            }
-
-            sum += val;
-            count++;
-        }
-
-        float mean = (count > 0) ? (sum / count) : 0.0f;
-
-        // Store minimal features (2 per axis = 12 total) with bounds checking
-        if (feature_idx < NUM_FEATURES) {
-            features[feature_idx++] = mean;
-        }
-        if (feature_idx < NUM_FEATURES) {
-            features[feature_idx++] = fabs(mean); // Absolute mean
-        }
-    }
-
-    // Fill remaining features with zeros
-    while (feature_idx < NUM_FEATURES) {
-        features[feature_idx++] = 0.0f;
-    }
-}"""
-
-        elif self.optimization == 'accuracy':
-            # Comprehensive feature extraction for maximum accuracy
-            return """void extract_features(float sensor_data[][6], int samples, float features[]) {
-    // Comprehensive feature extraction for ACCURACY optimization
-    // Extracts maximum number of features for best classification
-
-    int feature_idx = 0;
-
-    // For each sensor axis (aX, aY, aZ, gX, gY, gZ)
-    for (int axis = 0; axis < 6; axis++) {
-        // High-precision statistical calculations
-        double sum = 0, sum_sq = 0, sum_cube = 0, sum_quad = 0;
-        float min_val = sensor_data[0][axis];
-        float max_val = sensor_data[0][axis];
-
-        for (int i = 0; i < samples; i++) {
-            double val = sensor_data[i][axis];
-            sum += val;
-            sum_sq += val * val;
-            sum_cube += val * val * val;
-            sum_quad += val * val * val * val;
-            if (val < min_val) min_val = val;
-            if (val > max_val) max_val = val;
-        }
-
-        double mean = sum / samples;
-        double variance = (sum_sq / samples) - (mean * mean);
-        double std_dev = sqrt(variance > 0 ? variance : 0.000001);
-
-        // Advanced statistical features
-        double skewness = (sum_cube / samples - 3 * mean * variance - mean * mean * mean) / (std_dev * std_dev * std_dev + 0.000001);
-        double kurtosis = (sum_quad / samples) / (variance * variance + 0.000001) - 3.0;
-
-        // Store comprehensive features (20+ per axis)
-        features[feature_idx++] = mean;
-        features[feature_idx++] = std_dev;
-        features[feature_idx++] = min_val;
-        features[feature_idx++] = max_val;
-        features[feature_idx++] = max_val - min_val;
-        features[feature_idx++] = sqrt(sum_sq / samples);
-        features[feature_idx++] = skewness;
-        features[feature_idx++] = kurtosis;
-        features[feature_idx++] = sum_sq; // Energy
-
-        // Zero-crossing and additional metrics
-        int zero_crossings = 0;
-        for (int i = 1; i < samples; i++) {
-            if ((sensor_data[i-1][axis] > mean) != (sensor_data[i][axis] > mean)) {
-                zero_crossings++;
-            }
-        }
-        features[feature_idx++] = (float)zero_crossings;
-
-        // Spectral features (simplified FFT approximation)
-        float freq_energy_low = 0, freq_energy_high = 0;
-        for (int i = 0; i < samples/2; i++) {
-            float freq_component = sensor_data[i][axis] * sensor_data[i][axis];
-            if (i < samples/4) {
-                freq_energy_low += freq_component;
-            } else {
-                freq_energy_high += freq_component;
-            }
-        }
-        features[feature_idx++] = freq_energy_low;
-        features[feature_idx++] = freq_energy_high;
-        features[feature_idx++] = freq_energy_low / (freq_energy_high + 0.001f);
-    }
-
-    // Ensure we have exactly NUM_FEATURES
-    while (feature_idx < NUM_FEATURES) {
-        features[feature_idx++] = 0.0f;
-    }
-}"""
-
-        else:  # balanced
-            # Standard balanced feature extraction - MUST MATCH TRAINING FEATURES EXACTLY
-            return """void extract_features(float sensor_data[][6], int samples, float features[]) {
-    // Balanced feature extraction for BALANCED optimization
-    // MUST match training feature extraction exactly (23 features per axis)
-
-    int feature_idx = 0;
-
-    // For each sensor axis (aX, aY, aZ, gX, gY, gZ)
-    for (int axis = 0; axis < 6; axis++) {
-        // Collect data for sorting (for median and quartiles)
+    for (int axis = 0; axis < 6; axis++) {{
+        // Copy data for sorting (used for median and quartiles)
         float sorted_data[WINDOW_SIZE];
-        for (int i = 0; i < samples; i++) {
+        for (int i = 0; i < samples; i++) {{
             sorted_data[i] = sensor_data[i][axis];
-        }
+        }}
 
-        // Simple bubble sort for median/quartile calculation
-        for (int i = 0; i < samples - 1; i++) {
-            for (int j = 0; j < samples - i - 1; j++) {
-                if (sorted_data[j] > sorted_data[j + 1]) {
-                    float temp = sorted_data[j];
-                    sorted_data[j] = sorted_data[j + 1];
-                    sorted_data[j + 1] = temp;
-                }
-            }
-        }
+        // Insertion sort — O(n²) worst case but fast for small/partially-sorted arrays
+        for (int i = 1; i < samples; i++) {{
+            float key = sorted_data[i];
+            int j = i - 1;
+            while (j >= 0 && sorted_data[j] > key) {{
+                sorted_data[j + 1] = sorted_data[j];
+                j--;
+            }}
+            sorted_data[j + 1] = key;
+        }}
 
-        // Standard statistical calculations
-        float sum = 0, sum_sq = 0;
+        // Statistical calculations
+        {acc_type} sum = 0, sum_sq = 0;
         float min_val = sensor_data[0][axis];
         float max_val = sensor_data[0][axis];
 
-        for (int i = 0; i < samples; i++) {
-            float val = sensor_data[i][axis];
+        for (int i = 0; i < samples; i++) {{
+            {acc_type} val = ({acc_type})sensor_data[i][axis];
             sum += val;
             sum_sq += val * val;
-            if (val < min_val) min_val = val;
-            if (val > max_val) max_val = val;
-        }
+            if (sensor_data[i][axis] < min_val) min_val = sensor_data[i][axis];
+            if (sensor_data[i][axis] > max_val) max_val = sensor_data[i][axis];
+        }}
 
-        float mean = sum / samples;
-        float variance = (sum_sq / samples) - (mean * mean);
-        float std_dev = sqrt(variance > 0 ? variance : 0.001f);
+        float n = (float)samples;
+        float mean = (float)(sum / n);
+        float variance = (float)((sum_sq / n) - (({acc_type})mean * ({acc_type})mean));
+        if (variance < 0.0f) variance = 0.0f;
+        float std_dev = sqrtf(variance);
 
-        // Calculate median and quartiles from sorted data
+        // Median and quartiles from sorted data
         int mid = samples / 2;
-        float median = (samples % 2 == 0) ? (sorted_data[mid-1] + sorted_data[mid]) / 2.0f : sorted_data[mid];
-        int q1_idx = samples / 4;
-        int q3_idx = (3 * samples) / 4;
-        float q25 = sorted_data[q1_idx];
-        float q75 = sorted_data[q3_idx];
+        float median = (samples % 2 == 0)
+            ? (sorted_data[mid - 1] + sorted_data[mid]) / 2.0f
+            : sorted_data[mid];
+        float q25 = sorted_data[samples / 4];
+        float q75 = sorted_data[(3 * samples) / 4];
         float iqr = q75 - q25;
 
-        // Features matching training order: mean, std, min, max, range, median, q25, q75, iqr
-        features[feature_idx++] = mean;                      // 0: mean
-        features[feature_idx++] = std_dev;                   // 1: std
-        features[feature_idx++] = min_val;                   // 2: min
-        features[feature_idx++] = max_val;                   // 3: max
-        features[feature_idx++] = max_val - min_val;         // 4: range
-        features[feature_idx++] = median;                    // 5: median
-        features[feature_idx++] = q25;                       // 6: q25
-        features[feature_idx++] = q75;                       // 7: q75
-        features[feature_idx++] = iqr;                       // 8: iqr
+        // Feature vector (same 15 features in same order as training)
+        features[feature_idx++] = mean;                          // 0: mean
+        features[feature_idx++] = std_dev;                       // 1: std
+        features[feature_idx++] = min_val;                       // 2: min
+        features[feature_idx++] = max_val;                       // 3: max
+        features[feature_idx++] = max_val - min_val;             // 4: range
+        features[feature_idx++] = median;                        // 5: median
+        features[feature_idx++] = q25;                           // 6: q25
+        features[feature_idx++] = q75;                           // 7: q75
+        features[feature_idx++] = iqr;                           // 8: iqr
 
-        // Skewness and kurtosis - simplified to match sklearn/pandas behavior
-        // Using sample formulas (n-1 denominator for std)
-        float sample_std = sqrt(variance * samples / (samples - 1 + 0.001f));
+        // Skewness and kurtosis — bias-corrected (pandas/scipy formula)
+        float sample_std = sqrtf(variance * n / (n - 1.0f + 0.001f));
 
-        float m3_sum = 0, m4_sum = 0;
-        for (int i = 0; i < samples; i++) {
+        float m3_sum = 0.0f, m4_sum = 0.0f;
+        for (int i = 0; i < samples; i++) {{
             float z = (sensor_data[i][axis] - mean) / (sample_std + 0.001f);
             float z2 = z * z;
             m3_sum += z * z2;
             m4_sum += z2 * z2;
-        }
+        }}
 
-        // Skewness with bias correction (pandas/scipy formula)
-        float g1 = m3_sum / samples;
-        float skewness = 0;
-        if (samples >= 3) {
-            skewness = sqrt((float)(samples * (samples - 1))) / (samples - 2) * g1;
-        }
+        // Skewness with bias correction
+        float g1 = m3_sum / n;
+        float skewness = 0.0f;
+        if (samples >= 3) {{
+            skewness = sqrtf(n * (n - 1.0f)) / (n - 2.0f) * g1;
+        }}
 
-        // Excess kurtosis with bias correction (pandas/scipy formula)
-        float g2 = m4_sum / samples - 3.0f;
+        // Excess kurtosis with bias correction
+        float g2 = m4_sum / n - 3.0f;
         float kurtosis = -3.0f;
-        if (samples >= 4) {
-            float n = (float)samples;
-            kurtosis = (n - 1) / ((n - 2) * (n - 3)) * ((n + 1) * g2 + 6.0f);
-        }
+        if (samples >= 4) {{
+            kurtosis = (n - 1.0f) / ((n - 2.0f) * (n - 3.0f)) * ((n + 1.0f) * g2 + 6.0f);
+        }}
 
-        features[feature_idx++] = skewness;                  // 9: skewness
-        features[feature_idx++] = kurtosis;                  // 10: kurtosis
+        features[feature_idx++] = skewness;                     // 9: skewness
+        features[feature_idx++] = kurtosis;                      // 10: kurtosis
+        features[feature_idx++] = sqrtf((float)(sum_sq / n));    // 11: rms
+        features[feature_idx++] = (float)sum_sq;                 // 12: energy
 
-        // RMS and energy
-        features[feature_idx++] = sqrt(sum_sq / samples);    // 11: rms
-        features[feature_idx++] = sum_sq;                    // 12: energy
-
-        // Zero-crossings (signal crosses zero) - using sign product for consistency
+        // Zero-crossings (signal crosses zero)
         int zero_crossings = 0;
-        for (int i = 1; i < samples; i++) {
-            if (sensor_data[i-1][axis] * sensor_data[i][axis] < 0) {
+        for (int i = 1; i < samples; i++) {{
+            if (sensor_data[i-1][axis] * sensor_data[i][axis] < 0)
                 zero_crossings++;
-            }
-        }
-        features[feature_idx++] = (float)zero_crossings;     // 13: zero_crossings
+        }}
+        features[feature_idx++] = (float)zero_crossings;        // 13: zero_crossings
 
-        // Mean-crossing rate (signal crosses mean) - NORMALIZED
+        // Mean-crossing rate (normalised)
         int mean_crossings = 0;
-        for (int i = 1; i < samples; i++) {
-            if ((sensor_data[i-1][axis] - mean) * (sensor_data[i][axis] - mean) < 0) {
+        for (int i = 1; i < samples; i++) {{
+            if ((sensor_data[i-1][axis] - mean) * (sensor_data[i][axis] - mean) < 0)
                 mean_crossings++;
-            }
-        }
-        features[feature_idx++] = (float)mean_crossings / (float)samples;     // 14: mean_crossing_rate (normalized)
-    }
+        }}
+        features[feature_idx++] = (float)mean_crossings / n;    // 14: mean_crossing_rate
+    }}
 
-    // Total features: 15 per axis * 6 axes = 90 time-domain features
-    // No frequency-domain features (model retrained without FFT features)
-
-    // Fill any remaining features (should be none if calculation is correct)
-    while (feature_idx < NUM_FEATURES) {
+    // Total: 15 features/axis × 6 axes = 90 time-domain features
+    // Fill any remaining slots (should be zero if calculation is correct)
+    while (feature_idx < NUM_FEATURES) {{
         features[feature_idx++] = 0.0f;
-    }
-}"""
+    }}
+}}"""
 
     @abstractmethod
     def _get_model_specific_declarations(self) -> str:
@@ -819,7 +805,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         pass
 
     def generate_example_sketch(self, header_filename: str = None) -> str:
-        """Generate optimization-aware Arduino sketch with correct header include."""
+        """Generate platform-appropriate example code."""
 
         # Extract just the filename from the full path if provided
         if header_filename:
@@ -827,6 +813,168 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
             header_include = os.path.basename(header_filename)
         else:
             header_include = "har_model.h"
+
+        # Dispatch to platform-specific example generators
+        if self.platform in ('generic_c', 'generic_cpp'):
+            return self._generate_generic_example(header_include)
+        elif self.platform == 'esp_idf':
+            return self._generate_esp_idf_example(header_include)
+        else:
+            return self._generate_arduino_example(header_include)
+
+    def _generate_generic_example(self, header_include: str) -> str:
+        """Generate a portable C/C++ main() example (no Arduino dependency)."""
+        is_cpp = self.platform == 'generic_cpp'
+        ext = 'cpp' if is_cpp else 'c'
+        io_include = '<cstdio>' if is_cpp else '<stdio.h>'
+        math_include = '<cmath>' if is_cpp else '<math.h>'
+        stdlib_include = '<cstdlib>' if is_cpp else '<stdlib.h>'
+
+        return f"""/*
+ * HAR Model — Portable {('C++' if is_cpp else 'C')} Example
+ * Model Type: {self.model_type}
+ * Optimization: {self.optimization.upper()}
+ *
+ * Compile:
+ *   {'g++' if is_cpp else 'gcc'} -O2 -o har_example example.{ext} har_model.{ext} -lm
+ *
+ * This file demonstrates how to call the generated HAR model from
+ * a plain {('C++' if is_cpp else 'C')} program.  Replace the dummy sensor data
+ * with your actual sensor reading code.
+ */
+
+#include "{header_include}"
+#include {io_include}
+#include {math_include}
+#include {stdlib_include}
+
+/* ------------------------------------------------------------------ */
+/*  Provide your sensor data here                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Fill sensor_data[WINDOW_SIZE][6] with one window of IMU readings.
+ * Columns: aX, aY, aZ (m/s²), gX, gY, gZ (deg/s or rad/s)
+ * Return 0 on success, non-zero on error.
+ */
+static int read_sensor_window(float sensor_data[][6]) {{
+    /* --- REPLACE with actual sensor/file reading code --- */
+    for (int i = 0; i < WINDOW_SIZE; i++) {{
+        sensor_data[i][0] = 0.0f;   /* aX */
+        sensor_data[i][1] = 0.0f;   /* aY */
+        sensor_data[i][2] = 9.81f;  /* aZ (gravity) */
+        sensor_data[i][3] = 0.0f;   /* gX */
+        sensor_data[i][4] = 0.0f;   /* gY */
+        sensor_data[i][5] = 0.0f;   /* gZ */
+    }}
+    return 0;
+}}
+
+/* ------------------------------------------------------------------ */
+
+int main({"void" if not is_cpp else ""}) {{
+    printf("HAR Model — {self.model_type.upper()} ({self.optimization.title()})\\n");
+    printf("Features: %d | Classes: %d | Window: %d samples @ %d Hz\\n",
+           NUM_FEATURES, NUM_CLASSES, WINDOW_SIZE, SAMPLING_RATE);
+
+    har_init();
+
+    float sensor_data[WINDOW_SIZE][6];
+    float features[NUM_FEATURES];
+
+    /* Main inference loop — run until interrupted */
+    int iteration = 0;
+    while (iteration < 10) {{  /* Change to 'while(1)' for continuous operation */
+        if (read_sensor_window(sensor_data) != 0) {{
+            printf("Error reading sensor data\\n");
+            return 1;
+        }}
+
+        extract_features(sensor_data, WINDOW_SIZE, features);
+
+        int predicted_class = har_predict(features);
+        const char* activity = get_activity_name(predicted_class);
+
+        printf("[%04d] Predicted: %s (class %d)\\n",
+               iteration, activity, predicted_class);
+        iteration++;
+    }}
+
+    printf("Done.\\n");
+    return 0;
+}}
+"""
+
+    def _generate_esp_idf_example(self, header_include: str) -> str:
+        """Generate an ESP-IDF app_main() example."""
+        return f"""/*
+ * HAR Model — ESP-IDF Example
+ * Model Type: {self.model_type}
+ * Optimization: {self.optimization.upper()}
+ *
+ * Place in main/main.c of your ESP-IDF project.
+ * Build: idf.py build
+ * Flash: idf.py flash monitor
+ */
+
+#include "{header_include}"
+#include <stdio.h>
+#include <math.h>
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/i2c.h"
+
+static const char* TAG = "HAR";
+
+/* ------------------------------------------------------------------ */
+/*  Replace with your sensor driver                                    */
+/* ------------------------------------------------------------------ */
+static int read_sensor_window(float sensor_data[][6]) {{
+    /* TODO: Read {self.window_size} samples from IMU via I2C/SPI */
+    for (int i = 0; i < WINDOW_SIZE; i++) {{
+        sensor_data[i][0] = 0.0f;
+        sensor_data[i][1] = 0.0f;
+        sensor_data[i][2] = 9.81f;
+        sensor_data[i][3] = 0.0f;
+        sensor_data[i][4] = 0.0f;
+        sensor_data[i][5] = 0.0f;
+    }}
+    return 0;
+}}
+
+void app_main(void) {{
+    ESP_LOGI(TAG, "HAR Model — {self.model_type.upper()} ({self.optimization.title()})");
+    ESP_LOGI(TAG, "Features: %d | Classes: %d | Window: %d @ %d Hz",
+             NUM_FEATURES, NUM_CLASSES, WINDOW_SIZE, SAMPLING_RATE);
+
+    har_init();
+
+    float sensor_data[WINDOW_SIZE][6];
+    float features[NUM_FEATURES];
+
+    while (1) {{
+        if (read_sensor_window(sensor_data) != 0) {{
+            ESP_LOGE(TAG, "Sensor read error");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }}
+
+        extract_features(sensor_data, WINDOW_SIZE, features);
+        int predicted_class = har_predict(features);
+        const char* activity = get_activity_name(predicted_class);
+
+        ESP_LOGI(TAG, "Predicted: %s (class %d)", activity, predicted_class);
+
+        vTaskDelay(pdMS_TO_TICKS({int(1000 * self.window_size / self.sampling_rate)}));
+    }}
+}}
+"""
+
+    def _generate_arduino_example(self, header_include: str) -> str:
+        """Generate optimization-aware Arduino sketch with correct header include."""
+
+        header_include = header_include or "har_model.h"
 
         # Optimization-specific delay and settings
         delay_ms = {
@@ -1286,7 +1434,9 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
             raise ValidationError("platform must be a string")
 
         valid_platforms = ['arduino', 'arm_cortex_m',
-                           'esp32', 'teensy', 'seeed_xiao']
+                           'esp32', 'teensy', 'seeed_xiao',
+                           'generic_c', 'generic_cpp', 'esp_idf',
+                           'micropython', 'zephyr']
         if platform not in valid_platforms:
             raise ValidationError(f"Invalid platform: '{platform}'. "
                                   f"Valid platforms: {valid_platforms}")

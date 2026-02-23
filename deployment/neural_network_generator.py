@@ -378,9 +378,9 @@ int har_predict_internal(float features[NUM_FEATURES]) {
 }"""
 
     def _generate_utility_functions(self) -> str:
-        """Generate Neural Network utility functions."""
+        """Generate Neural Network utility functions (platform-portable)."""
         return """void print_network_outputs(float features[]) {
-    Serial.println("Neural Network Layer Outputs:");
+    HAR_LOG("Neural Network Layer Outputs:");
 
     // Show first few hidden layer outputs
     float hidden_outputs[HIDDEN_LAYER_SIZE];
@@ -390,9 +390,6 @@ int har_predict_internal(float features[NUM_FEATURES]) {
             sum += features[i] * input_weights[i][h];
         }
         hidden_outputs[h] = relu(sum);
-        Serial.print("Hidden[");
-        Serial.print(h);
-        Serial.print("]: ");
-        Serial.println(hidden_outputs[h], 3);
+        HAR_LOG_FLOAT("Hidden", hidden_outputs[h]);
     }
 }"""

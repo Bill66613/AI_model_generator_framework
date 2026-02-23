@@ -103,7 +103,11 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
         float diff = x1[i] - x2[i];
         sum += diff * diff;
     }}
-    return exp(-gamma * sum);
+    // Clamp exponent to prevent overflow/underflow on constrained devices
+    float exponent = -gamma * sum;
+    if (exponent < -80.0f) return 0.0f;   // exp(-80) ≈ 0
+    if (exponent > 80.0f) exponent = 80.0f;
+    return expf(exponent);
 }}"""
 
     def _generate_prediction_function(self) -> str:
@@ -151,9 +155,9 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
 }"""
 
     def _generate_utility_functions(self) -> str:
-        """Generate SVM utility functions."""
+        """Generate SVM utility functions (platform-portable)."""
         return """void print_svm_decision_scores(float features[]) {
-    Serial.println("SVM Decision Scores:");
+    HAR_LOG("SVM Decision Scores:");
 
     // Calculate decision scores for each class
     float decision_scores[NUM_CLASSES];
@@ -165,23 +169,12 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
     // Compute kernel values and accumulate weighted scores
     for (int sv = 0; sv < NUM_SUPPORT_VECTORS && sv < 10; sv++) {
         float kernel_value = rbf_kernel(features, (float*)support_vectors[sv], svm_gamma);
-        
-        Serial.print("  SV");
-        Serial.print(sv);
-        Serial.print(" kernel: ");
-        Serial.print(kernel_value, 4);
-        Serial.print(" -> ");
+        HAR_LOG_FLOAT("SV kernel", kernel_value);
         
         for (int cls = 0; cls < NUM_CLASSES; cls++) {
             float contrib = dual_coef[cls][sv] * kernel_value;
             decision_scores[cls] += contrib;
-            Serial.print("C");
-            Serial.print(cls);
-            Serial.print(":");
-            Serial.print(contrib, 3);
-            Serial.print(" ");
         }
-        Serial.println();
     }
     
     // Add intercepts
@@ -190,11 +183,8 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
     }
     
     // Print final scores
-    Serial.println("  Final scores:");
+    HAR_LOG("Final decision scores:");
     for (int cls = 0; cls < NUM_CLASSES; cls++) {
-        Serial.print("    ");
-        Serial.print(get_activity_name(cls));
-        Serial.print(": ");
-        Serial.println(decision_scores[cls], 4);
+        HAR_LOG_FLOAT(get_activity_name(cls), decision_scores[cls]);
     }
 }"""

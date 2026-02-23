@@ -65,39 +65,59 @@ layout = html.Div([
                 'color': '#2E86AB', 'margin-bottom': '20px', 'border-bottom': '2px solid #2E86AB', 'padding-bottom': '10px'}),
 
             html.Div([
-                # Platform selection
+                # Left column: Framework + Board selection
                 html.Div([
+                    # Output Framework / Language selection (NEW - primary dimension)
+                    html.Label("Output Language / Framework:", style={
+                               'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                    dcc.Dropdown(
+                        id='output-framework-selector',
+                        options=[
+                            {'label': '🔷 Arduino C++ (.ino) — Arduino framework, widest board support',
+                             'value': 'arduino_cpp'},
+                            {'label': '🇨 Generic C (C99) — Portable bare-metal C, no framework dependency',
+                             'value': 'generic_c'},
+                            {'label': '🅒+ Generic C++ (C++11) — Portable C++, standard library only',
+                             'value': 'generic_cpp'},
+                            {'label': '📡 ESP-IDF C — Native Espressif IoT Development Framework',
+                             'value': 'esp_idf_c'},
+                            {'label': '🐍 MicroPython — Python for microcontrollers (ESP32, RP2040)',
+                             'value': 'micropython'},
+                            {'label': '🌀 Zephyr RTOS C — Zephyr real-time OS (nRF, STM32, ESP32)',
+                             'value': 'zephyr_c'},
+                        ],
+                        value='arduino_cpp',
+                        placeholder='Select output language / framework',
+                        style={'margin-bottom': '15px'}
+                    ),
+                    html.Div(id='framework-description', style={
+                        'font-size': '12px', 'color': '#666', 'padding': '8px',
+                        'background': '#f0f7ff', 'border-radius': '4px', 'border-left': '3px solid #2E86AB',
+                        'margin-bottom': '15px'
+                    }),
+
+                    # Target Board selection (secondary — filtered by framework)
                     html.Label("Target Board:", style={
                                'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Dropdown(
                         id='target-board-selector',
-                        options=[
-                            {'label': '🔷 Arduino Uno (ATmega328P)',
-                             'value': 'arduino:avr:uno'},
-                            {'label': '🔷 Arduino Nano',
-                             'value': 'arduino:avr:nano'},
-                            {'label': '📡 ESP32 DevKit',
-                             'value': 'esp32:esp32:esp32'},
-                            {'label': '📡 ESP32-S3',
-                             'value': 'esp32:esp32:esp32s3'},
-                            {'label': '📱 M5StickC Plus2 (ESP32-PICO-V3-02)',
-                             'value': 'm5stack:esp32:m5stick_c'},
-                            {'label': '🔋 XIAO nRF52840 Sense (BLE + IMU)',
-                             'value': 'seeed:nrf52:xiaonRF52840Sense'},
-                            {'label': '⚡ STM32F4 (ARM Cortex-M4)',
-                             'value': 'STM32:stm32:GenF4'},
-                        ],
-                        value='esp32:esp32:esp32',
-                        placeholder='Select target board',
+                        options=[],
+                        value='generic',
+                        placeholder='Select target board (or Generic)',
                         style={'margin-bottom': '15px'}
-                    )
+                    ),
+                    html.Div(id='board-specs-display', style={
+                        'font-size': '12px', 'color': '#555', 'padding': '8px',
+                        'background': '#f8f9fa', 'border-radius': '4px',
+                        'margin-bottom': '10px'
+                    }),
                 ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
 
-                # Model parameters display (moved up since code generator removed)
+                # Right column: Model params + optimization
                 html.Div([
                     html.Div([
                         html.H5("⚙️ Model Parameters (from training)", style={
-                            'font-size': '14px', 'color': '#495057', 'margin-bottom': '10px', 'margin-top': '15px'
+                            'font-size': '14px', 'color': '#495057', 'margin-bottom': '10px', 'margin-top': '0px'
                         }),
                         html.Div(id='model-parameters-display', style={
                             'background': '#f8f9fa',
@@ -429,6 +449,7 @@ layout = html.Div([
         # Data stores
         dcc.Store(id='generated-code-store', storage_type='session'),
         dcc.Store(id='selected-model-store', storage_type='session'),
+        dcc.Store(id='selected-framework-store', storage_type='session'),
         dcc.Interval(id='port-refresh-interval', interval=5000, disabled=True)
 
     ], style={

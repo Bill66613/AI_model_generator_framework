@@ -108,8 +108,8 @@ int har_predict_internal(float features[NUM_FEATURES]) {{
         tree_starts = []
         current_index = 0
 
-        # Limit to first 10 trees for embedded
-        for i, tree in enumerate(self.trees[:10]):
+        # Use all extracted trees for embedded deployment
+        for i, tree in enumerate(self.trees):
             tree_starts.append(current_index)
 
             # Convert sklearn tree structure to our format
@@ -137,7 +137,7 @@ int har_predict_internal(float features[NUM_FEATURES]) {{
         nodes_str = ",\n".join(tree_nodes)
         starts_str = ", ".join(map(str, tree_starts))
 
-        return f"""// Random Forest Trees (first {len(tree_starts)} trees)
+        return f"""// Random Forest Trees ({len(tree_starts)} of {self.num_trees} trees)
 const TreeNode tree_nodes[] = {{
 {nodes_str}
 }};
@@ -145,26 +145,18 @@ const TreeNode tree_nodes[] = {{
 const int tree_starts[] = {{{starts_str}}};"""
 
     def _generate_utility_functions(self) -> str:
-        """Generate Random Forest utility functions."""
+        """Generate Random Forest utility functions (platform-portable)."""
         return """void print_tree_prediction_debug(float features[]) {
-    Serial.println("Random Forest Tree Predictions:");
+    HAR_LOG("Random Forest Tree Predictions:");
     for (int tree = 0; tree < NUM_TREES && tree < 5; tree++) {
         int prediction = predict_tree(tree_nodes, tree_starts[tree], features);
-        Serial.print("Tree ");
-        Serial.print(tree);
-        Serial.print(": ");
-        Serial.println(prediction);
+        HAR_LOG_FLOAT("Tree", (float)prediction);
     }
 }
 
 void print_feature_vector(float features[]) {
-    Serial.println("Feature Vector (first 10):");
+    HAR_LOG("Feature Vector (first 10):");
     for (int i = 0; i < 10 && i < NUM_FEATURES; i++) {
-        Serial.print("F");
-        Serial.print(i);
-        Serial.print(": ");
-        Serial.print(features[i], 3);
-        Serial.print(" ");
+        HAR_LOG_FLOAT("F", features[i]);
     }
-    Serial.println();
 }"""

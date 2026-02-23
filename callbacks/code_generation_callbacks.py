@@ -17,6 +17,136 @@ from utils.model_training import EdgeMLModel
 from deployment import (generate_deployment_code, generate_and_save_deployment_code,
                         validate_before_deployment)
 
+# ============================================================
+# Framework / Board definitions
+# ============================================================
+
+# Board options grouped by framework
+FRAMEWORK_BOARDS = {
+    'arduino_cpp': [
+        {'label': '🌐 Generic (any Arduino-compatible board)', 'value': 'generic'},
+        {'label': '🔷 Arduino Uno (ATmega328P)', 'value': 'arduino:avr:uno'},
+        {'label': '🔷 Arduino Nano', 'value': 'arduino:avr:nano'},
+        {'label': '📡 ESP32 DevKit', 'value': 'esp32:esp32:esp32'},
+        {'label': '📡 ESP32-S3', 'value': 'esp32:esp32:esp32s3'},
+        {'label': '📱 M5StickC Plus2 (ESP32-PICO-V3-02)', 'value': 'm5stack:esp32:m5stick_c'},
+        {'label': '🔋 XIAO nRF52840 Sense (BLE + IMU)', 'value': 'seeed:nrf52:xiaonRF52840Sense'},
+        {'label': '⚡ STM32F4 (ARM Cortex-M4)', 'value': 'STM32:stm32:GenF4'},
+    ],
+    'generic_c': [
+        {'label': '🌐 Generic (portable C99, any platform)', 'value': 'generic'},
+        {'label': '🖥️ x86 / x64 (PC / Linux / macOS)', 'value': 'x86_64'},
+        {'label': '💪 ARM Cortex-M (bare-metal)', 'value': 'arm_cortex_m'},
+        {'label': '🔩 RISC-V', 'value': 'riscv'},
+    ],
+    'generic_cpp': [
+        {'label': '🌐 Generic (portable C++11, any platform)', 'value': 'generic'},
+        {'label': '🖥️ x86 / x64 (PC / Linux / macOS)', 'value': 'x86_64'},
+        {'label': '💪 ARM Cortex-M (bare-metal)', 'value': 'arm_cortex_m'},
+        {'label': '🔩 RISC-V', 'value': 'riscv'},
+    ],
+    'esp_idf_c': [
+        {'label': '📡 ESP32 (Xtensa LX6)', 'value': 'esp32:esp32:esp32'},
+        {'label': '📡 ESP32-S3 (Xtensa LX7)', 'value': 'esp32:esp32:esp32s3'},
+        {'label': '📡 ESP32-C3 (RISC-V)', 'value': 'esp32:esp32:esp32c3'},
+    ],
+    'micropython': [
+        {'label': '📡 ESP32', 'value': 'esp32:esp32:esp32'},
+        {'label': '🍓 Raspberry Pi Pico / RP2040', 'value': 'rp2040'},
+        {'label': '⚡ STM32 (Pyboard)', 'value': 'stm32_pyboard'},
+    ],
+    'zephyr_c': [
+        {'label': '🔋 nRF52840 (Nordic)', 'value': 'nrf52840'},
+        {'label': '⚡ STM32F4', 'value': 'STM32:stm32:GenF4'},
+        {'label': '📡 ESP32', 'value': 'esp32:esp32:esp32'},
+    ],
+}
+
+# Descriptions for each framework
+FRAMEWORK_DESCRIPTIONS = {
+    'arduino_cpp': '🔷 Arduino C++ uses the Arduino framework with setup()/loop(), Serial, '
+                   'and wide library support. Best for rapid prototyping. Generates .ino files.',
+    'generic_c': '🇨 Portable C99 code with no framework dependencies. Uses only <stdio.h>, <math.h>, '
+                 '<string.h>, <stdlib.h>. Ideal for bare-metal, RTOS integration, or cross-compilation.',
+    'generic_cpp': '🅒+ Portable C++11 code with standard library only. No Arduino or vendor-specific '
+                   'dependencies. Suitable for embedded Linux, bare-metal C++ projects, or unit testing on PC.',
+    'esp_idf_c': '📡 Native ESP-IDF C code using Espressif\'s official framework. Leverages FreeRTOS, '
+                 'ESP logging, and hardware-specific optimizations. Requires ESP-IDF toolchain.',
+    'micropython': '🐍 MicroPython module — pure Python, no numpy required. Runs on MicroPython-compatible boards. '
+                   'Easiest to modify but slowest inference. Supports RF, NN, and SVM models.',
+    'zephyr_c': '🌀 Zephyr RTOS C code with device tree sensor bindings and kernel services. '
+                'Best for production IoT with advanced power management. Supports RF, NN, and SVM models.',
+}
+
+# Map (framework, board) → internal platform string used by generators
+def resolve_platform(framework: str, board: str) -> str:
+    """Map UI selections to the internal platform string used by code generators."""
+    if framework == 'arduino_cpp':
+        board_platform_map = {
+            'generic': 'esp32',
+            'arduino:avr:uno': 'arduino',
+            'arduino:avr:nano': 'arduino',
+            'esp32:esp32:esp32': 'esp32',
+            'esp32:esp32:esp32s3': 'esp32',
+            'm5stack:esp32:m5stick_c': 'esp32',
+            'seeed:nrf52:xiaonRF52840Sense': 'seeed_xiao',
+            'STM32:stm32:GenF4': 'arm_cortex_m',
+        }
+        return board_platform_map.get(board, 'esp32')
+    elif framework == 'generic_c':
+        if board == 'arm_cortex_m':
+            return 'arm_cortex_m'
+        return 'generic_c'
+    elif framework == 'generic_cpp':
+        if board == 'arm_cortex_m':
+            return 'arm_cortex_m'
+        return 'generic_cpp'
+    elif framework == 'esp_idf_c':
+        return 'esp_idf'
+    elif framework == 'micropython':
+        return 'micropython'
+    elif framework == 'zephyr_c':
+        return 'zephyr'
+    return 'esp32'
+
+# Board specs for resource analysis (RAM in KB, Flash in KB, Speed in MHz)
+BOARD_SPECS = {
+    'generic': {'name': 'Generic', 'ram': 256, 'flash': 1024, 'speed': 100},
+    'x86_64': {'name': 'x86/x64 PC', 'ram': 1048576, 'flash': 1048576, 'speed': 3000},
+    'arm_cortex_m': {'name': 'ARM Cortex-M', 'ram': 256, 'flash': 1024, 'speed': 168},
+    'riscv': {'name': 'RISC-V', 'ram': 256, 'flash': 1024, 'speed': 160},
+    'rp2040': {'name': 'RP2040 (Pico)', 'ram': 264, 'flash': 2048, 'speed': 133},
+    'nrf52840': {'name': 'nRF52840', 'ram': 256, 'flash': 1024, 'speed': 64},
+    'stm32_pyboard': {'name': 'STM32 Pyboard', 'ram': 192, 'flash': 1024, 'speed': 168},
+    'arduino:avr:uno': {'name': 'Arduino Uno', 'ram': 2, 'flash': 32, 'speed': 16},
+    'arduino:avr:nano': {'name': 'Arduino Nano', 'ram': 2, 'flash': 32, 'speed': 16},
+    'esp32:esp32:esp32': {'name': 'ESP32', 'ram': 520, 'flash': 4096, 'speed': 240},
+    'esp32:esp32:esp32s3': {'name': 'ESP32-S3', 'ram': 512, 'flash': 8192, 'speed': 240},
+    'esp32:esp32:esp32c3': {'name': 'ESP32-C3', 'ram': 400, 'flash': 4096, 'speed': 160},
+    'm5stack:esp32:m5stick_c': {'name': 'M5StickC Plus2', 'ram': 320, 'flash': 8192, 'speed': 240},
+    'seeed:nrf52:xiaonRF52840Sense': {'name': 'XIAO nRF52840 Sense', 'ram': 256, 'flash': 1024, 'speed': 64},
+    'STM32:stm32:GenF4': {'name': 'STM32F4', 'ram': 192, 'flash': 1024, 'speed': 168},
+}
+
+# Board display name lookup
+BOARD_NAMES = {
+    'generic': 'Generic',
+    'x86_64': 'x86/x64 PC',
+    'arm_cortex_m': 'ARM Cortex-M',
+    'riscv': 'RISC-V',
+    'rp2040': 'RP2040',
+    'nrf52840': 'nRF52840',
+    'stm32_pyboard': 'STM32 Pyboard',
+    'arduino:avr:uno': 'Arduino Uno',
+    'arduino:avr:nano': 'Arduino Nano',
+    'esp32:esp32:esp32': 'ESP32',
+    'esp32:esp32:esp32s3': 'ESP32-S3',
+    'esp32:esp32:esp32c3': 'ESP32-C3',
+    'm5stack:esp32:m5stick_c': 'M5StickC Plus2',
+    'seeed:nrf52:xiaonRF52840Sense': 'XIAO nRF52840 Sense',
+    'STM32:stm32:GenF4': 'STM32F4',
+}
+
 
 def compile_with_arduino_cli(code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose):
     """
@@ -298,6 +428,44 @@ def register_callbacks(app):
             traceback.print_exc()
             return []
 
+    # ----------------------------------------------------------
+    # Framework → Board dropdown filtering
+    # ----------------------------------------------------------
+    @app.callback(
+        [Output('target-board-selector', 'options'),
+         Output('target-board-selector', 'value'),
+         Output('framework-description', 'children')],
+        Input('output-framework-selector', 'value')
+    )
+    def update_boards_for_framework(framework):
+        """Update board options when the framework selection changes."""
+        if not framework:
+            return [], None, "Select a framework to see available boards."
+
+        boards = FRAMEWORK_BOARDS.get(framework, [])
+        default_value = boards[0]['value'] if boards else None
+        description = FRAMEWORK_DESCRIPTIONS.get(framework, '')
+
+        return boards, default_value, description
+
+    @app.callback(
+        Output('board-specs-display', 'children'),
+        Input('target-board-selector', 'value')
+    )
+    def display_board_specs(board):
+        """Show board specs when a board is selected."""
+        if not board:
+            return "Select a board to see specifications."
+
+        specs = BOARD_SPECS.get(board)
+        if not specs:
+            return "No specification data available for this board."
+
+        return html.Div([
+            html.Span(f"📋 {specs['name']}", style={'font-weight': 'bold'}),
+            html.Span(f"  •  RAM: {specs['ram']} KB  •  Flash: {specs['flash']} KB  •  Clock: {specs['speed']} MHz",
+                       style={'margin-left': '8px'})
+        ])
     @app.callback(
         [Output('model-info-display', 'children'),
          Output('model-parameters-display', 'children')],
@@ -510,13 +678,14 @@ def register_callbacks(app):
          Output('compile-flash-btn', 'style')],
         Input('generate-code-btn', 'n_clicks'),
         [State('deployment-model-selector', 'value'),
+         State('output-framework-selector', 'value'),
          State('target-board-selector', 'value'),
          State('optimization-level', 'value'),
          State('deployment-stride', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
-    def generate_embedded_code(n_clicks, model_filename, target_board, optimization, stride, base_dir):
+    def generate_embedded_code(n_clicks, model_filename, framework, target_board, optimization, stride, base_dir):
         """
         Generate embedded C/C++ code from the trained model using actual metadata.
         Model type is automatically detected from the selected model.
@@ -595,17 +764,8 @@ def register_callbacks(app):
             classes = list(model.label_encoder.classes_) if model.label_encoder else [
                 'activity_1', 'activity_2']
 
-            # Map target board to platform string for code generator
-            platform_mapping = {
-                'arduino:avr:uno': 'arduino',
-                'arduino:avr:nano': 'arduino',
-                'esp32:esp32:esp32': 'esp32',
-                'esp32:esp32:esp32s3': 'esp32',
-                'm5stack:esp32:m5stick_c': 'esp32',
-                'seeed:nrf52:xiaonRF52840Sense': 'seeed_xiao',
-                'STM32:stm32:GenF4': 'arm_cortex_m'
-            }
-            platform = platform_mapping.get(target_board, 'arduino')
+            # Map target board + framework to platform string for code generator
+            platform = resolve_platform(framework or 'arduino_cpp', target_board or 'generic')
 
             # Infer feature_method if not present in metadata
             if 'feature_method' not in model_params and feature_names:
@@ -764,26 +924,20 @@ def register_callbacks(app):
             }
 
             # Get board name for display
-            board_names = {
-                'arduino:avr:uno': 'Arduino Uno',
-                'arduino:avr:nano': 'Arduino Nano',
-                'esp32:esp32:esp32': 'ESP32',
-                'esp32:esp32:esp32s3': 'ESP32-S3',
-                'm5stack:esp32:m5stick_c': 'M5StickC Plus2',
-                'seeed:nrf52:xiaonRF52840Sense': 'XIAO nRF52840 Sense',
-                'STM32:stm32:GenF4': 'STM32F4'
-            }
-            board_name = board_names.get(target_board, 'Unknown Board')
+            board_name = BOARD_NAMES.get(target_board, 'Unknown Board')
 
-            # Generate PlatformIO configuration
-            platformio_ini = generate_platformio_config(
-                target_board, model_filename, board_name)
+            # Generate PlatformIO configuration (only relevant for Arduino framework)
+            platformio_ini = ''
+            if framework == 'arduino_cpp' and target_board and target_board != 'generic':
+                platformio_ini = generate_platformio_config(
+                    target_board, model_filename, board_name)
 
             # Store all generated files
             code_data = {
                 'code': preview_code,  # Main code for compilation
                 'filename': preview_filename,
                 'board': target_board,
+                'framework': framework,
                 'platformio_ini': platformio_ini,
                 'all_files': generated_code_files  # Store all generated files
             }
@@ -914,12 +1068,13 @@ def register_callbacks(app):
         Output('resource-analysis-output', 'children'),
         Input('resource-analysis-btn', 'n_clicks'),
         [State('deployment-model-selector', 'value'),
+         State('output-framework-selector', 'value'),
          State('target-board-selector', 'value'),
          State('optimization-level', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
-    def analyze_resources(n_clicks, model_filename, target_board, optimization, base_dir):
+    def analyze_resources(n_clicks, model_filename, framework, target_board, optimization, base_dir):
         """
         Analyze and display resource requirements for deploying the model to target board.
         Uses the working directory from the store.
@@ -951,17 +1106,7 @@ def register_callbacks(app):
             window_size_samples = int((window_size_ms / 1000) * sampling_rate)
 
             # Estimate resource usage based on model type and target board
-            board_specs = {
-                'arduino:avr:uno': {'name': 'Arduino Uno', 'ram': 2, 'flash': 32, 'speed': 16},
-                'arduino:avr:nano': {'name': 'Arduino Nano', 'ram': 2, 'flash': 32, 'speed': 16},
-                'esp32:esp32:esp32': {'name': 'ESP32', 'ram': 520, 'flash': 4096, 'speed': 240},
-                'esp32:esp32:esp32s3': {'name': 'ESP32-S3', 'ram': 512, 'flash': 8192, 'speed': 240},
-                'm5stack:esp32:m5stick_c': {'name': 'M5StickC Plus2', 'ram': 320, 'flash': 8192, 'speed': 240},
-                'seeed:nrf52:xiaonRF52840Sense': {'name': 'XIAO nRF52840 Sense', 'ram': 256, 'flash': 1024, 'speed': 64},
-                'STM32:stm32:GenF4': {'name': 'STM32F4', 'ram': 192, 'flash': 1024, 'speed': 168}
-            }
-
-            board_info = board_specs.get(
+            board_info = BOARD_SPECS.get(
                 target_board, {'name': 'Unknown', 'ram': 100, 'flash': 1024, 'speed': 100})
 
             # Estimate RAM usage (buffer + feature array + model weights)
