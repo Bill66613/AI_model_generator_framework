@@ -16,8 +16,9 @@ This file documents **4 critical technical findings** discovered during framewor
 | 2 | Kurtosis/skewness sample-vs-population std | MEDIUM | ✅ FIXED | `deployment/base_generator.py`, `deployment/micropython_generator.py` | Ch.3 §CodeGen, Ch.5 §parity |
 | 3 | NN bias → default prediction behavior | INFO | DOCUMENTED | (no code change needed) | Ch.5 §analysis |
 | 4 | FFT precision mismatch → time-only features | DESIGN | RESOLVED | `utils/feature_extraction.py` | Ch.3 §FE rationale |
+| 5 | Edge-replication padding still distorts features + tiny dataset | CRITICAL | ⚠️ DATA QUALITY | `callbacks/feature_engineering_callbacks.py`, `callbacks/preprocessing_callbacks.py` | Ch.4 §accuracy, Ch.5 §deployment |
 
-**Action required:** Retrain models with fixed pipeline, collect before/after accuracy data for Ch.4.
+**Action required:** Collect longer recordings (≥1.5s per window), use sliding window to generate 50+ windows/class, retrain, collect before/after accuracy data for Ch.4.
 
 ### Cross-Reference Index
 
@@ -27,6 +28,8 @@ This file documents **4 critical technical findings** discovered during framewor
 - **Finding 4 (FFT)** → Decision: use only time-domain features → Thesis: Ch.3 feature selection rationale
 - **Parity checklist** (§5.3) → Validates all 8 aspects of training-deployment consistency
 
+- **Finding 5 (padding distortion + tiny dataset)** → Code: `callbacks/feature_engineering_callbacks.py` padding logic, `callbacks/preprocessing_callbacks.py` sliding window → Thesis: Ch.4 accuracy results, Ch.5 deployment analysis → Related: Finding 1 (preceded this, was the first padding issue)
+
 ---
 
 ## SESSION LOG
@@ -35,6 +38,7 @@ This file documents **4 critical technical findings** discovered during framewor
 |------|---------|-------------|
 | 2025-02-27 | Initial creation | Documented all 4 findings from device deployment debugging session |
 | 2025-02-27 | Restructure v2.0 | Added Quick Context, Cross-Reference Index, Session Log for cross-session AI continuity |
+| 2025-02-27 | Finding 5 added | Documented edge-replication distortion and tiny dataset root cause analysis |
 
 *Add a row here each time this file is updated.*
 
@@ -274,6 +278,87 @@ Training-deployment parity trong edge ML là một vấn đề **ít được ng
 6. ✅ **Cùng tốc độ lấy mẫu** — 100Hz trong cả thu thập và suy luận
 7. ✅ **Cùng kích thước cửa sổ** — 150 mẫu, từ metadata model
 8. ✅ **StandardScaler nhất quán** — cùng mean/std values, cùng clamp range
+
+---
+
+## 5. EDGE-REPLICATION VẪN LÀM SAI LỆCH ĐẶC TRƯNG + DỮ LIỆU QUÁ ÍT
+
+### 5.1 Mô tả vấn đề
+
+Sau khi sửa lỗi zero-padding (Finding 1) và kurtosis (Finding 2), model đã cải thiện: nhận đúng "still" và phần nào "running". Tuy nhiên, model KHÔNG BAO GIỜ dự đoán "walking" (Class 2) hay "walking_upstairs" (Class 4) — tất cả đều rơi vào "walking_downstairs" (Class 3).
+
+**Hai nguyên nhân gốc:**
+1. **Edge-replication padding vẫn gây sai lệch lớn** — mặc dù tốt hơn zero-padding, nó vẫn thay đổi nghiêm trọng các đặc trưng thống kê
+2. **Dataset quá nhỏ** — chỉ 109 mẫu huấn luyện / 33 đặc trưng (21 mẫu/lớp)
+
+### 5.2 Dữ liệu chứng minh
+
+#### Sai lệch đặc trưng do padding (ví dụ: cửa sổ running 70 mẫu → pad đến 150)
+
+| Đặc trưng | Gốc (70 mẫu) | Sau pad (150) | Sai lệch |
+|-----------|---------------|---------------|----------|
+| `acc_mag_std` | 7.661 | 5.269 | **-31.2%** |
+| `acc_mag_iqr` | 5.739 | 2.326 | **-59.5%** |
+| `acc_mag_kurtosis` | 1.253 | 4.970 | **+296.5%** |
+| `acc_mag_mean_crossing_rate` | 0.100 | 0.047 | **-53.3%** |
+| `gyro_mag_mean` | 209.303 | 151.771 | **-27.5%** |
+| `gyro_mag_median` | 181.094 | 101.430 | **-44.0%** |
+| `gyro_mag_iqr` | 171.228 | 73.236 | **-57.2%** |
+| `gyro_mag_kurtosis` | -0.666 | 2.404 | **+460.9%** |
+| `acc_jerk_mag_mean` | 2.249 | 1.042 | **-53.7%** |
+
+**Cơ chế gây sai lệch:** Edge-replication lặp lại giá trị cuối cùng → vùng padding có variance = 0, jerk = 0, không có mean-crossing. Điều này:
+- Giảm `std`, `iqr`, `rms` (vì thêm giá trị hằng số)  
+- Tăng `kurtosis` mạnh (phân phối bị nhọn ở giá trị cuối)
+- Giảm `mean_crossing_rate` mạnh (vùng padding không cross mean)
+- Giảm `jerk_mean` mạnh (jerk = 0 trong vùng constant)
+
+#### Dataset quá nhỏ
+
+| Chỉ số | Giá trị | Yêu cầu tối thiểu |
+|--------|---------|-------------------|
+| Tổng mẫu huấn luyện | 109 | ≥ 500 |
+| Mẫu/lớp | ~21 | ≥ 50 (tốt nhất 100+) |
+| Số đặc trưng | 33 | — |
+| Tỷ lệ mẫu/đặc trưng | 3.3:1 | ≥ 10:1 |
+| Kích thước cửa sổ gốc | 70-121 mẫu | 150 (target) |
+| Phần trăm padding | 19-53% | 0% (lý tưởng) |
+
+#### Các lớp walking gần giống nhau
+
+| Lớp | `acc_mag_mean` | `gyro_mag_mean` | `acc_jerk_mag_mean` |
+|-----|----------------|-----------------|---------------------|
+| walking | 10.937 | 106.037 | 0.670 |
+| walking_downstairs | 10.657 | 102.573 | 0.748 |
+| walking_upstairs | 10.325 | 75.799 | 0.649 |
+
+Walking và walking_downstairs chênh lệch chỉ ~3% trên hầu hết đặc trưng → với 21 mẫu/lớp, model không thể học biên phân lớp ổn định.
+
+### 5.3 Phân tích hệ quả
+
+**Tại sao model hoạt động 95.8% trên test set nhưng kém trên thiết bị:**
+1. Test set (24 mẫu) cũng là dữ liệu padding → cùng phân phối sai lệch với train
+2. Thiết bị thu thập 150 mẫu thật → đặc trưng nằm NGOÀI phân phối training
+3. Model quá ít dữ liệu → overfitting vào đặc trưng PADDING, không phải hoạt động thật
+4. Cụ thể: trên thiết bị, `std` cao hơn, `kurtosis` thấp hơn, `jerk` cao hơn → model "confuse" và chọn lớp mặc định (walking_downstairs)
+
+**So sánh với Edge Impulse:** Edge Impulse yêu cầu tối thiểu 3 phút dữ liệu mỗi lớp (~18,000 mẫu ở 100Hz) — framework của chúng tôi cần cảnh báo rõ hơn khi dữ liệu không đủ.
+
+### 5.4 Giải pháp
+
+**Cần thực hiện (theo thứ tự ưu tiên):**
+
+1. **Thu thập dữ liệu dài hơn**: Ghi ít nhất 3-5 giây mỗi hoạt động (300-500 mẫu ở 100Hz). Dùng data acquisition sketch kết hợp serial recording.
+
+2. **Dùng sliding window trong tab Preprocessing**: Framework ĐÃ có tính năng này (`callbacks/preprocessing_callbacks.py` → `generate_sliding_windows_from_current()`). Từ 1 recording 5 giây, trích xuất nhiều cửa sổ 1.5 giây chồng lấp (overlap 50%) → ~7 cửa sổ/recording. Nhân với 10 recording = 70 cửa sổ/lớp.
+
+3. **HOẶC giảm kích thước cửa sổ**: Đặt window size = 70 mẫu (0.7 giây) → loại bỏ hoàn toàn padding. Tradeoff: ít ngữ cảnh hơn cho phân loại.
+
+4. **Thử Random Forest**: Xử lý dataset nhỏ tốt hơn NN, ít overfitting hơn, robust hơn với sai lệch phân phối.
+
+5. **Cân nhắc hợp nhất walking classes**: Nếu walking/walking_downstairs/walking_upstairs không phân biệt được, gộp thành 1 lớp "walking" → tăng số mẫu/lớp + giảm complexity.
+
+**Mã nguồn không cần sửa** — vấn đề là chất lượng dữ liệu, không phải lỗi code. Framework nên bổ sung cảnh báo khi dataset quá nhỏ hoặc padding quá nhiều (cải tiến UX).
 
 ---
 
