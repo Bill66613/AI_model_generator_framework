@@ -14,7 +14,8 @@ from sklearn.model_selection import train_test_split
 import glob
 
 from config.config import (
-    PERSISTENT_DIR, METADATA_FILE, WINDOWS_DIR
+    PERSISTENT_DIR, METADATA_FILE, WINDOWS_DIR,
+    SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE
 )
 from utils.model_training import extract_time_domain_features, extract_frequency_domain_features, create_feature_vector
 
@@ -214,24 +215,33 @@ def register_callbacks(app):
 
 
     @app.callback(
-        Output('global-test-split-display', 'children'),
+        [Output('global-test-split-display', 'children'),
+         Output('execute-feature-engineering-btn', 'disabled')],
         [Input('global-train-split', 'value'),
          Input('global-val-split', 'value')]
     )
     def calculate_test_split(train_ratio, val_ratio):
         """
         Calculate and display the test split percentage.
+        Disables the execute button when the split is invalid.
         """
         if train_ratio is None or val_ratio is None:
-            return "--"
+            return "--", True
 
         test_ratio = 1.0 - train_ratio - val_ratio
 
         # Validate
-        if test_ratio < 0:
-            return html.Span("Error: Invalid split!", style={'color': '#dc3545'})
+        if test_ratio < 0.01:
+            return (
+                html.Span(
+                    f"⚠️ Invalid split! Train ({train_ratio*100:.0f}%) + "
+                    f"Val ({val_ratio*100:.0f}%) ≥ 100%",
+                    style={'color': '#dc3545', 'font-size': '16px'}
+                ),
+                True  # disable button
+            )
 
-        return f"{test_ratio*100:.0f}%"
+        return f"{test_ratio*100:.0f}%", False
 
 
     @app.callback(
@@ -272,6 +282,17 @@ def register_callbacks(app):
             return html.Div("⚠️ Please select at least one activity label",
                             style={'color': '#ff9800', 'padding': '15px'}), "", {}
 
+        # Validate split ratios
+        if train_ratio is None or val_ratio is None:
+            return html.Div("⚠️ Please set train and validation split ratios",
+                            style={'color': '#ff9800', 'padding': '15px'}), "", {}
+        test_ratio = 1.0 - train_ratio - val_ratio
+        if test_ratio < 0.01:
+            return html.Div(
+                f"⚠️ Invalid split: Train ({train_ratio*100:.0f}%) + "
+                f"Val ({val_ratio*100:.0f}%) leaves no room for test set",
+                style={'color': '#dc3545', 'padding': '15px'}), "", {}
+
         try:
             # Use stored base directory or default to PERSISTENT_DIR
             if not base_dir:
@@ -311,7 +332,7 @@ def register_callbacks(app):
                 (target_window_size / 1000) * sampling_rate)
 
             # Step 3: Zero-pad windows to target size if needed
-            sensor_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+            sensor_cols = SENSOR_COLUMNS
             padded_windows = []
             padding_stats = {'padded': 0, 'original_size': 0}
 
@@ -388,14 +409,10 @@ def register_callbacks(app):
                         df_window, sensor_cols, sampling_rate
                     )
                 elif feature_method == 'raw':
-                    # Raw sensor values (mean of window) - 6 features
+                    # Raw sensor values (mean of window) — N features
                     features = {
-                        'aX': df_window['aX'].mean(),
-                        'aY': df_window['aY'].mean(),
-                        'aZ': df_window['aZ'].mean(),
-                        'gX': df_window['gX'].mean(),
-                        'gY': df_window['gY'].mean(),
-                        'gZ': df_window['gZ'].mean()
+                        col: df_window[col].mean()
+                        for col in sensor_cols if col in df_window.columns
                     }
                     feature_df = pd.DataFrame([features])
                 else:
@@ -511,6 +528,7 @@ def register_callbacks(app):
                 'window_size_samples': target_window_samples,
                 'feature_method': feature_method,
                 'normalization_method': normalization_method,
+                'sensor_columns': sensor_cols,
                 'feature_names': feature_names,
                 'num_features': len(feature_names),
                 'selected_labels': selected_labels,
@@ -530,15 +548,18 @@ def register_callbacks(app):
             with open(fe_meta_file, 'w') as f:
                 json.dump(fe_metadata, f, indent=2)
 
-            # Also save to engineered-dataset-store for backwards compatibility
+            # Store lightweight reference in engineered-dataset-store
+            # (full data is persisted on disk; avoid sending large arrays through dcc.Store)
             engineered_data = {
-                'train': {'X': X_train.tolist(), 'y': y_train.tolist()},
-                'val': {'X': X_val.tolist(), 'y': y_val.tolist()},
-                'test': {'X': X_test.tolist(), 'y': y_test.tolist()},
+                'training_dir': training_dir,
+                'dataset_name': dataset_name,
                 'feature_names': feature_names,
                 'scaler': normalization_method,
                 'labels': selected_labels,
-                'feature_method': feature_method
+                'feature_method': feature_method,
+                'n_train': len(y_train),
+                'n_val': len(y_val),
+                'n_test': len(y_test),
             }
 
             # Step 6: Display statistics

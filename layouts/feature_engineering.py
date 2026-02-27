@@ -145,7 +145,7 @@ layout = html.Div([
 
                 # Normalization method
                 html.Div([
-                    html.Label("Normalization Method:", style={
+                    html.Label("Normalization Method (applied during training):", style={
                         'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Dropdown(
                         id='global-normalization-method',
@@ -164,8 +164,16 @@ layout = html.Div([
                         style={'margin-bottom': '20px'}
                     ),
                     html.Div([
-                        html.P("ℹ️ Standard Scaler recommended for most ML models", style={
-                            'font-size': '12px', 'color': '#666', 'font-style': 'italic', 'margin': '0'
+                        html.P([
+                            "ℹ️ Normalization is ",
+                            html.Strong("not applied here"),
+                            " — it is saved to metadata and applied during ",
+                            html.Strong("model training"),
+                            " so the scaler is bundled with the model for deployment."
+                        ], style={
+                            'font-size': '12px', 'color': '#856404', 'margin': '0',
+                            'padding': '8px', 'background': '#fff3cd',
+                            'border-radius': '4px', 'border-left': '3px solid #ffc107'
                         })
                     ])
                 ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'})

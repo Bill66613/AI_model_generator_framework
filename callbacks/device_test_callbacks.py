@@ -3,10 +3,17 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pickle
 import os
+import json
+import glob
 import numpy as np
 import pandas as pd
 from utils.device_reader import device_reader
 from utils.model_training import create_feature_vector
+
+from config.config import (
+    PERSISTENT_DIR, SENSOR_COLUMNS, ACCEL_COLUMNS, GYRO_COLUMNS,
+    DEFAULT_SAMPLING_RATE
+)
 
 # Cache for loaded model and scaler
 _model_cache = {
@@ -158,39 +165,27 @@ def register_callbacks(app):
             row_heights=[0.5, 0.5]
         )
 
-        # Accelerometer data
-        fig.add_trace(
-            go.Scatter(x=data['time'], y=data['aX'], name='aX',
-                       line=dict(color='#FF6B6B', width=2)),
-            row=1, col=1
-        )
-        fig.add_trace(
-            go.Scatter(x=data['time'], y=data['aY'], name='aY',
-                       line=dict(color='#4ECDC4', width=2)),
-            row=1, col=1
-        )
-        fig.add_trace(
-            go.Scatter(x=data['time'], y=data['aZ'], name='aZ',
-                       line=dict(color='#45B7D1', width=2)),
-            row=1, col=1
-        )
+        # Colour palette for traces
+        accel_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFD93D', '#6BCB77', '#E8A87C']
+        gyro_colors  = ['#FFA07A', '#98D8C8', '#6C88C4', '#C9B1FF', '#FF9CEE', '#A0D2DB']
 
-        # Gyroscope data
-        fig.add_trace(
-            go.Scatter(x=data['time'], y=data['gX'], name='gX',
-                       line=dict(color='#FFA07A', width=2)),
-            row=2, col=1
-        )
-        fig.add_trace(
-            go.Scatter(x=data['time'], y=data['gY'], name='gY',
-                       line=dict(color='#98D8C8', width=2)),
-            row=2, col=1
-        )
-        fig.add_trace(
-            go.Scatter(x=data['time'], y=data['gZ'], name='gZ',
-                       line=dict(color='#6C88C4', width=2)),
-            row=2, col=1
-        )
+        # Accelerometer data (dynamic — uses ACCEL_COLUMNS)
+        for i, col in enumerate(ACCEL_COLUMNS):
+            if col in data:
+                fig.add_trace(
+                    go.Scatter(x=data['time'], y=data[col], name=col,
+                               line=dict(color=accel_colors[i % len(accel_colors)], width=2)),
+                    row=1, col=1
+                )
+
+        # Gyroscope data (dynamic — uses GYRO_COLUMNS)
+        for i, col in enumerate(GYRO_COLUMNS):
+            if col in data:
+                fig.add_trace(
+                    go.Scatter(x=data['time'], y=data[col], name=col,
+                               line=dict(color=gyro_colors[i % len(gyro_colors)], width=2)),
+                    row=2, col=1
+                )
 
         fig.update_xaxes(title_text="Time (s)", row=2, col=1)
         fig.update_yaxes(title_text="Acceleration (m/s²)", row=1, col=1)
@@ -209,69 +204,97 @@ def register_callbacks(app):
         [Output('activity-prediction', 'children'),
          Output('prediction-confidence', 'children')],
         Input('inference-interval', 'n_intervals'),
+        State('working-directory-store', 'data'),
         prevent_initial_call=True
     )
-    def run_inference(n_intervals):
-        """Run model inference on latest data"""
+    def run_inference(n_intervals, base_dir):
+        """Run model inference on latest data.
+
+        Loads the most recent trained model from the working directory,
+        reads the feature-engineering metadata so that inference uses the
+        **same** feature method, window size and sampling rate as training.
+        """
         try:
             if not device_reader.is_connected:
                 return "No device connected", ""
 
-            # Check if model exists
-            model_path = 'persistent_data/trained_model.pkl'
-            scaler_path = 'persistent_data/scaler.pkl'
+            # ---- Resolve working directory ----
+            if not base_dir:
+                base_dir = PERSISTENT_DIR
 
-            if not os.path.exists(model_path) or not os.path.exists(scaler_path):
+            models_dir = os.path.join(base_dir, 'models')
+            training_dir = os.path.join(base_dir, 'training')
+
+            # ---- Locate trained model file (most recent .joblib) ----
+            model_files = sorted(
+                glob.glob(os.path.join(models_dir, '*.joblib')),
+                key=os.path.getmtime, reverse=True
+            )
+            if not model_files:
                 return "No trained model available", "Train a model in the Training tab first"
 
-            # Get latest window
-            window_data = device_reader.get_latest_window(150)
-
-            if window_data is None:
-                return "Collecting data...", f"Need 150 samples (current: {len(device_reader.data_buffer['time'])})"
-
-            # Load or use cached model and scaler
+            model_path = model_files[0]
             model_modified = os.path.getmtime(model_path)
 
+            # ---- Locate FE metadata (most recent) ----
+            fe_meta_files = sorted(
+                glob.glob(os.path.join(training_dir, '*_fe_metadata.json')),
+                key=os.path.getmtime, reverse=True
+            )
+            fe_meta = {}
+            if fe_meta_files:
+                with open(fe_meta_files[0], 'r') as f:
+                    fe_meta = json.load(f)
+
+            # Read parameters from metadata, with sensible fallbacks
+            window_size_samples = fe_meta.get(
+                'window_size_samples',
+                int(fe_meta.get('window_size_ms', 1500) / 1000 * fe_meta.get('sampling_rate', DEFAULT_SAMPLING_RATE))
+            )
+            sampling_rate = fe_meta.get('sampling_rate', DEFAULT_SAMPLING_RATE)
+            feature_method = fe_meta.get('feature_method', 'orientation_invariant_time_only')
+            include_freq = fe_meta.get('include_frequency', False)
+            orientation_robust = fe_meta.get('orientation_robust', True)
+            include_per_axis = fe_meta.get('include_per_axis', False)
+            sensor_cols = fe_meta.get('sensor_columns', SENSOR_COLUMNS)
+
+            # ---- Get latest window from device ----
+            window_data = device_reader.get_latest_window(window_size_samples)
+
+            if window_data is None:
+                current = len(device_reader.data_buffer['time'])
+                return "Collecting data...", f"Need {window_size_samples} samples (current: {current})"
+
+            # ---- Load / cache model ----
             if (_model_cache['model'] is None or
                 _model_cache['last_modified'] is None or
                     _model_cache['last_modified'] < model_modified):
-
-                # Load model and scaler (only when needed)
-                with open(model_path, 'rb') as f:
-                    model_info = pickle.load(f)
-                _model_cache['model'] = model_info['model']
-                _model_cache['model_info'] = model_info
-
-                with open(scaler_path, 'rb') as f:
-                    _model_cache['scaler'] = pickle.load(f)
-
+                import joblib as _jl
+                model_bundle = _jl.load(model_path)
+                _model_cache['model'] = model_bundle.get('model', model_bundle)
+                _model_cache['model_info'] = model_bundle
+                _model_cache['scaler'] = model_bundle.get('scaler')
                 _model_cache['last_modified'] = model_modified
-                print(f"Loaded model from disk (modified: {model_modified})")
+                print(f"Loaded model from {model_path}")
 
-            # Use cached model and scaler
             model = _model_cache['model']
             scaler = _model_cache['scaler']
-            model_info = _model_cache['model_info']
 
-            # Convert window data to DataFrame
-            window_df = pd.DataFrame({
-                'aX': window_data['aX'],
-                'aY': window_data['aY'],
-                'aZ': window_data['aZ'],
-                'gX': window_data['gX'],
-                'gY': window_data['gY'],
-                'gZ': window_data['gZ']
-            })
+            # ---- Build feature vector using the SAME method as training ----
+            window_df = pd.DataFrame(window_data)
 
-            # Extract features using the same method as training
-            sensor_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
-            include_freq = model_info.get('include_frequency', False)
             features_df = create_feature_vector(
-                window_df, sensor_cols, sampling_rate=100, include_frequency=include_freq)
+                window_df, sensor_cols, sampling_rate=sampling_rate,
+                include_frequency=include_freq,
+                orientation_robust=orientation_robust,
+                include_per_axis=include_per_axis
+            )
 
-            # Scale features
-            features_scaled = scaler.transform(features_df)
+            # Scale features (if a scaler was saved with the model)
+            if scaler is not None:
+                features_scaled = scaler.transform(features_df)
+            else:
+                features_scaled = features_df.values
 
             # Predict
             prediction = model.predict(features_scaled)[0]

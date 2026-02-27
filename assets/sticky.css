@@ -1,0 +1,26 @@
+/* ------------------------------------------------------------------ */
+/* Sticky progress bar + tab header strip                             */
+/* Dash renders dcc.Tabs as:                                          */
+/*   .tab-container > .tab-parent (header row) + .tab-content         */
+/* We make the progress bar and tab-parent individually sticky so     */
+/* they stack at the top while tab content scrolls underneath.        */
+/* ------------------------------------------------------------------ */
+
+#workflow-progress-bar {
+    position: sticky;
+    top: 0;
+    z-index: 1001;
+    background: #fafafa;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* The row of tab labels rendered by dcc.Tabs */
+.tab-parent {
+    position: sticky;
+    /* Sits right below the progress bar (~54 px tall). */
+    /* Using a generous value; the browser clamps to actual bar height. */
+    top: 54px;
+    z-index: 1000;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}

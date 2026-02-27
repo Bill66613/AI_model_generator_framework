@@ -5,6 +5,8 @@ import io
 from sklearn.model_selection import train_test_split
 from scipy.signal import butter, filtfilt
 
+from config.config import SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE
+
 
 def parse_csv(contents, filename):
     content_type, content_string = contents.split(',')
@@ -20,21 +22,47 @@ def parse_csv(contents, filename):
     return df, None
 
 
-def clean_data(df, method):
-    # Assume sensor columns: aX, aY, aZ, gX, gY, gZ
-    required = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+def detect_sensor_columns(df, default=None):
+    """Detect which sensor columns are present in a DataFrame.
+
+    Returns the intersection of the DataFrame's columns with the expected
+    sensor columns (from *default* or the global ``SENSOR_COLUMNS``).
+    """
+    expected = default or SENSOR_COLUMNS
+    return [c for c in expected if c in df.columns]
+
+
+def clean_data(df, method, sensor_cols=None):
+    """Clean data using the specified method.
+
+    Args:
+        df: Input DataFrame.
+        method: ``'remove_missing'`` or ``'filter_outliers'``.
+        sensor_cols: Columns to operate on.  Defaults to auto-detected
+                     sensor columns present in *df*.
+    """
+    if sensor_cols is None:
+        sensor_cols = detect_sensor_columns(df)
     if method == 'remove_missing':
-        df = df.dropna(subset=required)
+        df = df.dropna(subset=sensor_cols)
     elif method == 'filter_outliers':
-        for col in required:
+        for col in sensor_cols:
             mean, std = df[col].mean(), df[col].std()
             df = df[(df[col] >= mean - 3*std) & (df[col] <= mean + 3*std)]
     return df
 
-# Function to apply a low-pass filter
 
+def low_pass_filter(data, cutoff=5, fs=None, order=2):
+    """Apply a Butterworth low-pass filter.
 
-def low_pass_filter(data, cutoff=5, fs=50, order=2):
+    Args:
+        data: DataFrame of numeric columns.
+        cutoff: Cutoff frequency in Hz.
+        fs: Sampling frequency in Hz.  Defaults to ``DEFAULT_SAMPLING_RATE``.
+        order: Filter order.
+    """
+    if fs is None:
+        fs = DEFAULT_SAMPLING_RATE
     nyquist = 0.5 * fs
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype='low', analog=False)

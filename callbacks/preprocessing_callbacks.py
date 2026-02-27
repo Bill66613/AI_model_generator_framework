@@ -6,47 +6,36 @@ from scipy.signal import savgol_filter
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 import numpy as np
 
 from config.config import (
     PERSISTENT_DIR, METADATA_FILE, DATASETS_DIR, WINDOWS_DIR, TRAINING_DIR, MODELS_DIR,
+    SENSOR_COLUMNS, ACCEL_COLUMNS, GYRO_COLUMNS,
+    DEFAULT_SAMPLING_RATE, get_sampling_rate_from_metadata,
     get_dataset_path, get_window_path, get_window_pattern, get_training_data_path
 )
 from utils.data_processing import clean_data, low_pass_filter
-from utils.model_training import extract_time_domain_features, extract_frequency_domain_features
 
 
-def _get_feature_method_label(feature_method):
-    """Convert feature method code to descriptive label."""
-    labels = {
-        'all': 'Time + Frequency Domain',
-        'statistical': 'Raw Sensor Axes Only',
-        'time_domain': 'Time-Domain Only',
-        'custom': 'Custom Selection'
-    }
-    return labels.get(feature_method, feature_method)
-
-
-def compute_window_quality(window_data, sensor_cols=['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']):
+def compute_window_quality(window_data, sensor_cols=None):
     """
     Calculate quality score for a window.
 
     Args:
         window_data: DataFrame with sensor readings
-        sensor_cols: List of sensor column names
+        sensor_cols: List of sensor column names (defaults to SENSOR_COLUMNS)
 
     Returns:
         quality_score: 0-1 (1 = high quality)
         reasons: List of quality issues
     """
+    if sensor_cols is None:
+        sensor_cols = SENSOR_COLUMNS
     quality_score = 1.0
     reasons = []
 
     # Check 1: Sufficient variance (not stationary/flat line)
-    available_accel = [col for col in [
-        'aX', 'aY', 'aZ'] if col in window_data.columns]
+    available_accel = [col for col in ACCEL_COLUMNS if col in window_data.columns]
     if available_accel:
         variance = window_data[available_accel].var().mean()
         if variance < 0.01:
@@ -102,8 +91,7 @@ def generate_sliding_windows_from_current(current_windows, df, window_size_sampl
     good_windows = []
     flagged_windows = []
 
-    sensor_cols = [col for col in df.columns if col in [
-        'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+    sensor_cols = [col for col in df.columns if col in SENSOR_COLUMNS]
 
     # Sort windows by start time (ensure numeric values)
     sorted_windows = sorted(
@@ -447,21 +435,28 @@ def register_callbacks(app):
         if not os.path.exists(file_path):
             return no_update, no_update
 
+        # Load metadata to get the actual sampling rate for this dataset
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        sampling_rate = DEFAULT_SAMPLING_RATE
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
+
         df = pd.read_csv(file_path)
 
         # Clean the data
         df = clean_data(df, method='remove_missing')
         df = clean_data(df, method='filter_outliers')
 
-        # Apply low-pass filter
-        df = low_pass_filter(df, cutoff=5, fs=50, order=2)
+        # Apply low-pass filter (use actual sampling rate, not hardcoded fs=50)
+        df = low_pass_filter(df, cutoff=5, fs=sampling_rate, order=2)
 
         # Apply Savitzky-Golay filter
         for col in df.select_dtypes(include=['float64', 'int64']).columns:
             df[col] = savgol_filter(df[col], window_length=5, polyorder=2)
 
         # Create time axis for proper labeling
-        sampling_rate = 100  # Default sampling rate
         df['Time_seconds'] = df.index / sampling_rate
 
         # Get sensor columns for plotting
@@ -576,7 +571,7 @@ def register_callbacks(app):
         # Get sensor columns
         sensor_cols = [col for col in df.columns if col not in [
             'Time_seconds', 'Window']]
-        priority_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+        priority_cols = SENSOR_COLUMNS
         available_cols = [col for col in priority_cols if col in sensor_cols]
 
         if not available_cols:
@@ -855,7 +850,7 @@ def register_callbacks(app):
         # Get sensor columns for y-axis range
         sensor_cols = [col for col in df.columns if col not in [
             'Time_seconds', 'Window']]
-        priority_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+        priority_cols = SENSOR_COLUMNS
         available_cols = [col for col in priority_cols if col in sensor_cols]
 
         if not available_cols:
@@ -1052,7 +1047,7 @@ def register_callbacks(app):
                 # Get sensor columns
                 sensor_cols = [col for col in df.columns if col not in [
                     'Time_seconds', 'Window']]
-                priority_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+                priority_cols = SENSOR_COLUMNS
                 available_cols = [
                     col for col in priority_cols if col in sensor_cols]
 
@@ -1241,7 +1236,7 @@ def register_callbacks(app):
             return ""
 
         # Calculate window parameters
-        sampling_rate = 100  # Hz
+        sampling_rate = DEFAULT_SAMPLING_RATE
         window_samples = int((window_size_ms / 1000) * sampling_rate)
         stride = int(window_samples * (1 - overlap_percent / 100))
 
@@ -1360,8 +1355,7 @@ def register_callbacks(app):
             if preview_sample_count > 0:
                 preview_data = pd.concat([good_windows[i]['data'] for i in range(
                     preview_sample_count)], ignore_index=True)
-                sensor_cols = [col for col in preview_data.columns if col in [
-                    'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+                sensor_cols = [col for col in preview_data.columns if col in SENSOR_COLUMNS]
 
                 preview_fig = go.Figure()
                 colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
@@ -1554,8 +1548,7 @@ def register_callbacks(app):
                 window_df = pd.DataFrame(window_info['data'])
 
                 # Extract sensor columns
-                sensor_cols = [col for col in window_df.columns if col in [
-                    'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
+                sensor_cols = [col for col in window_df.columns if col in SENSOR_COLUMNS]
 
                 # Generate unique filename
                 window_id = f"sliding_{idx}"
@@ -1613,9 +1606,8 @@ def register_callbacks(app):
 
             # Create visualization of all windows
             combined_data = pd.concat(all_selected_data, ignore_index=True)
-            sensor_cols = [col for col in combined_data.columns if col in [
-                'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']]
-            available_cols = sensor_cols[:6]
+            sensor_cols = [col for col in combined_data.columns if col in SENSOR_COLUMNS]
+            available_cols = sensor_cols[:len(SENSOR_COLUMNS)]
 
             fig = go.Figure()
             colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
@@ -1746,7 +1738,7 @@ def register_callbacks(app):
 
         # Get sensor columns
         sensor_cols = [col for col in df.columns if col not in ['Time_seconds']]
-        priority_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+        priority_cols = SENSOR_COLUMNS
         available_cols = [col for col in priority_cols if col in sensor_cols]
 
         if not available_cols:
@@ -2500,475 +2492,17 @@ def register_callbacks(app):
 
         return test_display, info_msg
 
-
-    @app.callback(
-        Output('preprocessed-training-data', 'data'),
-        Output('preprocessing-results', 'children'),
-        Input('preprocess-for-training-btn', 'n_clicks'),
-        State('training-dataset-selector', 'value'),
-        State('normalization-method', 'value'),
-        State('feature-selection-method', 'value'),
-        State('dataset-selector_', 'value'),
-        State('working-directory-store', 'data'),
-        prevent_initial_call=True
-    )
-    def preprocess_for_training(n_clicks, selected_files, norm_method, feature_method, dataset_name, base_dir):
-        """Preprocess selected split windows for model training."""
-        if not (selected_files and norm_method and feature_method):
-            return {}, html.Div("⚠️ Please select datasets and preprocessing options.", style={'color': '#FF9800'})
-
-        try:
-            # Get the correct label from metadata.json
-            activity_label = None
-            try:
-                if not base_dir:
-                    base_dir = PERSISTENT_DIR
-                metadata_file = os.path.join(base_dir, 'metadata.json')
-
-                if os.path.exists(metadata_file):
-                    with open(metadata_file, 'r') as f:
-                        metadata = json.load(f)
-
-                    dataset_info = metadata.get(dataset_name, {})
-                    # Get the actual label from metadata
-                    activity_label = dataset_info.get('label', None)
-
-                    if activity_label:
-                        print(
-                            f"DEBUG: Dataset '{dataset_name}' has label '{activity_label}' from metadata")
-                    else:
-                        print(
-                            f"WARNING: No label found in metadata for '{dataset_name}', using fallback")
-                else:
-                    print(f"WARNING: Metadata file not found at {METADATA_FILE}")
-            except Exception as meta_error:
-                print(f"WARNING: Error reading metadata: {meta_error}")
-
-            # Fallback: extract from dataset name if metadata not available
-            if not activity_label:
-                activity_label = dataset_name.replace('.csv', '').rsplit('_', 1)[0]
-                print(
-                    f"DEBUG: Using fallback label '{activity_label}' from dataset name")
-
-            # Load and combine all selected split windows
-            all_data = []
-            file_info = []
-
-            for file_path in selected_files:
-                if os.path.exists(file_path):
-                    df = pd.read_csv(file_path)
-
-                    # Extract window ID from filename
-                    filename = os.path.basename(file_path)
-                    parts = filename.replace(f"_{dataset_name}", "").replace(
-                        "dragged_window_", "")
-                    window_id = parts.split("_")[0] if "_" in parts else parts
-
-                    # Add window ID and label for classification
-                    df['Window_ID'] = window_id
-                    # Use the label from metadata.json
-                    df['Activity_Label'] = activity_label
-
-                    all_data.append(df)
-                    file_info.append({
-                        'window_id': window_id,
-                        'samples': len(df),
-                        'file_path': file_path
-                    })
-
-            if not all_data:
-                return {}, html.Div("❌ No valid data files found.", style={'color': '#dc3545'})
-
-            # Extract features from each window
-            sensor_cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
-            extracted_features_list = []
-            labels_list = []
-            window_ids_list = []
-
-            for df in all_data:
-                # Get window-specific data
-                window_id = df['Window_ID'].iloc[0]
-                activity_label = df['Activity_Label'].iloc[0]
-
-                # Remove metadata columns for feature extraction
-                window_data = df[sensor_cols]
-
-                # Extract features based on selection method
-                if feature_method == 'statistical':
-                    # Use only raw sensor values (no feature engineering)
-                    # Average each sensor across the window
-                    features_df = pd.DataFrame([{
-                        col: window_data[col].mean() for col in sensor_cols
-                    }])
-                elif feature_method == 'time_domain':
-                    # Extract 90 time-domain features (15 per axis)
-                    features_df = extract_time_domain_features(
-                        window_data, sensor_cols)
-                elif feature_method == 'all':
-                    # Extract both time-domain (90) and frequency-domain (48) features = 138 total
-                    time_features = extract_time_domain_features(
-                        window_data, sensor_cols)
-                    freq_features = extract_frequency_domain_features(
-                        window_data, sensor_cols)
-                    features_df = pd.concat([time_features, freq_features], axis=1)
-                else:  # custom
-                    # Default to time-domain
-                    features_df = extract_time_domain_features(
-                        window_data, sensor_cols)
-
-                extracted_features_list.append(features_df)
-                labels_list.append(activity_label)
-                window_ids_list.append(window_id)
-
-            # Combine all extracted features
-            features_df = pd.concat(extracted_features_list, ignore_index=True)
-            feature_cols = features_df.columns.tolist()
-
-            if not feature_cols:
-                return {}, html.Div("❌ No features available for training.", style={'color': '#dc3545'})
-
-            # Prepare arrays
-            X = features_df.values
-            y = np.array(labels_list)
-            window_ids = np.array(window_ids_list)
-
-            # Handle any missing values
-            if np.isnan(X).any():
-                X = np.nan_to_num(X, nan=0.0)
-
-            # Apply normalization
-            scaler = None
-            if norm_method == 'minmax':
-                scaler = MinMaxScaler()
-                X_scaled = scaler.fit_transform(X)
-            elif norm_method == 'standard':
-                scaler = StandardScaler()
-                X_scaled = scaler.fit_transform(X)
-            elif norm_method == 'robust':
-                scaler = RobustScaler()
-                X_scaled = scaler.fit_transform(X)
-            else:  # none
-                X_scaled = X
-
-            # Store preprocessed data
-            preprocessed_data = {
-                'features': X_scaled.tolist(),
-                'labels': y.tolist(),
-                'window_ids': window_ids.tolist(),
-                'feature_names': feature_cols,
-                'scaler_type': norm_method,
-                'scaler_params': scaler.get_params() if scaler else None,
-                'original_shape': X_scaled.shape
-            }
-
-            # Create results summary
-            results_content = html.Div([
-                html.H5("✅ Preprocessing Complete", style={
-                        'color': '#4CAF50', 'margin': '0 0 15px 0'}),
-                html.Div([
-                    html.Div([
-                        html.Span("📊 Total Samples: ", style={
-                                  'font-weight': 'bold'}),
-                        html.Span(f"{len(X_scaled)}")
-                    ], style={'margin-bottom': '5px'}),
-                    html.Div([
-                        html.Span("🎯 Features Extracted: ",
-                                  style={'font-weight': 'bold'}),
-                        html.Span(
-                            f"{len(feature_cols)} features ({_get_feature_method_label(feature_method)})")
-                    ], style={'margin-bottom': '5px'}),
-                    html.Div([
-                        html.Span("📏 Normalization: ", style={
-                                  'font-weight': 'bold'}),
-                        html.Span(
-                            f"{norm_method.title() if norm_method != 'none' else 'None'}")
-                    ], style={'margin-bottom': '5px'}),
-                    html.Div([
-                        html.Span("🗂️ Windows Used: ", style={
-                                  'font-weight': 'bold'}),
-                        html.Span(f"{len(file_info)} windows")
-                    ], style={'margin-bottom': '10px'}),
-                    html.Details([
-                        html.Summary("View Selected Features", style={
-                                     'cursor': 'pointer', 'font-weight': 'bold'}),
-                        html.Div([
-                            html.Span(f"{i+1}. {col}") for i, col in enumerate(feature_cols[:10])
-                        ] + ([html.Span(f"... and {len(feature_cols)-10} more")] if len(feature_cols) > 10 else []),
-                            style={'margin-top': '10px', 'font-family': 'monospace', 'font-size': '12px'})
-                    ])
-                ])
-            ])
-
-            return preprocessed_data, results_content
-
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            print(f"ERROR in preprocess_for_training: {error_details}")
-            error_msg = html.Div([
-                html.H5("❌ Error during preprocessing", style={
-                        'color': '#dc3545', 'margin-bottom': '10px'}),
-                html.P(f"Error: {str(e)}", style={'margin-bottom': '5px'}),
-                html.Details([
-                    html.Summary("Show technical details", style={
-                                 'cursor': 'pointer', 'color': '#6c757d'}),
-                    html.Pre(error_details, style={'font-size': '11px', 'background-color': '#f8f9fa',
-                             'padding': '10px', 'border-radius': '4px', 'overflow': 'auto'})
-                ])
-            ])
-            return {}, error_msg
-
-
-    @app.callback(
-        Output('train-test-data', 'data'),
-        Output('train-test-split-graph', 'figure'),
-        Input('train-test-split-btn', 'n_clicks'),
-        State('preprocessed-training-data', 'data'),
-        State('train-split', 'value'),
-        State('val-split', 'value'),
-        State('random-state-input', 'value'),
-        prevent_initial_call=True
-    )
-    def perform_enhanced_train_val_test_split(n_clicks, preprocessed_data, train_ratio, val_ratio, random_state):
-        """Perform train-validation-test split on preprocessed data and visualize results."""
-        if not (preprocessed_data and train_ratio is not None and val_ratio is not None):
-            return {}, {}
-
-        try:
-            # Extract data
-            X = np.array(preprocessed_data['features'])
-            y = np.array(preprocessed_data['labels'])
-            feature_names = preprocessed_data['feature_names']
-
-            # Calculate test ratio
-            test_ratio = 1.0 - train_ratio - val_ratio
-            if test_ratio < 0.1:
-                test_ratio = 0.1
-                train_ratio = 0.9 - val_ratio
-
-            # Perform split based on validation ratio
-            if val_ratio == 0:
-                # 2-way split: train and test only (use CV during training)
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=test_ratio, random_state=random_state, stratify=y
-                )
-                X_val, y_val = None, None
-            else:
-                # 3-way split: train, validation, and test
-                # First split: separate test set
-                X_temp, X_test, y_temp, y_test = train_test_split(
-                    X, y, test_size=test_ratio, random_state=random_state, stratify=y
-                )
-
-                # Second split: separate train and validation from remaining data
-                val_size_adjusted = val_ratio / (train_ratio + val_ratio)
-                X_train, X_val, y_train, y_val = train_test_split(
-                    X_temp, y_temp, test_size=val_size_adjusted, random_state=random_state, stratify=y_temp
-                )
-
-            # Store split data
-            split_data = {
-                'X_train': X_train.tolist(),
-                'X_val': X_val.tolist() if X_val is not None else [],
-                'X_test': X_test.tolist(),
-                'y_train': y_train.tolist(),
-                'y_val': y_val.tolist() if y_val is not None else [],
-                'y_test': y_test.tolist(),
-                'feature_names': feature_names,
-                'train_ratio': train_ratio,
-                'val_ratio': val_ratio,
-                'test_ratio': test_ratio,
-                'random_state': random_state,
-                'has_validation': val_ratio > 0
-            }
-
-            # Create visualization
-            fig = go.Figure()
-
-            # Sample a few features for visualization
-            max_features_to_plot = min(6, len(feature_names))
-            selected_features = feature_names[:max_features_to_plot]
-
-            colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
-                      '#d62728', '#9467bd', '#8c564b']
-
-            for i, feature in enumerate(selected_features):
-                feature_idx = feature_names.index(feature)
-                current_idx = 0
-
-                # Training data
-                fig.add_trace(go.Scatter(
-                    x=list(range(current_idx, current_idx + len(X_train))),
-                    y=X_train[:, feature_idx],
-                    mode='markers',
-                    name=f'{feature} (Train)',
-                    marker=dict(color=colors[i % len(colors)],
-                                symbol='circle', size=4),
-                    opacity=0.7
-                ))
-                current_idx += len(X_train)
-
-                # Validation data (if present)
-                if val_ratio > 0:
-                    fig.add_trace(go.Scatter(
-                        x=list(range(current_idx, current_idx + len(X_val))),
-                        y=X_val[:, feature_idx],
-                        mode='markers',
-                        name=f'{feature} (Val)',
-                        marker=dict(color=colors[i % len(colors)],
-                                    symbol='square', size=4),
-                        opacity=0.7
-                    ))
-                    current_idx += len(X_val)
-
-                # Test data
-                fig.add_trace(go.Scatter(
-                    x=list(range(current_idx, current_idx + len(X_test))),
-                    y=X_test[:, feature_idx],
-                    mode='markers',
-                    name=f'{feature} (Test)',
-                    marker=dict(color=colors[i % len(colors)],
-                                symbol='diamond', size=4),
-                    opacity=0.7
-                ))
-
-            # Add vertical lines to separate sets
-            fig.add_vline(
-                x=len(X_train)-0.5,
-                line=dict(color="green", width=2, dash="dash"),
-                annotation_text="Train | Val" if val_ratio > 0 else "Train | Test",
-                annotation_position="top"
-            )
-
-            if val_ratio > 0:
-                fig.add_vline(
-                    x=len(X_train) + len(X_val) - 0.5,
-                    line=dict(color="red", width=2, dash="dash"),
-                    annotation_text="Val | Test",
-                    annotation_position="top"
-                )
-
-            # Update layout
-            if val_ratio > 0:
-                title_text = (f"Train-Validation-Test Split Visualization<br>"
-                              f"Training: {len(X_train)} samples ({train_ratio:.1%}) | "
-                              f"Validation: {len(X_val)} samples ({val_ratio:.1%}) | "
-                              f"Testing: {len(X_test)} samples ({test_ratio:.1%})")
-            else:
-                title_text = (f"Train-Test Split Visualization (CV Mode)<br>"
-                              f"Training: {len(X_train)} samples ({train_ratio:.1%}) | "
-                              f"Testing: {len(X_test)} samples ({test_ratio:.1%})")
-
-            fig.update_layout(
-                title=title_text,
-                xaxis_title="Sample Index",
-                yaxis_title="Normalized Feature Values",
-                height=500,
-                showlegend=True,
-                hovermode='closest',
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                )
-            )
-
-            # Add summary annotation
-            if val_ratio > 0:
-                annotation_text = (f"📊 Features Extracted: {len(feature_names)}<br>"
-                                   f"🎓 Train: {len(X_train)} samples<br>"
-                                   f"📋 Validation: {len(X_val)} samples<br>"
-                                   f"🧪 Test: {len(X_test)} samples<br>"
-                                   f"🎲 Random State: {random_state}")
-            else:
-                annotation_text = (f"📊 Features Extracted: {len(feature_names)}<br>"
-                                   f"🎓 Train: {len(X_train)} samples<br>"
-                                   f"🧪 Test: {len(X_test)} samples<br>"
-                                   f"⚙️ Using 5-fold CV<br>"
-                                   f"🎲 Random State: {random_state}")
-
-            fig.add_annotation(
-                text=annotation_text,
-                xref="paper", yref="paper",
-                x=0.02, y=0.98,
-                showarrow=False,
-                font=dict(size=10, color="darkgreen"),
-                bgcolor="rgba(200,255,200,0.9)",
-                bordercolor="green",
-                borderwidth=2,
-                align="left"
-            )
-
-            return split_data, fig
-
-        except Exception as e:
-            error_msg = f"Error during train-test split: {str(e)}"
-            print(error_msg)
-            return {}, {}
-
-
-    # Callback disabled - clear-training-data-btn button doesn't exist in layout
-    # @callback(
-    #     Output('preprocessed-training-data', 'data', allow_duplicate=True),
-    #     Output('train-test-data', 'data', allow_duplicate=True),
-    #     Output('train-test-split-graph', 'figure', allow_duplicate=True),
-    #     Output('preprocessing-results', 'children', allow_duplicate=True),
-    #     Input('clear-training-data-btn', 'n_clicks'),
-    #     State('dataset-selector_', 'value'),
-    #     State('working-directory-store', 'data'),
-    #     prevent_initial_call=True
-    # )
-    # def clear_training_data(n_clicks, dataset_name, base_dir):
-        """Clear all preprocessed training data and associated files."""
-        if not dataset_name:
-            return {}, {}, {}, html.Div("⚠️ No dataset selected.", style={'color': '#FF9800'})
-
-        deleted_files = []
-        try:
-            # Clear training data directory for this dataset
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
-            training_dir = os.path.join(base_dir, 'training_data')
-
-            if os.path.exists(training_dir):
-                # Remove files related to current dataset
-                patterns = [
-                    f"{dataset_name}_train.csv",
-                    f"{dataset_name}_test.csv",
-                    f"{dataset_name}_metadata.json"
-                ]
-
-                for pattern in patterns:
-                    file_path = os.path.join(training_dir, pattern)
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                        deleted_files.append(pattern)
-
-            # Clear session data
-            empty_data = {}
-            empty_figure = {}
-
-            # Success message
-            success_content = html.Div([
-                html.H5("🧹 Training Data Cleared Successfully", style={
-                    'color': '#28a745', 'margin': '0 0 15px 0'}),
-                html.Div([
-                    html.P(f"✅ Cleared feature engineering data for: {dataset_name}", style={
-                        'margin': '5px 0', 'font-weight': 'bold'}),
-                    html.P(f"📁 Files removed: {len(deleted_files)}", style={
-                        'margin': '5px 0'}),
-                    html.P("🔧 Ready for new feature engineering process", style={
-                        'margin': '5px 0', 'color': '#6c757d', 'font-style': 'italic'})
-                ])
-            ])
-
-            return empty_data, empty_data, empty_figure, success_content
-
-        except Exception as e:
-            error_msg = f"❌ Error clearing training data: {str(e)}"
-            return no_update, no_update, no_update, html.Div(error_msg, style={'color': '#dc3545'})
+    # -------------------------------------------------------------------------
+    # LEGACY CALLBACKS REMOVED
+    # -------------------------------------------------------------------------
+    # The following orphaned callbacks were removed during cleanup:
+    # - preprocess_for_training: Feature extraction + normalization (superseded by Feature Engineering tab)
+    # - perform_enhanced_train_val_test_split: Train/val/test splitting (superseded by Feature Engineering tab)
+    # - clear_training_data: Already disabled, no layout button existed
+    #
+    # Feature engineering and train/test splitting are now handled exclusively
+    # by the Feature Engineering tab (callbacks/feature_engineering_callbacks.py).
+    # -------------------------------------------------------------------------
 
 
     @app.callback(

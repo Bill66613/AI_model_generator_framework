@@ -5,6 +5,56 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve(strict=True).parent.parent
 CONF_PATH = os.path.dirname(os.path.abspath(__file__))
 
+# ---------------------------------------------------------------------------
+# Sensor configuration
+# ---------------------------------------------------------------------------
+# Default sensor axis groups.  The framework is **not** limited to 6 axes —
+# any subset or superset of these can be used.  Datasets that contain extra
+# columns (e.g. magnetometer mX/mY/mZ, barometer, temperature) will be
+# handled automatically as long as they are listed here.
+#
+# To customise: edit the lists below *or* override at runtime via the
+# ``SENSOR_COLUMNS`` environment variable (comma-separated, e.g.
+# ``SENSOR_COLUMNS=aX,aY,aZ``).
+
+DEFAULT_ACCEL_COLUMNS = ['aX', 'aY', 'aZ']
+DEFAULT_GYRO_COLUMNS  = ['gX', 'gY', 'gZ']
+DEFAULT_SENSOR_COLUMNS = DEFAULT_ACCEL_COLUMNS + DEFAULT_GYRO_COLUMNS
+
+# Allow runtime override via environment variable
+_env_cols = os.environ.get('SENSOR_COLUMNS')
+SENSOR_COLUMNS = [c.strip() for c in _env_cols.split(',')] if _env_cols else DEFAULT_SENSOR_COLUMNS
+ACCEL_COLUMNS  = [c for c in SENSOR_COLUMNS if c.startswith('a')]
+GYRO_COLUMNS   = [c for c in SENSOR_COLUMNS if c.startswith('g')]
+# Any columns that are neither accel nor gyro (e.g. magnetometer, barometer)
+EXTRA_COLUMNS  = [c for c in SENSOR_COLUMNS if c not in ACCEL_COLUMNS + GYRO_COLUMNS]
+
+# Default sampling parameters
+DEFAULT_SAMPLING_RATE = 100  # Hz — used as fallback when metadata is absent
+
+
+def get_sensor_columns_from_metadata(metadata: dict, dataset_name: str) -> list:
+    """Return sensor columns for a specific dataset, with fallback to global default.
+
+    If the dataset's metadata contains a 'sensor_columns' key, use that.
+    Otherwise fall back to the global ``SENSOR_COLUMNS`` constant.
+    """
+    if dataset_name in metadata:
+        return metadata[dataset_name].get('sensor_columns', SENSOR_COLUMNS)
+    return SENSOR_COLUMNS
+
+
+def get_sampling_rate_from_metadata(metadata: dict, dataset_name: str) -> float:
+    """Return sampling rate for a specific dataset, with fallback to default.
+
+    Looks up ``metadata[dataset_name]['sampling_rate']``; if missing returns
+    ``DEFAULT_SAMPLING_RATE``.
+    """
+    if dataset_name in metadata:
+        return metadata[dataset_name].get('sampling_rate', DEFAULT_SAMPLING_RATE)
+    return DEFAULT_SAMPLING_RATE
+
+
 # Base persistent data directory
 PERSISTENT_DIR = os.path.join(ROOT_DIR, "persistent_data")
 if not os.path.exists(PERSISTENT_DIR):

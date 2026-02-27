@@ -1,50 +1,46 @@
 # TODO.md
 
-## Todo
+## Active / Planned
 
-- [ ] Implement code generation & deployment tab
-  - [ ] Create layout for code generation UI
-  - [ ] Implement compilation with Arduino CLI
-  - [ ] Add flash to device functionality
-  - [ ] Serial port auto-detection
-- [ ] Implement device testing tab (UART)
-  - [ ] Real-time serial communication
-  - [ ] Live sensor data plotting
-  - [ ] Real-time activity classification
-- [ ] Update training tab to use engineered-dataset-store
-- [ ] Add model export functionality
+- [ ] **Step completion indicator** — Add a persistent workflow progress bar or sidebar showing
+      which pipeline stages have been completed (data uploaded → preprocessed → features extracted
+      → model trained → code generated → device tested).
+- [ ] **Reduce dcc.Store payload** — `engineered-dataset-store` currently holds full
+      `X_train.tolist()` / `X_test.tolist()` arrays.  Store file paths instead and load on demand
+      so the browser isn't shuttling megabytes per callback.
+- [ ] **End-to-end integration test** — Automate a headless run through all 6 tabs with sample
+      data to catch regressions.
+- [ ] **balance_training_data.py** — Either integrate into the Feature Engineering tab or remove
+      (currently unused / not imported anywhere).
+- [ ] **Deployment generator sampling rate** — `base_generator.py` still has
+      `self.sampling_rate = 100` hardcoded; read from model metadata instead.
 
-## In Progress
+## Recently Completed
 
-- [ ] Testing complete feature engineering workflow
-  - [✓] UI implemented
-  - [✓] Callbacks implemented
-  - [ ] End-to-end testing with all activity labels
+- [x] Centralized sensor column configuration (`config.py`: `SENSOR_COLUMNS`, `ACCEL_COLUMNS`,
+      `GYRO_COLUMNS`, `DEFAULT_SAMPLING_RATE`). All callbacks and utils now derive column lists
+      from config rather than hardcoding `['aX','aY','aZ','gX','gY','gZ']`.
+- [x] Clarified normalization UX — dropdown label and info box now explain that normalization is
+      deferred to training and bundled with the saved model.
+- [x] Fixed Device Testing tab — auto-discovers latest `.joblib` model, reads
+      `_fe_metadata.json` for correct feature method, window size, and sampling rate.
+- [x] Fixed `fs` inconsistency — `clean_and_smooth_data()` now reads actual sampling rate from
+      metadata instead of using hardcoded `fs=50`.
+- [x] Added split ratio validation — execute button is disabled when train + val ≥ 100 %;
+      guard clause prevents execution even if UI is bypassed.
+- [x] Removed ~470 lines of orphaned legacy preprocessing callbacks (`preprocess_for_training`,
+      `perform_enhanced_train_val_test_split`, `clear_training_data`).
+- [x] Fixed inference feature mismatch — Device Testing reads `_fe_metadata.json` and passes
+      correct `orientation_robust`, `include_per_axis`, `include_frequency` flags.
+- [x] Refactored `utils/` — split monolithic `model_training.py` (981 lines) into:
+      `feature_extraction.py`, `edge_ml_model.py`, `training_pipeline.py`.
+      `model_training.py` remains as a backward-compat re-export shim.
 
-## Done ✓
+## Architecture (6-Tab Workflow)
 
-- [✓] Framework restructured to 5 tabs (Data, Preprocessing, Feature Engineering, Training, Device Test)
-- [✓] Feature engineering tab created with unified workflow
-- [✓] Feature engineering callbacks fully implemented
-  - [✓] populate_activity_labels() - Load labels from metadata
-  - [✓] update_windows_per_label() - Display window counts
-  - [✓] handle_label_selection_buttons() - Select All/Clear functionality
-  - [✓] update_feature_count() - Display feature counts based on method
-  - [✓] calculate_test_split() - Auto-calculate test percentage
-  - [✓] execute_feature_engineering() - Unified feature engineering pipeline
-- [✓] Fixed window naming display (removed "Manual"/"Window" prefix)
-- [✓] Fixed "Load Previous" button to work independently
-- [✓] Fixed float conversion issues in windowing callbacks
-- [✓] Apply time window functionality
-  - [✓] Display graph only for the input time (based on sampling rate)
-  - [✓] Able to select window of data and capture in file
-  - [✓] Draggable window selection on graph
-- [✓] Split selected time windows
-  - [✓] Understand and implement relayoutData handling
-  - [✓] Save split windows to persistent storage
-  - [✓] Load previous windows from metadata
-- [✓] Sliding window generation
-  - [✓] Generate sliding windows from current selection
-  - [✓] Merge with manual windows
-  - [✓] Handle overlaps and gaps
-- [✓] Preprocessing tab refactored (removed feature engineering section)
+1. **Data Management** — Upload / manage CSV sensor datasets
+2. **Signal Preprocessing** — Clean, filter, window, drag-select windows
+3. **Feature Engineering** — Extract features, normalize, train/val/test split
+4. **Model Training** — Train sklearn / PyTorch models, evaluate, save
+5. **Code Generation** — Generate C/C++/MicroPython for target MCU
+6. **Device Testing** — Serial connection, real-time plots, live inference

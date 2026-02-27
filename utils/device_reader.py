@@ -5,21 +5,18 @@ import time
 import numpy as np
 from collections import deque
 
+from config.config import SENSOR_COLUMNS
+
 
 class DeviceReader:
-    def __init__(self):
+    def __init__(self, sensor_cols=None):
         self.serial_conn = None
         self.is_connected = False
         self.is_running = False
-        self.data_buffer = {
-            'time': deque(maxlen=500),
-            'aX': deque(maxlen=500),
-            'aY': deque(maxlen=500),
-            'aZ': deque(maxlen=500),
-            'gX': deque(maxlen=500),
-            'gY': deque(maxlen=500),
-            'gZ': deque(maxlen=500)
-        }
+        self.sensor_cols = sensor_cols or SENSOR_COLUMNS
+        self.data_buffer = {'time': deque(maxlen=500)}
+        for col in self.sensor_cols:
+            self.data_buffer[col] = deque(maxlen=500)
         self.debug_log = deque(maxlen=100)  # Store last 100 debug messages
         self.start_time = None
         self.reader_thread = None
@@ -93,25 +90,22 @@ class DeviceReader:
             if not line:
                 return
 
-            # Expected format: aX,aY,aZ,gX,gY,gZ
+            # Expected format: comma-separated values matching sensor_cols order
             parts = line.split(',')
+            n_cols = len(self.sensor_cols)
 
-            if len(parts) >= 6:
+            if len(parts) >= n_cols:
                 current_time = time.time() - self.start_time if self.start_time else 0
 
                 self.data_buffer['time'].append(current_time)
-                self.data_buffer['aX'].append(float(parts[0]))
-                self.data_buffer['aY'].append(float(parts[1]))
-                self.data_buffer['aZ'].append(float(parts[2]))
-                self.data_buffer['gX'].append(float(parts[3]))
-                self.data_buffer['gY'].append(float(parts[4]))
-                self.data_buffer['gZ'].append(float(parts[5]))
+                for i, col in enumerate(self.sensor_cols):
+                    self.data_buffer[col].append(float(parts[i]))
 
                 # Log first valid sample
                 if len(self.data_buffer['time']) == 1:
                     self._log(f"✓ First data sample received: {line[:50]}...")
             else:
-                error_msg = f"Invalid format (expected 6 values, got {len(parts)}): {line[:80]}"
+                error_msg = f"Invalid format (expected {n_cols} values, got {len(parts)}): {line[:80]}"
                 self._log(f"✗ {error_msg}")
                 print(error_msg)
 
@@ -121,31 +115,19 @@ class DeviceReader:
             print(error_msg)
 
     def get_data(self):
-        """Get current buffered data"""
-        return {
-            'time': list(self.data_buffer['time']),
-            'aX': list(self.data_buffer['aX']),
-            'aY': list(self.data_buffer['aY']),
-            'aZ': list(self.data_buffer['aZ']),
-            'gX': list(self.data_buffer['gX']),
-            'gY': list(self.data_buffer['gY']),
-            'gZ': list(self.data_buffer['gZ'])
-        }
+        """Get current buffered data as dict of lists."""
+        result = {'time': list(self.data_buffer['time'])}
+        for col in self.sensor_cols:
+            result[col] = list(self.data_buffer[col])
+        return result
 
     def get_latest_window(self, window_size=150):
-        """Get latest N samples for inference"""
+        """Get latest N samples for inference."""
         data = self.get_data()
         if len(data['time']) < window_size:
             return None
 
-        return {
-            'aX': data['aX'][-window_size:],
-            'aY': data['aY'][-window_size:],
-            'aZ': data['aZ'][-window_size:],
-            'gX': data['gX'][-window_size:],
-            'gY': data['gY'][-window_size:],
-            'gZ': data['gZ'][-window_size:]
-        }
+        return {col: data[col][-window_size:] for col in self.sensor_cols}
 
     def clear_buffer(self):
         """Clear all buffered data"""
