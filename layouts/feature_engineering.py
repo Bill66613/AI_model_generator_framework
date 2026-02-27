@@ -106,15 +106,15 @@ layout = html.Div([
                     dcc.Dropdown(
                         id='global-feature-selection',
                         options=[
-                            {'label': '🧭 Orientation-Invariant Time-Domain ONLY (RECOMMENDED for deployment) - 33 features',
+                            {'label': '🧭 Orientation-Invariant Time-Domain ONLY (RECOMMENDED) - 33 features',
                              'value': 'orientation_invariant_time_only'},
-                            {'label': '🧭 Orientation-Invariant + FFT (Training only, NOT deployable) - 47 features',
+                            {'label': '🧭 Orientation-Invariant + DFT (Deployable) - 47 features',
                              'value': 'orientation_invariant'},
-                            {'label': '🎯 All Features Time-Domain (Deployable) - 90 features',
+                            {'label': '🎯 Per-Axis Time-Domain (Deployable) - 90 features',
                              'value': 'time_domain'},
-                            {'label': '🎯 All Features + FFT (Training only, NOT deployable) - 138 features',
+                            {'label': '🎯 Per-Axis All + FFT (⚠️ per-axis freq NOT deployable) - 138 features',
                              'value': 'all'},
-                            {'label': '🌊 Frequency-Domain Only (Training only, NOT deployable) - 48 features',
+                            {'label': '🌊 Per-Axis Frequency Only (⚠️ NOT deployable) - 48 features',
                              'value': 'frequency_domain'},
                             {'label': '📊 Raw Sensor Axes (Deployable) - 6 features',
                              'value': 'raw'}
@@ -125,10 +125,13 @@ layout = html.Div([
                         style={'margin-bottom': '20px'}
                     ),
                     html.Div([
-                        html.Strong("⚠️ Important: "),
-                        "FFT features work for training but ",
-                        html.Strong("cannot be deployed to devices"),
-                        " (no FFT implementation in C++). For deployment, use time-domain only options."
+                        html.Strong("⚠️ Note: "),
+                        "Orientation-robust DFT (47 features) ",
+                        html.Strong("is fully deployable"),
+                        " — code generators emit a lightweight sin/cos DFT. ",
+                        "Only ",
+                        html.Strong("per-axis"),
+                        " frequency features (48 / 138) cannot be deployed."
                     ], style={
                         'padding': '12px',
                         'backgroundColor': '#fff3cd',

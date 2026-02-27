@@ -175,26 +175,29 @@ def register_callbacks(app):
             'orientation_invariant_time_only': (
                 '33 features',
                 'Orientation-robust magnitudes: 15 stats × (acc_mag + gyro_mag) + 3 jerk stats. '
-                'RECOMMENDED for deployment (C / MicroPython).'
+                'RECOMMENDED for deployment — fully deployable to all targets (C / C++ / MicroPython).'
             ),
             'orientation_invariant': (
                 '47 features',
                 'Orientation-robust magnitudes (33 time) + DFT on magnitudes (14 freq). '
-                'Fully deployable — DFT runs on-device.'
+                'Fully deployable — on-device DFT uses only sin/cos, no FFT library needed.'
             ),
             'time_domain': (
                 '90 features',
-                'Per-axis time-domain: 15 stats × 6 axes (aX, aY, aZ, gX, gY, gZ). Deployable.'
+                'Per-axis time-domain: 15 stats × 6 axes (aX, aY, aZ, gX, gY, gZ). '
+                'Fully deployable to all targets.'
             ),
             'all': (
                 '138 features',
-                'Per-axis time-domain (90) + frequency-domain (48). '
-                '⚠️ Per-axis FFT NOT yet deployable (use orientation_invariant for freq features).'
+                'Per-axis time-domain (90) + per-axis frequency-domain (48). '
+                '⚠️ The 48 per-axis freq features are NOT deployable — only orientation-robust '
+                'DFT is implemented in code generators. Use “Orientation Invariant” for deployable freq features.'
             ),
             'frequency_domain': (
                 '48 features',
-                'Per-axis frequency-domain only (FFT features). '
-                '⚠️ Per-axis FFT NOT yet deployable.'
+                'Per-axis frequency-domain only (per-axis FFT). '
+                '⚠️ Per-axis freq features are NOT deployable. '
+                'Use “Orientation Invariant” (47 features) which includes deployable DFT on magnitudes.'
             ),
             'raw': (
                 '6 features',

@@ -509,12 +509,27 @@ def register_callbacks(app):
             features = metadata.get('features', 0)
             classes = metadata.get('classes', 0)
 
-            # Get training parameters from model_params (stored during training)
+            # Get training parameters — prefer fe_config (from Feature Engineering)
+            # over model_params (which stores model hyperparameters like n_estimators, C, etc.)
+            fe_config = metadata.get('fe_config', {})
             model_params = metadata.get('model_params', {})
-            sampling_rate = model_params.get(
-                'sampling_rate', 100)  # Default 100 Hz
-            window_size_ms = model_params.get(
-                'window_size_ms', 1500)  # Default 1500 ms
+            sampling_rate = fe_config.get('sampling_rate',
+                                          model_params.get('sampling_rate', 100))
+            window_size_ms = fe_config.get('window_size_ms',
+                                           model_params.get('window_size_ms', 1500))
+
+            # Determine feature domain label from FE metadata
+            feature_method = fe_config.get('feature_method', '')
+            _METHOD_LABELS = {
+                'orientation_invariant_time_only': 'orientation-robust, time-domain only',
+                'orientation_invariant': 'orientation-robust, time + freq (DFT)',
+                'time_domain': 'per-axis, time-domain only',
+                'all': 'per-axis, time + freq domain',
+                'frequency_domain': 'per-axis, freq-domain only',
+                'raw': 'raw sensor means',
+            }
+            feature_domain_label = _METHOD_LABELS.get(
+                feature_method, feature_method or 'unknown')
 
             # Build info display
             info = html.Div([
@@ -553,7 +568,7 @@ def register_callbacks(app):
                               'font-weight': 'bold'}),
                     html.Span(f"{features} features",
                               style={'color': '#2E86AB'}),
-                    html.Span(" (time + freq domain)",
+                    html.Span(f" ({feature_domain_label})",
                               style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
                 ])
             ])
