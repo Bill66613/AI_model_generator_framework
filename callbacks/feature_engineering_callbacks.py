@@ -269,11 +269,12 @@ def register_callbacks(app):
         """
         Main feature engineering executor.
         Applies consistent settings across all selected activity labels.
-        Uses zero-padding for windows smaller than target size.
+        Uses edge-value replication for windows smaller than target size.
 
         Workflow:
         1. Load all windows from all selected labels
-        2. Zero-pad windows to target size if needed
+        2. Pad windows to target size using edge-value replication
+           (zero-padding would corrupt magnitude features for deployment)
         3. Extract features uniformly (same method for all)
         4. Apply normalization uniformly (same scaler for all)
         5. Combine into single dataset with 'activity' column
@@ -334,18 +335,32 @@ def register_callbacks(app):
             target_window_samples = int(
                 (target_window_size / 1000) * sampling_rate)
 
-            # Step 3: Zero-pad windows to target size if needed
+            # Minimum window size threshold: windows shorter than 30% of
+            # target are discarded (too little real data for reliable features)
+            min_window_samples = max(10, int(target_window_samples * 0.3))
+
+            # Step 3: Pad windows to target size using EDGE-VALUE REPLICATION
+            # IMPORTANT: Zero-padding would introduce artificial zero values
+            # (e.g., acc_mag=0, gyro_mag=0) that corrupt statistical features
+            # and cause massive train/deploy mismatch. Edge replication
+            # preserves the signal characteristics of the real data.
             sensor_cols = SENSOR_COLUMNS
             padded_windows = []
-            padding_stats = {'padded': 0, 'original_size': 0}
+            padding_stats = {'padded': 0, 'discarded': 0, 'original_size': 0}
 
-            for df_window in all_windows:
+            temp_labels = []  # Track labels for non-discarded windows
+            for df_window, lbl in zip(all_windows, all_labels):
                 current_size = len(df_window)
-                if current_size < target_window_samples:
-                    # Zero-pad
+                if current_size < min_window_samples:
+                    # Discard windows that are too short
+                    padding_stats['discarded'] += 1
+                    continue
+                elif current_size < target_window_samples:
+                    # Edge-value replication: repeat the last row to fill
                     padding_needed = target_window_samples - current_size
-                    padding_df = pd.DataFrame(0, index=range(
-                        padding_needed), columns=df_window.columns)
+                    last_row = df_window.iloc[[-1]]
+                    padding_df = pd.concat(
+                        [last_row] * padding_needed, ignore_index=True)
                     df_padded = pd.concat(
                         [df_window, padding_df], ignore_index=True)
                     padded_windows.append(df_padded)
@@ -359,8 +374,17 @@ def register_callbacks(app):
                     padded_windows.append(df_window)
 
                 padding_stats['original_size'] = current_size
+                temp_labels.append(lbl)
 
-            # Step 3: Extract features uniformly (with zero-padding applied)
+            all_labels = temp_labels
+
+            if not padded_windows:
+                return html.Div(
+                    f"⚠️ All windows were too short (< {min_window_samples} "
+                    f"samples). Need longer data selections.",
+                    style={'color': '#dc3545', 'padding': '15px'}), "", {}
+
+            # Step 3: Extract features uniformly (with edge-padded windows)
 
             feature_list = []
             for df_window, label in zip(padded_windows, all_labels):
@@ -634,6 +658,10 @@ def register_callbacks(app):
             )
 
             # Success message
+            pad_info = f"Edge-padded windows: {padding_stats['padded']} / {total_all}"
+            if padding_stats['discarded'] > 0:
+                pad_info += f" ({padding_stats['discarded']} discarded as too short)"
+
             success_msg = html.Div([
                 html.H4("✅ Feature Engineering Complete!",
                         style={'color': '#28a745'}),
@@ -642,8 +670,7 @@ def register_callbacks(app):
                 html.Ul([
                     html.Li(
                         f"Target window size: {target_window_size}ms ({target_window_samples} samples @ {sampling_rate}Hz)"),
-                    html.Li(
-                        f"Zero-padded windows: {padding_stats['padded']} / {total_all}"),
+                    html.Li(pad_info),
                     html.Li(
                         f"Features extracted: {len(feature_names)} features using '{feature_method}' method"),
                     html.Li("Rotation augmentation: ON (only for orientation_invariant)" if feature_method ==

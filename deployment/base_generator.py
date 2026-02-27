@@ -693,12 +693,12 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
     features[idx++] = iqr;          // 8: iqr
 
     // Skewness and kurtosis - bias-corrected (pandas/scipy formula)
-    float sample_var = variance * n / (n - 1.0f + 0.001f);
-    float sample_std = sqrtf(sample_var > 0 ? sample_var : 0.0001f);
+    // Use population std for z-scores to match pandas computation exactly
+    float pop_std = sqrtf(variance > 0.0f ? variance : 0.0001f);
 
     float m3_sum = 0.0f, m4_sum = 0.0f;
     for (int i = 0; i < samples; i++) {
-        float z = (mag[i] - mean) / (sample_std + 0.0001f);
+        float z = (mag[i] - mean) / (pop_std + 0.0001f);
         float z2 = z * z;
         m3_sum += z * z2;
         m4_sum += z2 * z2;
@@ -827,11 +827,12 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         features[feature_idx++] = iqr;                           // 8: iqr
 
         // Skewness and kurtosis — bias-corrected (pandas/scipy formula)
-        float sample_std = sqrtf(variance * n / (n - 1.0f + 0.001f));
+        // Use population std for z-scores to match pandas computation exactly
+        float pop_std = sqrtf(variance > 0.0f ? variance : 0.0001f);
 
         float m3_sum = 0.0f, m4_sum = 0.0f;
         for (int i = 0; i < samples; i++) {{
-            float z = (sensor_data[i][axis] - mean) / (sample_std + 0.001f);
+            float z = (sensor_data[i][axis] - mean) / (pop_std + 0.001f);
             float z2 = z * z;
             m3_sum += z * z2;
             m4_sum += z2 * z2;

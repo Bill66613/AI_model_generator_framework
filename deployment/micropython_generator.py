@@ -527,13 +527,12 @@ def _magnitude_stats(mag):
     q75 = s_data[(3 * n) // 4]
     iqr = q75 - q25
 
-    # Skewness/kurtosis (bias-corrected)
-    sample_var = var * n / (n - 1 + 0.001)
-    sample_std = math.sqrt(sample_var) if sample_var > 0 else 0.0001
+    # Skewness/kurtosis (bias-corrected, using population std to match pandas)
+    pop_std = math.sqrt(var) if var > 0 else 0.0001
     m3 = 0.0
     m4 = 0.0
     for v in mag:
-        z = (v - mean) / (sample_std + 0.0001)
+        z = (v - mean) / (pop_std + 0.0001)
         z2 = z * z
         m3 += z * z2
         m4 += z2 * z2
@@ -726,12 +725,12 @@ def extract_features(sensor_data, samples):
         q75 = s_data[(3 * samples) // 4]
         iqr = q75 - q25
 
-        # Skewness / kurtosis
-        sample_std = math.sqrt(var * n / (n - 1 + 0.001))
+        # Skewness / kurtosis (using population std to match pandas)
+        pop_std = math.sqrt(var) if var > 0 else 0.0001
         m3 = 0.0
         m4 = 0.0
         for v in col:
-            z = (v - mean) / (sample_std + 0.001)
+            z = (v - mean) / (pop_std + 0.001)
             z2 = z * z
             m3 += z * z2
             m4 += z2 * z2
