@@ -482,6 +482,36 @@ def register_callbacks(app):
             training_dir = os.path.join(base_dir, 'training')
             os.makedirs(training_dir, exist_ok=True)
 
+            # Clean up stale training files from previous FE runs that used
+            # a different feature set.  Only remove files that do NOT belong to
+            # the current dataset_name (determined below) and that have no
+            # matching _fe_metadata.json — i.e. old per-file splits.
+            # Build the dataset name first so we can guard against deleting our own files.
+            dataset_name = '_'.join(sorted(selected_labels)[:3])
+            if len(selected_labels) > 3:
+                dataset_name += f"_and_{len(selected_labels)-3}_more"
+
+            existing_fe_meta = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
+            fe_dataset_names = {
+                os.path.basename(f).replace('_fe_metadata.json', '')
+                for f in existing_fe_meta
+            }
+            # Also keep the new dataset we're about to write
+            fe_dataset_names.add(dataset_name)
+
+            for f in os.listdir(training_dir):
+                fpath = os.path.join(training_dir, f)
+                if not os.path.isfile(fpath):
+                    continue
+                # Check if this file belongs to any known FE dataset
+                belongs = any(f.startswith(name) for name in fe_dataset_names)
+                if not belongs:
+                    try:
+                        os.remove(fpath)
+                        print(f"Cleaned stale training file: {f}")
+                    except Exception:
+                        pass
+
             # Create DataFrames with feature names
             df_train = pd.DataFrame(X_train, columns=feature_names)
             df_train['label'] = y_train
@@ -493,11 +523,7 @@ def register_callbacks(app):
                 df_val = pd.DataFrame(X_val, columns=feature_names)
                 df_val['label'] = y_val
 
-            # Create a combined dataset name from selected labels
-            dataset_name = '_'.join(sorted(selected_labels)[
-                                    :3])  # Use up to 3 labels
-            if len(selected_labels) > 3:
-                dataset_name += f"_and_{len(selected_labels)-3}_more"
+            # dataset_name was already computed above (before cleanup)
 
             # Save to CSV files
             train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
@@ -624,7 +650,7 @@ def register_callbacks(app):
                     html.Li(
                         f"Train/Val/Test split: {train_ratio*100:.0f}% / {val_ratio*100:.0f}% / {test_ratio*100:.0f}%"),
                     html.Li(f"Random state: {random_state}"),
-                    html.Li([html.Strong("💾 Saved to: "), f"{training_dir}/"])
+                    html.Li([html.Strong("💾 Saved to: "), f"{training_dir}\\"])
                 ])
             ], style={'padding': '15px', 'background-color': '#d4edda', 'border-radius': '5px'})
 

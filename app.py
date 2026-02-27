@@ -1,4 +1,4 @@
-from dash import Dash, html, dcc, Input, Output, State
+from dash import Dash, html, dcc, Input, Output, State, ctx
 import os, json
 from layouts.data_upload import layout as data_upload_layout
 from layouts.preprocessing import layout as preprocessing_layout
@@ -16,26 +16,30 @@ server = app.server  # For deployment
 # Workflow step definitions
 # ---------------------------------------------------------------------------
 WORKFLOW_STEPS = [
-    {'id': 'step-data',    'label': 'Data',       'icon': '📊'},
-    {'id': 'step-preproc', 'label': 'Preprocess',  'icon': '🔬'},
-    {'id': 'step-fe',      'label': 'Features',    'icon': '⚙️'},
-    {'id': 'step-train',   'label': 'Train',       'icon': '🎯'},
-    {'id': 'step-code',    'label': 'Code Gen',    'icon': '🔧'},
-    {'id': 'step-device',  'label': 'Device Test', 'icon': '📡'},
+    {'id': 'step-data',    'label': 'Data',       'icon': '📊', 'tab': 'tab-1'},
+    {'id': 'step-preproc', 'label': 'Preprocess',  'icon': '🔬', 'tab': 'tab-2'},
+    {'id': 'step-fe',      'label': 'Features',    'icon': '⚙️', 'tab': 'tab-3'},
+    {'id': 'step-train',   'label': 'Train',       'icon': '🎯', 'tab': 'tab-4'},
+    {'id': 'step-code',    'label': 'Code Gen',    'icon': '🔧', 'tab': 'tab-5'},
+    {'id': 'step-device',  'label': 'Device Test', 'icon': '📡', 'tab': 'tab-6'},
 ]
 
+# Map step id → tab value for the click callback
+_STEP_TO_TAB = {s['id']: s['tab'] for s in WORKFLOW_STEPS}
+
 def _make_step_div(step, idx, total):
-    """Create one step element for the progress bar."""
+    """Create one clickable step element for the progress bar."""
     return html.Div([
         html.Div(step['icon'], className='step-icon', id=f"{step['id']}-icon",
                  style={'font-size': '20px', 'text-align': 'center'}),
         html.Div(step['label'], style={
             'font-size': '11px', 'text-align': 'center', 'margin-top': '2px',
             'white-space': 'nowrap'}),
-    ], id=step['id'], style={
+    ], id=step['id'], n_clicks=0, style={
         'display': 'inline-block', 'text-align': 'center', 'padding': '6px 14px',
         'border-radius': '8px', 'margin-right': '4px' if idx < total - 1 else '0',
         'background': '#f0f0f0', 'color': '#999', 'min-width': '72px',
+        'cursor': 'pointer',
         'transition': 'background 0.3s, color 0.3s',
     })
 
@@ -90,6 +94,20 @@ device_test_callbacks.register_callbacks(app)
 
 
 # ---------------------------------------------------------------------------
+# Step click → tab switch callback
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output('tabs', 'value'),
+    [Input(step['id'], 'n_clicks') for step in WORKFLOW_STEPS],
+    prevent_initial_call=True,
+)
+def switch_tab_on_step_click(*_clicks):
+    """When a workflow step is clicked, switch to the corresponding tab."""
+    triggered_id = ctx.triggered_id
+    return _STEP_TO_TAB.get(triggered_id, 'tab-1')
+
+
+# ---------------------------------------------------------------------------
 # Workflow progress callback — checks filesystem for pipeline artifacts
 # ---------------------------------------------------------------------------
 @app.callback(
@@ -118,22 +136,24 @@ def update_workflow_progress(_n, base_dir):
         'dragged_samples' in v and len(v.get('dragged_samples', [])) > 0
         for v in metadata.values()
     )
-    fe_dir = os.path.join(base_dir, 'feature_engineering')
-    has_fe = os.path.isdir(fe_dir) and any(
-        f.endswith('.json') for f in os.listdir(fe_dir)
-    ) if os.path.isdir(fe_dir) else False
+    # FE saves *_fe_metadata.json into the training/ directory
+    training_dir = os.path.join(base_dir, 'training')
+    has_fe = os.path.isdir(training_dir) and any(
+        f.endswith('_fe_metadata.json') for f in os.listdir(training_dir)
+    ) if os.path.isdir(training_dir) else False
     models_dir = os.path.join(base_dir, 'models')
     has_model = os.path.isdir(models_dir) and any(
         f.endswith('.joblib') for f in os.listdir(models_dir)
     ) if os.path.isdir(models_dir) else False
-    generated_dir = os.path.join(base_dir, 'generated_code')
+    # Code generation saves into the generated/ directory
+    generated_dir = os.path.join(base_dir, 'generated')
     has_code = os.path.isdir(generated_dir) and len(os.listdir(generated_dir)) > 0
 
     completed = [has_data, has_preproc, has_fe, has_model, has_code, False]
 
     base_style = {
         'display': 'inline-block', 'text-align': 'center', 'padding': '6px 14px',
-        'border-radius': '8px', 'min-width': '72px',
+        'border-radius': '8px', 'min-width': '72px', 'cursor': 'pointer',
         'transition': 'background 0.3s, color 0.3s',
     }
 

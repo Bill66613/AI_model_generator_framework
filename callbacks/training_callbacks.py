@@ -32,6 +32,32 @@ from utils.model_training import EdgeMLModel, prepare_training_data, create_feat
 from deployment import generate_deployment_code, analyze_resource_requirements, generate_and_save_deployment_code
 
 
+def _get_fe_train_files(training_dir):
+    """Return only the *_train.csv files that belong to the latest Feature Engineering run.
+
+    When FE metadata files exist in training_dir we restrict to those datasets
+    instead of blindly globbing every ``*_train.csv`` (which may include stale
+    per-file splits from the preprocessing tab with a different feature set).
+    """
+    fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
+    if fe_meta_files:
+        # Only use datasets that have a corresponding _fe_metadata.json
+        fe_dataset_names = [
+            os.path.basename(f).replace('_fe_metadata.json', '')
+            for f in fe_meta_files
+        ]
+        train_files = []
+        for name in fe_dataset_names:
+            candidate = os.path.join(training_dir, f'{name}_train.csv')
+            if os.path.exists(candidate):
+                train_files.append(candidate)
+        if train_files:
+            return train_files
+
+    # Fallback: no FE metadata → load all (backward compat)
+    return glob.glob(os.path.join(training_dir, '*_train.csv'))
+
+
 def register_callbacks(app):
     """Register all callbacks with the app."""
     @app.callback(
@@ -127,11 +153,11 @@ def register_callbacks(app):
                            style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
                 ])
 
-            # Find available datasets
-            train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
+            # Find available datasets (prefer FE-produced files over stale splits)
+            train_files = _get_fe_train_files(training_dir)
             if not train_files:
                 return html.Div([
-                    html.P("⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
+                    html.P("⚠️ No training data found. Please complete Feature Engineering first.",
                            style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic'}),
                     html.P(f"Looking in: {training_dir}",
                            style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
@@ -692,13 +718,13 @@ def register_callbacks(app):
                     html.P("Please perform train-validation-test split first.")
                 ]), no_update)
 
-            # Find available datasets (look for *_train.csv files)
-            train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
+            # Find available datasets (prefer FE-produced files over stale splits)
+            train_files = _get_fe_train_files(training_dir)
             if not train_files:
                 return (html.Div([
                     html.H4("❌ No training data found.",
                             style={'color': 'red'}),
-                    html.P("Please perform train-validation-test split first.")
+                    html.P("Please complete Feature Engineering first.")
                 ]), no_update)
 
             # Load and combine ALL training files
@@ -901,8 +927,15 @@ def register_callbacks(app):
             # For CNN: load raw windowed data instead of features
             if model_type == 'pytorch_cnn':
                 training_dir = os.path.join(base_dir, 'training')
-                # Find raw window .npy files
-                raw_train_files = glob.glob(os.path.join(training_dir, '*_raw_train.npy'))
+                # Prefer FE-matched raw files, fallback to all
+                fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
+                if fe_meta_files:
+                    fe_names = [os.path.basename(f).replace('_fe_metadata.json', '') for f in fe_meta_files]
+                    raw_train_files = [os.path.join(training_dir, f'{n}_raw_train.npy')
+                                       for n in fe_names
+                                       if os.path.exists(os.path.join(training_dir, f'{n}_raw_train.npy'))]
+                else:
+                    raw_train_files = glob.glob(os.path.join(training_dir, '*_raw_train.npy'))
                 if not raw_train_files:
                     return (html.Div([
                         html.H4("❌ No raw window data found for CNN", style={'color': 'red'}),
@@ -2352,9 +2385,8 @@ def register_callbacks(app):
 
             if not feature_names:
                 print("DEBUG: Still no feature names, loading from training file...")
-                # Last resort: load from any training CSV file
-                train_files = glob.glob(
-                    os.path.join(training_dir, '*_train.csv'))
+                # Last resort: load from FE-matched training CSV file
+                train_files = _get_fe_train_files(training_dir)
                 if train_files:
                     temp_df = pd.read_csv(train_files[0])
                     feature_names = [
