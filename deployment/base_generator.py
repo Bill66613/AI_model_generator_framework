@@ -72,6 +72,7 @@ class BaseCodeGenerator(ABC):
 // Model configuration
 #define NUM_FEATURES {len(self.feature_names)}
 #define NUM_CLASSES {len(self.classes)}
+#define N_CHANNELS  6
 #define SAMPLING_RATE {self.sampling_rate}
 #define WINDOW_SIZE {self.window_size}
 
@@ -285,7 +286,7 @@ const char* get_activity_name(int class_id) {{
                 '#endif\n\n'
                 'void har_init(void);\n'
                 'int har_predict(float features[NUM_FEATURES]);\n'
-                'void extract_features(float sensor_data[][6], int samples, float features[]);\n'
+                'void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]);\n'
                 'const char* get_activity_name(int class_id);\n\n'
                 '#ifdef __cplusplus\n'
                 '}\n'
@@ -295,7 +296,7 @@ const char* get_activity_name(int class_id) {{
             return (
                 'void har_init();\n'
                 'int har_predict(float features[NUM_FEATURES]);\n'
-                'void extract_features(float sensor_data[][6], int samples, float features[]);\n'
+                'void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]);\n'
                 'const char* get_activity_name(int class_id);'
             )
 
@@ -553,7 +554,7 @@ int extract_frequency_features(float* signal, int samples, float sampling_rate,
         code += """// Forward declaration for helper function
 int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx);
 
-void extract_features(float sensor_data[][6], int samples, float features[]) {
+void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]) {
     // Orientation-robust features (magnitude-based)
     // Time-domain: 15 stats x 2 magnitudes + 3 jerk = 33 features
 """
@@ -755,7 +756,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         use_double = self.optimization == 'accuracy'
         acc_type = 'double' if use_double else 'float'
 
-        return f"""void extract_features(float sensor_data[][6], int samples, float features[]) {{
+        return f"""void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]) {{
     // Per-axis feature extraction — 15 features per axis × 6 axes = 90 features
     // MUST match training feature extraction exactly regardless of optimization level.
     // Optimization: {self.optimization.upper()} ({'double-precision' if use_double else 'single-precision'} accumulation)
@@ -950,11 +951,11 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
 /* ------------------------------------------------------------------ */
 
 /**
- * Fill sensor_data[WINDOW_SIZE][6] with one window of IMU readings.
+ * Fill sensor_data[WINDOW_SIZE][N_CHANNELS] with one window of IMU readings.
  * Columns: aX, aY, aZ (m/s²), gX, gY, gZ (deg/s or rad/s)
  * Return 0 on success, non-zero on error.
  */
-static int read_sensor_window(float sensor_data[][6]) {{
+static int read_sensor_window(float sensor_data[][N_CHANNELS]) {{
     /* --- REPLACE with actual sensor/file reading code --- */
     for (int i = 0; i < WINDOW_SIZE; i++) {{
         sensor_data[i][0] = 0.0f;   /* aX */
@@ -976,7 +977,7 @@ int main({"void" if not is_cpp else ""}) {{
 
     har_init();
 
-    float sensor_data[WINDOW_SIZE][6];
+    float sensor_data[WINDOW_SIZE][N_CHANNELS];
     float features[NUM_FEATURES];
 
     /* Main inference loop — run until interrupted */
@@ -1027,7 +1028,7 @@ static const char* TAG = "HAR";
 /* ------------------------------------------------------------------ */
 /*  Replace with your sensor driver                                    */
 /* ------------------------------------------------------------------ */
-static int read_sensor_window(float sensor_data[][6]) {{
+static int read_sensor_window(float sensor_data[][N_CHANNELS]) {{
     /* TODO: Read {self.window_size} samples from IMU via I2C/SPI */
     for (int i = 0; i < WINDOW_SIZE; i++) {{
         sensor_data[i][0] = 0.0f;
@@ -1047,7 +1048,7 @@ void app_main(void) {{
 
     har_init();
 
-    float sensor_data[WINDOW_SIZE][6];
+    float sensor_data[WINDOW_SIZE][N_CHANNELS];
     float features[NUM_FEATURES];
 
     while (1) {{
@@ -1101,7 +1102,7 @@ void app_main(void) {{
 {platform_code['defines']}
 
 // Data collection variables
-float sensor_buffer[WINDOW_SIZE][6];  // aX, aY, aZ, gX, gY, gZ
+float sensor_buffer[WINDOW_SIZE][N_CHANNELS];  // aX, aY, aZ, gX, gY, gZ
 int buffer_index = 0;
 float features[NUM_FEATURES];
 unsigned long last_reading = 0;
@@ -1157,27 +1158,36 @@ void loop() {{
 
         buffer_index++;
 
-        // When buffer is full, extract features and predict
+        // Check if buffer is full → run inference
+        const char* activity_name = NULL;
         if (buffer_index >= WINDOW_SIZE) {{
             // Use overlap for smoother predictions
             for (int i = 0; i < WINDOW_SIZE / 2; i++) {{
-                for (int axis = 0; axis < 6; axis++) {{
+                for (int axis = 0; axis < N_CHANNELS; axis++) {{
                     sensor_buffer[i][axis] = sensor_buffer[i + WINDOW_SIZE / 2][axis];
                 }}
             }}
             buffer_index = (int)buffer_index_shift;
 
-{platform_code['motion_stats']}
-
-            // Extract features
+            // Extract features and predict
             extract_features(sensor_buffer, WINDOW_SIZE, features);
-
-            // Make prediction
             int predicted_class = har_predict(features);
-            const char* activity_name = get_activity_name(predicted_class);
-
-{platform_code['print_result']}
+            activity_name = get_activity_name(predicted_class);
         }}
+
+        // Always output sensor CSV (for Device Test graph plotting)
+        // Append prediction only on inference cycles
+        Serial.print(aX, 4); Serial.print(",");
+        Serial.print(aY, 4); Serial.print(",");
+        Serial.print(aZ, 4); Serial.print(",");
+        Serial.print(gX, 4); Serial.print(",");
+        Serial.print(gY, 4); Serial.print(",");
+        Serial.print(gZ, 4);
+        if (activity_name != NULL) {{
+            Serial.print(",");
+            Serial.print(activity_name);
+        }}
+        Serial.println();
     }}
 
     delay({delay_ms});  // Optimization-specific delay
@@ -1239,30 +1249,7 @@ const float buffer_index_shift = WINDOW_SIZE * (1 - OVERLAP);""",
         float gX = myIMU.readFloatGyroX();
         float gY = myIMU.readFloatGyroY();
         float gZ = myIMU.readFloatGyroZ();""",
-                'motion_stats': """            // Calculate motion statistics for debugging
-            float acc_mag_sum = 0, gyro_mag_sum = 0;
-            for (int i = 0; i < WINDOW_SIZE; i++) {
-                float acc_mag = sqrt(sensor_buffer[i][0] * sensor_buffer[i][0] +
-                                     sensor_buffer[i][1] * sensor_buffer[i][1] +
-                                     sensor_buffer[i][2] * sensor_buffer[i][2]);
-                float gyro_mag = sqrt(sensor_buffer[i][3] * sensor_buffer[i][3] +
-                                      sensor_buffer[i][4] * sensor_buffer[i][4] +
-                                      sensor_buffer[i][5] * sensor_buffer[i][5]);
-                acc_mag_sum += acc_mag;
-                gyro_mag_sum += gyro_mag;
-            }
-            float avg_acc_mag = acc_mag_sum / WINDOW_SIZE;
-            float avg_gyro_mag = gyro_mag_sum / WINDOW_SIZE;""",
-                'print_result': """            // Print result with motion statistics
-            Serial.print("Motion: acc=");
-            Serial.print(avg_acc_mag, 2);
-            Serial.print(" gyro=");
-            Serial.print(avg_gyro_mag, 2);
-            Serial.print(" => Predicted: ");
-            Serial.print(activity_name);
-            Serial.print(" (Class ");
-            Serial.print(predicted_class);
-            Serial.println(")");"""
+                'motion_stats': ""
             }
 
         elif self.platform == 'esp32':
@@ -1294,16 +1281,7 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
         aX *= CONVERT_G_TO_MS2;
         aY *= CONVERT_G_TO_MS2;
         aZ *= CONVERT_G_TO_MS2;""",
-                'motion_stats': """            // Optional: Calculate motion magnitude for debugging
-            float acc_mag = sqrt(sensor_buffer[WINDOW_SIZE-1][0] * sensor_buffer[WINDOW_SIZE-1][0] +
-                               sensor_buffer[WINDOW_SIZE-1][1] * sensor_buffer[WINDOW_SIZE-1][1] +
-                               sensor_buffer[WINDOW_SIZE-1][2] * sensor_buffer[WINDOW_SIZE-1][2]);""",
-                'print_result': """            // Print result
-            Serial.print("Predicted: ");
-            Serial.print(activity_name);
-            Serial.print(" (Class ");
-            Serial.print(predicted_class);
-            Serial.println(")");"""
+                'motion_stats': ""
             }
 
         else:  # Generic Arduino
@@ -1329,13 +1307,7 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
         float gX = 0.0f;  // Replace with actual gyroscope X
         float gY = 0.0f;  // Replace with actual gyroscope Y
         float gZ = 0.0f;  // Replace with actual gyroscope Z""",
-                'motion_stats': """            // Optional: Add motion statistics here""",
-                'print_result': """            // Print result
-            Serial.print("Predicted: ");
-            Serial.print(activity_name);
-            Serial.print(" (Class ");
-            Serial.print(predicted_class);
-            Serial.println(")");"""
+                'motion_stats': ""
             }
 
     def _set_optimization_parameters(self):

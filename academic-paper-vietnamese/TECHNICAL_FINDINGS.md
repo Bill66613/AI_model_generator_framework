@@ -1,14 +1,14 @@
 # PHÁT HIỆN KỸ THUẬT QUAN TRỌNG
 # Technical Findings — Framework vs Commercial Platforms
 
-**Last updated:** 2025-02-27  
-**Version:** 2.0 (restructured for cross-session continuity)
+**Last updated:** 2026-03-05  
+**Version:** 4.0 (added finding 9: CNN validation false positives)
 
 ---
 
 ## QUICK CONTEXT (Read this first in any new session)
 
-This file documents **4 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
+This file documents **9 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
 
 | # | Finding | Severity | Status | Code Files Affected | Thesis Chapters |
 |---|---------|----------|--------|---------------------|-----------------|
@@ -17,6 +17,10 @@ This file documents **4 critical technical findings** discovered during framewor
 | 3 | NN bias → default prediction behavior | INFO | DOCUMENTED | (no code change needed) | Ch.5 §analysis |
 | 4 | FFT precision mismatch → time-only features | DESIGN | RESOLVED | `utils/feature_extraction.py` | Ch.3 §FE rationale |
 | 5 | Edge-replication padding still distorts features + tiny dataset | CRITICAL | ⚠️ DATA QUALITY | `callbacks/feature_engineering_callbacks.py`, `callbacks/preprocessing_callbacks.py` | Ch.4 §accuracy, Ch.5 §deployment |
+| 6 | Double standardization — FE + Training both scaling | CRITICAL | ✅ FIXED | `callbacks/feature_engineering_callbacks.py`, `callbacks/training_callbacks.py` | Ch.5 §parity |
+| 7 | Feature order mismatch — alphabetical vs C++ computation order | CRITICAL | ✅ FIXED | `deployment/code_generator_factory.py`, `deployment/neural_network_generator.py` | Ch.3 §CodeGen, Ch.5 §parity |
+| 8 | Double extraction — reorder undone by 2nd extract call | CRITICAL | ✅ FIXED | `deployment/code_generator_factory.py` | Ch.5 §parity |
+| 9 | CNN validation false positives — architecture-unaware validator | MEDIUM | ✅ FIXED | `deployment/validation.py` | Ch.3 §CodeGen, Ch.5 §validation |
 
 **Action required:** Collect longer recordings (≥1.5s per window), use sliding window to generate 50+ windows/class, retrain, collect before/after accuracy data for Ch.4.
 
@@ -29,6 +33,10 @@ This file documents **4 critical technical findings** discovered during framewor
 - **Parity checklist** (§5.3) → Validates all 8 aspects of training-deployment consistency
 
 - **Finding 5 (padding distortion + tiny dataset)** → Code: `callbacks/feature_engineering_callbacks.py` padding logic, `callbacks/preprocessing_callbacks.py` sliding window → Thesis: Ch.4 accuracy results, Ch.5 deployment analysis → Related: Finding 1 (preceded this, was the first padding issue)
+- **Finding 6 (double standardization)** → Code: `callbacks/feature_engineering_callbacks.py` (removed), `callbacks/training_callbacks.py` (keep DataFrame) → Thesis: Ch.5 training-deployment parity chain
+- **Finding 7 (feature order mismatch)** → Code: `deployment/code_generator_factory.py` (reorder functions), `deployment/neural_network_generator.py` (weight reorder) → Thesis: Ch.3 code generation, Ch.5 parity
+- **Finding 8 (double extraction)** → Code: `deployment/code_generator_factory.py` line 589 removed → Thesis: Ch.5 pipeline correctness
+- **Finding 9 (CNN validation)** → Code: `deployment/validation.py` (CNN-aware validation branch + `_validate_cnn_code` + `_estimate_cnn_resources`) → Thesis: Ch.3 multi-architecture support, Ch.5 validation framework
 
 ---
 
@@ -39,6 +47,7 @@ This file documents **4 critical technical findings** discovered during framewor
 | 2025-02-27 | Initial creation | Documented all 4 findings from device deployment debugging session |
 | 2025-02-27 | Restructure v2.0 | Added Quick Context, Cross-Reference Index, Session Log for cross-session AI continuity |
 | 2025-02-27 | Finding 5 added | Documented edge-replication distortion and tiny dataset root cause analysis |
+| 2026-03-01 | Findings 6-8 added | Three critical deployment bugs: double standardization, feature order mismatch, double extraction in code gen pipeline |
 
 *Add a row here each time this file is updated.*
 
@@ -247,40 +256,6 @@ Sử dụng CHỈ đặc trưng miền thời gian (time-domain features), đả
 
 ---
 
-## 5. TỔNG HỢP: TẠI SAO FRAMEWORK NÀY VƯỢT TRỘI
-
-### 5.1 So sánh chi tiết với Edge Impulse
-
-| Khía cạnh | Edge Impulse | Framework chúng tôi | Lợi thế |
-|-----------|-------------|---------------------|---------|
-| **Pipeline transparency** | Hộp đen (black-box) | Mã nguồn mở 100% | Chúng tôi: phát hiện và sửa lỗi |
-| **Padding strategy** | Không rõ, không kiểm chứng | Edge-value replication, đã kiểm chứng | Chúng tôi: tránh artifact |
-| **Formula verification** | Không thể kiểm tra | Python ↔ C++ đã xác minh | Chúng tôi: bit-exact |
-| **Feature distribution check** | Không | Có thể qua debug output | Chúng tôi: phát hiện mismatch |
-| **FFT consistency** | Có thể sai lệch, không biết | Loại bỏ FFT, chỉ time-domain | Chúng tôi: không có rủi ro |
-| **Chi phí** | $20-99/tháng | $0 (mã nguồn mở) | Chúng tôi: miễn phí |
-| **Debugging deployment** | Hạn chế | Full source code access | Chúng tôi: debug toàn diện |
-
-### 5.2 Vấn đề "Ít được nghiên cứu" trong tài liệu
-
-Training-deployment parity trong edge ML là một vấn đề **ít được nghiên cứu chuyên sâu** trong tài liệu học thuật:
-- Hầu hết bài báo báo cáo accuracy trên test set (Python) mà không xác minh trên device thực
-- Các nền tảng thương mại xử lý đây là chi tiết triển khai nội bộ (không công khai)
-- Framework của chúng tôi là một trong số ít hệ thống công khai ghi nhận VÀ giải quyết vấn đề này
-
-### 5.3 Danh sách các biện pháp đảm bảo tương đồng trong framework
-
-1. ✅ **Loại bỏ FFT features** — tránh sai lệch triển khai FFT
-2. ✅ **Edge-value replication** — thay thế zero-padding
-3. ✅ **Verified kurtosis/skewness** — population std, khớp pandas
-4. ✅ **Cùng thứ tự đặc trưng** — Python feature_extraction.py ↔ C++ extract_magnitude_stats()
-5. ✅ **Cùng đơn vị cảm biến** — m/s² cho gia tốc, deg/s cho gyroscope
-6. ✅ **Cùng tốc độ lấy mẫu** — 100Hz trong cả thu thập và suy luận
-7. ✅ **Cùng kích thước cửa sổ** — 150 mẫu, từ metadata model
-8. ✅ **StandardScaler nhất quán** — cùng mean/std values, cùng clamp range
-
----
-
 ## 5. EDGE-REPLICATION VẪN LÀM SAI LỆCH ĐẶC TRƯNG + DỮ LIỆU QUÁ ÍT
 
 ### 5.1 Mô tả vấn đề
@@ -362,7 +337,233 @@ Walking và walking_downstairs chênh lệch chỉ ~3% trên hầu hết đặc 
 
 ---
 
-## 6. GHI CHÚ CHO TÁC GIẢ VÀ AI ASSISTANT
+## 6. CHUẨN HÓA KÉP — FE VÀ TRAINING ĐỀU SCALE (Double Standardization)
+
+### 6.1 Mô tả vấn đề
+
+**Tên kỹ thuật:** Chuẩn hóa kép gây scaler gần đồng nhất (Double Standardization → Identity Scaler)
+
+**Bối cảnh:** Pipeline Feature Engineering (FE) áp dụng `StandardScaler` lên feature matrix trước khi ghi ra CSV. Sau đó, Training pipeline đọc CSV và áp dụng `StandardScaler` lần nữa → model.scaler học trên dữ liệu **đã chuẩn hóa** → scaler.mean_ ≈ 0, scaler.scale_ ≈ 1.
+
+**Chuỗi lỗi:**
+```
+FE tab: features → StandardScaler.fit_transform() → writes scaled CSV
+Training tab: reads CSV → StandardScaler.fit_transform() AGAIN → scaler learns means≈0, stds≈1
+Code gen: exports scaler means=[0.07, -0.02, ...], stds=[0.98, 1.01, ...] → identity transform
+Device: z = (x - 0.07) / 0.98 ≈ x → NO SCALING → all activations wrong
+```
+
+### 6.2 Dữ liệu chứng minh
+
+**Scaler parameters trong C++ trước sửa (từ model cũ):**
+```
+feature_means[0] = 0.07   (should be 11.79 for acc_mag_mean)
+feature_stds[0]  = 0.98   (should be 2.49)
+```
+
+**Sau sửa (model mới):**
+```
+feature_means[0] = 11.791  ✅
+feature_stds[0]  = 2.491   ✅
+```
+
+### 6.3 Giải pháp
+
+**File sửa:** `callbacks/feature_engineering_callbacks.py`
+- **XÓA** block `StandardScaler/MinMaxScaler/RobustScaler` trong FE callback
+- FE tab giờ ghi raw features ra CSV
+- Scaling chỉ xảy ra MỘT LẦN trong training pipeline (`EdgeMLModel.preprocess_data()`)
+
+**File sửa:** `callbacks/training_callbacks.py`
+- Giữ `pd.DataFrame` (không gọi `.values`) khi truyền vào model.train()
+- Đảm bảo `feature_names` được lưu trong model dict (trước đó bị `None` do `.values` mất tên cột)
+
+---
+
+## 7. SAI THỨ TỰ ĐẶC TRƯNG — ALPHABETICAL VS C++ COMPUTATION ORDER (Feature Order Mismatch)
+
+### 7.1 Mô tả vấn đề
+
+**Tên kỹ thuật:** Không khớp thứ tự đặc trưng giữa model training và C++ extraction
+
+**Bối cảnh:** Python `pd.DataFrame(list_of_dicts)` sắp xếp cột theo **thứ tự alphabet**. Model sklearn được huấn luyện trên thứ tự này. Nhưng C++ `extract_magnitude_stats()` trích xuất theo **thứ tự tính toán** cố định.
+
+**Thứ tự alphabet (Python training):**
+```
+[0] acc_jerk_mag_max        → value 3.724
+[1] acc_jerk_mag_mean       → value 1.011
+[2] acc_jerk_mag_std        → value 0.848
+...
+[7] acc_mag_mean            → value 11.791
+```
+
+**Thứ tự C++ extraction:**
+```
+[0] acc_mag_mean            → value 11.791
+[1] acc_mag_std             → value 3.837
+[2] acc_mag_min             → value 4.975
+...
+```
+
+**Hậu quả:** TẤT CẢ 33 đặc trưng bị sai lệch vị trí → scaler áp dụng sai mean/std cho sai feature → weights nhân với sai feature → kết quả dự đoán hoàn toàn ngẫu nhiên.
+
+### 7.2 Giải pháp
+
+Thêm **feature reorder remapping** vào `deployment/code_generator_factory.py`:
+
+```python
+def get_cpp_feature_order(feature_names):
+    """Determine C++ extraction order from feature names."""
+    # Groups: acc_mag → gyro_mag → jerk_mag
+    # Stats per group: mean, std, min, max, range, median, q25, q75,
+    #                  iqr, skewness, kurtosis, rms, energy,
+    #                  zero_crossings, mean_crossing_rate
+    ...
+
+def reorder_model_parameters(enhanced_data, reorder_indices, cpp_order):
+    """Reorder scaler means/stds, NN input weights, RF tree indices, SVM SV columns."""
+    ...
+```
+
+Áp dụng reorder tại thời điểm code generation: scaler means/stds, input weight matrix rows (cho NN), tree feature indices (cho RF), support vector columns (cho SVM).
+
+---
+
+## 8. TRÍCH XUẤT KÉP — REORDER BỊ HỦY BỞI LẦN GỌI THỨ HAI (Double Extraction Bug)
+
+### 8.1 Mô tả vấn đề
+
+**Tên kỹ thuật:** Gọi `extract_real_model_parameters()` hai lần hủy kết quả reorder
+
+**Bối cảnh:** Trong pipeline code generation:
+1. `generate_and_save_deployment_code()` gọi `extract_real_model_parameters()` → reorder ✅ → `feature_names` thành C++ order
+2. Rồi gọi `generate_deployment_code()` → gọi `extract_real_model_parameters()` LẦN NỮA
+3. Lần gọi thứ 2: `feature_names` đã ở C++ order → `compute_feature_reorder_indices()` trả `None` → **KHÔNG reorder**
+4. NHƯNG: scaler means/stds được trích xuất LẠI từ scaler object (thứ tự alphabet!) → **GHI ĐÈ** giá trị đã reorder
+
+**Kết quả:** Generated code có `feature_means[0] = 3.724` (alphabetical: acc_jerk_mag_max) thay vì `11.791` (C++ order: acc_mag_mean).
+
+### 8.2 Giải pháp
+
+**File sửa:** `deployment/code_generator_factory.py`
+- **XÓA** lệnh gọi `extract_real_model_parameters()` trong `generate_and_save_deployment_code()` (line 589)
+- Giữ lại lệnh gọi duy nhất trong `generate_deployment_code()` (line 505)
+- Thêm comment giải thích tại sao KHÔNG được gọi hai lần
+
+### 8.3 Xác minh
+
+Sau sửa, test code generation pipeline:
+```
+feature_means[0] = 11.791  ✅ (acc_mag_mean, C++ extraction order)
+Feature order remapped: model order → C++ extraction order
+Applied feature reorder to input weight matrix ✅
+```
+
+---
+
+## 9. Validation không nhận diện kiến trúc CNN — False Positive
+
+### 9.1 Vấn đề
+
+`DeploymentValidator.validate_generated_code()` áp dụng kiểm tra dành cho model dựa trên **feature extraction** (NN, RF, SVM) cho tất cả model types, kể cả **CNN**. CNN sử dụng cửa sổ cảm biến thô (raw sensor windows) — **không có feature extraction, không có scaling** — nên 5 kiểm tra đều cho kết quả sai:
+
+| Check | Kỳ vọng (feature-based) | CNN thực tế | Kết quả |
+|-------|------------------------|-------------|---------|
+| `feature_means[NUM_FEATURES]` | Có | Không có — CNN không scale | ❌ False positive |
+| `feature_stds[NUM_FEATURES]` | Có | Không có | ❌ False positive |
+| `extract_magnitude_stats` in source | Có (nếu acc_mag_*) | Không — CNN dùng raw data | ❌ False positive |
+| `features == NULL` check | Có | Không có biến features | ⚠️ False warning |
+| `std < 0.0001f` div-by-zero | Có | Không scaling | ⚠️ False warning |
+
+**Nguyên nhân gốc:** Validator thiết kế theo kiến trúc feature-based (extract → scale → predict). CNN có kiến trúc hoàn toàn khác (collect window → Conv1D → MaxPool → Dense → predict).
+
+### 9.2 Giải pháp
+
+Thêm **model-type detection** vào validator:
+
+1. **Phát hiện CNN**: Kiểm tra `model_type in ('pytorch_cnn', 'cnn')` hoặc `'har_predict_from_window' in source_code`
+2. **CNN-specific checks** thay thế cho feature-based checks:
+   - `WINDOW_SIZE` defined ✓
+   - `N_CHANNELS` defined ✓
+   - `NUM_CLASSES` matches ✓
+   - `conv1d` function present ✓
+   - `har_predict_from_window` function present ✓
+   - CNN weight arrays present ✓
+   - Kiểm tra nghịch: **không nên** có `feature_means`/`extract_features` trong CNN code
+3. **Skip scaling validation** cho CNN (không có scaler)
+4. **CNN resource estimation** riêng: RAM = sensor buffer + layer activations (no FE buffers)
+
+### 9.3 Kết quả
+
+Trước sửa:
+```
+❌ Missing feature_means array in source
+❌ Missing feature_stds array in source
+❌ Model trained with magnitude features but C++ uses per-axis extraction!
+⚠️ Missing NULL pointer check for features array
+⚠️ Missing division-by-zero protection in feature scaling
+```
+
+Sau sửa:
+```
+✅ WINDOW_SIZE=150 ✓
+✅ N_CHANNELS=6 ✓
+✅ NUM_CLASSES=5 ✓
+✅ Conv1D layer function present ✓
+✅ Window-based prediction function present ✓
+✅ CNN weight arrays present (10 arrays) ✓
+✅ CNN architecture: raw window input (no feature extraction needed) ✓
+```
+
+### 9.4 Ý nghĩa cho thesis
+
+- Framework hỗ trợ **hai kiến trúc triển khai** (feature-based và end-to-end CNN) — commercial platforms thường chỉ hỗ trợ 1
+- Validator phải **architecture-aware** — không thể dùng cùng checklist cho mọi model type
+- CNN trên MCU: inference nhanh hơn (không mất thời gian FE) nhưng RAM cao hơn (lưu toàn bộ window)
+
+**Files changed:** `deployment/validation.py`
+
+---
+
+## TỔNG HỢP: TẠI SAO FRAMEWORK NÀY VƯỢT TRỘI
+
+### So sánh chi tiết với Edge Impulse
+
+| Khía cạnh | Edge Impulse | Framework chúng tôi | Lợi thế |
+|-----------|-------------|---------------------|---------|
+| **Pipeline transparency** | Hộp đen (black-box) | Mã nguồn mở 100% | Chúng tôi: phát hiện và sửa lỗi |
+| **Padding strategy** | Không rõ, không kiểm chứng | Edge-value replication, đã kiểm chứng | Chúng tôi: tránh artifact |
+| **Formula verification** | Không thể kiểm tra | Python ↔ C++ đã xác minh | Chúng tôi: bit-exact |
+| **Feature distribution check** | Không | Có thể qua debug output | Chúng tôi: phát hiện mismatch |
+| **FFT consistency** | Có thể sai lệch, không biết | Loại bỏ FFT, chỉ time-domain | Chúng tôi: không có rủi ro |
+| **Chi phí** | $20-99/tháng | $0 (mã nguồn mở) | Chúng tôi: miễn phí |
+| **Debugging deployment** | Hạn chế | Full source code access | Chúng tôi: debug toàn diện |
+
+### Vấn đề "Ít được nghiên cứu" trong tài liệu
+
+Training-deployment parity trong edge ML là một vấn đề **ít được nghiên cứu chuyên sâu** trong tài liệu học thuật:
+- Hầu hết bài báo báo cáo accuracy trên test set (Python) mà không xác minh trên device thực
+- Các nền tảng thương mại xử lý đây là chi tiết triển khai nội bộ (không công khai)
+- Framework của chúng tôi là một trong số ít hệ thống công khai ghi nhận VÀ giải quyết vấn đề này
+
+### Danh sách các biện pháp đảm bảo tương đồng trong framework
+
+1. ✅ **Loại bỏ FFT features** — tránh sai lệch triển khai FFT
+2. ✅ **Edge-value replication** — thay thế zero-padding
+3. ✅ **Verified kurtosis/skewness** — population std, khớp pandas
+4. ✅ **Cùng thứ tự đặc trưng** — Python feature_extraction.py ↔ C++ extract_magnitude_stats()
+5. ✅ **Cùng đơn vị cảm biến** — m/s² cho gia tốc, deg/s cho gyroscope
+6. ✅ **Cùng tốc độ lấy mẫu** — 100Hz trong cả thu thập và suy luận
+7. ✅ **Cùng kích thước cửa sổ** — 150 mẫu, từ metadata model
+8. ✅ **StandardScaler nhất quán** — cùng mean/std values, cùng clamp range
+9. ✅ **Loại bỏ chuẩn hóa kép** — scaling chỉ xảy ra 1 lần trong training pipeline
+10. ✅ **Feature order remapping** — reorder scaler/weights tại code-gen để khớp C++ order
+11. ✅ **Idempotent parameter extraction** — `extract_real_model_parameters` chỉ gọi 1 lần
+12. ✅ **Architecture-aware validation** — validator phân biệt CNN (raw window) vs feature-based (NN/RF/SVM)
+
+---
+
+## 10. GHI CHÚ CHO TÁC GIẢ VÀ AI ASSISTANT
 
 ### Khi retrain model:
 1. Xóa dữ liệu huấn luyện cũ (`persistent_data/training/*.csv`)

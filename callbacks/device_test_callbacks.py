@@ -210,15 +210,26 @@ def register_callbacks(app):
     def run_inference(n_intervals, base_dir):
         """Run model inference on latest data.
 
-        Loads the most recent trained model from the working directory,
-        reads the feature-engineering metadata so that inference uses the
-        **same** feature method, window size and sampling rate as training.
+        First checks if the device is sending on-board predictions (CSV with
+        activity name).  If so, displays the device prediction directly.
+        Otherwise, falls back to Python-side inference using the most recent
+        trained model from the working directory.
         """
         try:
             if not device_reader.is_connected:
                 return "No device connected", ""
 
-            # ---- Resolve working directory ----
+            # ---- Check for on-board device prediction ----
+            device_prediction = device_reader.get_latest_prediction()
+            if device_prediction is not None:
+                # Device is running a deployed model — show its prediction
+                return (
+                    f"🎯 {device_prediction}",
+                    "Source: on-device inference"
+                )
+
+            # ---- Fallback: Python-side inference ----
+            # Resolve working directory
             if not base_dir:
                 base_dir = PERSISTENT_DIR
 

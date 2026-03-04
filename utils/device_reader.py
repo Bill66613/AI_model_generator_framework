@@ -17,6 +17,8 @@ class DeviceReader:
         self.data_buffer = {'time': deque(maxlen=500)}
         for col in self.sensor_cols:
             self.data_buffer[col] = deque(maxlen=500)
+        self.inference_buffer = deque(maxlen=500)  # Store inference results
+        self.latest_prediction = None  # Most recent prediction string
         self.debug_log = deque(maxlen=100)  # Store last 100 debug messages
         self.start_time = None
         self.reader_thread = None
@@ -80,36 +82,66 @@ class DeviceReader:
                 time.sleep(0.01)  # Small delay to prevent CPU spinning
 
     def _parse_line(self, line):
-        """Parse incoming serial data line"""
+        """Parse incoming serial data line.
+
+        Expected CSV format from generated sketches:
+            aX,aY,aZ,gX,gY,gZ              (sensor data only)
+            aX,aY,aZ,gX,gY,gZ,activity     (sensor data + inference result)
+
+        Lines starting with '#' or containing non-numeric first fields are
+        treated as info/debug messages and logged to the debug console.
+        """
         try:
-            # Skip comment lines
+            # Skip empty lines
+            if not line:
+                return
+
+            # Skip comment / info lines (e.g. "HAR Model Ready!", "# ...")
             if line.startswith('#'):
                 self._log(f"[INFO] {line}")
                 return
 
-            if not line:
-                return
-
-            # Expected format: comma-separated values matching sensor_cols order
             parts = line.split(',')
             n_cols = len(self.sensor_cols)
 
-            if len(parts) >= n_cols:
-                current_time = time.time() - self.start_time if self.start_time else 0
+            # Need at least n_cols comma-separated parts with numeric sensor values
+            if len(parts) < n_cols:
+                # Could be a human-readable status message — log it instead of erroring
+                self._log(f"[DEVICE] {line[:100]}")
+                return
 
-                self.data_buffer['time'].append(current_time)
-                for i, col in enumerate(self.sensor_cols):
-                    self.data_buffer[col].append(float(parts[i]))
+            # Try parsing the first n_cols parts as floats
+            try:
+                sensor_values = [float(parts[i]) for i in range(n_cols)]
+            except ValueError:
+                # First fields aren't numeric — treat as info message
+                self._log(f"[DEVICE] {line[:100]}")
+                return
 
-                # Log first valid sample
-                if len(self.data_buffer['time']) == 1:
-                    self._log(f"✓ First data sample received: {line[:50]}...")
-            else:
-                error_msg = f"Invalid format (expected {n_cols} values, got {len(parts)}): {line[:80]}"
-                self._log(f"✗ {error_msg}")
-                print(error_msg)
+            current_time = time.time() - self.start_time if self.start_time else 0
 
-        except (ValueError, IndexError) as e:
+            self.data_buffer['time'].append(current_time)
+            for i, col in enumerate(self.sensor_cols):
+                self.data_buffer[col].append(sensor_values[i])
+
+            # Check for optional inference result after sensor columns
+            prediction = None
+            if len(parts) > n_cols:
+                extra = parts[n_cols].strip()
+                if extra:
+                    prediction = extra
+                    self.latest_prediction = prediction
+                    self.inference_buffer.append({
+                        'time': current_time,
+                        'prediction': prediction
+                    })
+
+            # Log first valid sample
+            if len(self.data_buffer['time']) == 1:
+                suffix = f" → {prediction}" if prediction else ""
+                self._log(f"✓ First data sample received: {line[:60]}{suffix}")
+
+        except Exception as e:
             error_msg = f"Parse error for '{line[:80]}': {e}"
             self._log(f"✗ {error_msg}")
             print(error_msg)
@@ -120,6 +152,14 @@ class DeviceReader:
         for col in self.sensor_cols:
             result[col] = list(self.data_buffer[col])
         return result
+
+    def get_inference_results(self):
+        """Get buffered inference results as list of dicts with 'time' and 'prediction'."""
+        return list(self.inference_buffer)
+
+    def get_latest_prediction(self):
+        """Get the most recent inference prediction string, or None."""
+        return self.latest_prediction
 
     def get_latest_window(self, window_size=150):
         """Get latest N samples for inference."""
@@ -133,6 +173,8 @@ class DeviceReader:
         """Clear all buffered data"""
         for key in self.data_buffer:
             self.data_buffer[key].clear()
+        self.inference_buffer.clear()
+        self.latest_prediction = None
         self.start_time = time.time()
         self._log("Buffer cleared")
 

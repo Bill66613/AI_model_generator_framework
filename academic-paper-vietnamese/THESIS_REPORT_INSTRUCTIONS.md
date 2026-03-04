@@ -1,7 +1,7 @@
 # HƯỚNG DẪN HOÀN THIỆN BÁO CÁO LUẬN VĂN
 
-**Last updated:** 2025-02-27  
-**Version:** 2.0 (restructured for cross-session continuity)  
+**Last updated:** 2026-03-05  
+**Version:** 4.0 (added finding 9: CNN validation false positives)  
 **Sinh viên:** Nguyễn Trường Minh Hoàng (MSSV: 2270757)  
 **Đề tài:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người  
 **GVHD:** TS. Lê Trọng Nhân  
@@ -30,11 +30,16 @@
 
 ### Key Technical Findings (detail in TECHNICAL_FINDINGS.md)
 
-4 findings differentiate this thesis from commercial platforms:
+9 findings differentiate this thesis from commercial platforms:
 1. **Zero-padding artifact** → FIXED → edge-value replication (CRITICAL for defense)
 2. **Kurtosis formula mismatch** → FIXED → population std in all generators
 3. **NN bias default prediction** → DOCUMENTED → explains "always predicts walking_downstairs"
 4. **FFT precision gap** → RESOLVED → time-domain only features
+5. **Edge-replication distortion + tiny dataset** → DATA QUALITY → need longer recordings
+6. **Double standardization** → FIXED → FE tab no longer scales; training pipeline scales once
+7. **Feature order mismatch** → FIXED → reorder remapping at code-gen time
+8. **Double extraction** → FIXED → `extract_real_model_parameters()` called once, not twice
+9. **CNN validation false positives** → FIXED → Validator now architecture-aware (CNN vs feature-based)
 
 ---
 
@@ -44,6 +49,8 @@
 |------|---------|-------------|
 | 2025-02-27 | Initial creation | Created with full TODO, LaTeX snippets, defense prep, glossary |
 | 2025-02-27 | Restructure v2.0 | Added Quick Context, Session Log, structured for cross-session AI use |
+| 2026-03-01 | Findings 6-8 | Added double standardization, feature order mismatch, double extraction to findings list |
+| 2026-03-05 | Finding 9 | Added CNN validation false positives — validator now architecture-aware |
 
 *Add a row here each time this file is updated.*
 
@@ -86,6 +93,32 @@
 **Ý nghĩa:** Đây là bằng chứng cho thấy **distribution mismatch** là nguyên nhân gốc, không phải lỗi thuật toán.
 
 **Đưa vào báo cáo:** Chương 5 → phân tích chi tiết hành vi mô hình khi gặp dữ liệu ngoài phân phối.
+
+### Phát hiện #6: Chuẩn hóa kép — FE và Training đều scale (CRITICAL)
+
+**Vấn đề:** Feature Engineering tab áp dụng `StandardScaler` trước khi ghi CSV. Training pipeline đọc CSV và scale lần nữa → scaler học trên dữ liệu đã chuẩn hóa → `means ≈ 0, stds ≈ 1` → identity transform trên thiết bị.
+
+**Hậu quả:** Thiết bị không scale đặc trưng → tất cả giá trị nằm ngoài phân phối → luôn dự đoán sai.
+
+**Giải pháp:** Xóa scaling trong FE callback, giữ scaling duy nhất trong training pipeline.
+
+**Đưa vào báo cáo:** Chương 5 → phân tích chuỗi lỗi pipeline, so sánh với hộp đen thương mại.
+
+### Phát hiện #7: Sai thứ tự đặc trưng — Alphabetical vs C++ extraction order (CRITICAL)
+
+**Vấn đề:** Python `pd.DataFrame` sắp xếp cột theo alphabet. C++ `extract_magnitude_stats()` trích xuất theo thứ tự tính toán cố định (mean→std→min→max→...). TẤT CẢ 33 đặc trưng bị sai vị trí → scaler áp sai mean/std cho sai feature → weights nhân sai feature.
+
+**Giải pháp:** Thêm feature reorder remapping (`reorder_model_parameters()`) tại thời điểm code generation.
+
+**Đưa vào báo cáo:** Chương 3 → Code Generation architecture, Chương 5 → parity verification.
+
+### Phát hiện #8: Trích xuất kép — Reorder bị hủy bởi lần gọi thứ hai (CRITICAL)
+
+**Vấn đề:** `extract_real_model_parameters()` được gọi 2 lần: trong `generate_and_save` rồi trong `generate_deployment_code`. Lần 2 re-extract scaler (alphabet order) nhưng skip reorder vì feature_names đã bị mutate sang C++ order → ghi đè kết quả reorder.
+
+**Giải pháp:** Xóa lần gọi thừa, chỉ giữ 1 lần trong `generate_deployment_code()`.
+
+**Đưa vào báo cáo:** Chương 5 → ví dụ về bug pipeline tinh vi mà chỉ hệ thống minh bạch mới phát hiện được.
 
 ---
 

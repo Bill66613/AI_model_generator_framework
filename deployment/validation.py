@@ -215,11 +215,21 @@ class DeploymentValidator:
             'checks_passed': [],
         }
 
+        # Detect CNN model type — CNN uses raw sensor windows, not extracted features
+        model_type = model_data.get('model_type', '')
+        is_cnn = model_type in ('pytorch_cnn', 'cnn') or \
+                 'har_predict_from_window' in source_code
+
+        if is_cnn:
+            return self._validate_cnn_code(header_code, source_code, model_data, report)
+
+        # === Feature-based model checks (NN, RF, SVM) ===
+
         # Check 1: NUM_FEATURES matches model
-        num_features_match = re.search(r'#define NUM_FEATURES (\d+)', header_code)
+        num_features_match = re.search(r'#define NUM_FEATURES\s+(\d+)', header_code)
         if num_features_match:
             cpp_features = int(num_features_match.group(1))
-            py_features = len(model_data.get('feature_names', []))
+            py_features = len(model_data.get('feature_names') or [])
             if cpp_features != py_features:
                 report['issues'].append(
                     f"NUM_FEATURES mismatch: C++={cpp_features}, Python={py_features}")
@@ -228,11 +238,11 @@ class DeploymentValidator:
                 report['checks_passed'].append(f"NUM_FEATURES={cpp_features} ✓")
 
         # Check 2: NUM_CLASSES matches model
-        num_classes_match = re.search(r'#define NUM_CLASSES (\d+)', header_code)
+        num_classes_match = re.search(r'#define NUM_CLASSES\s+(\d+)', header_code)
         if num_classes_match:
             cpp_classes = int(num_classes_match.group(1))
-            py_classes = len(model_data.get('classes', []))
-            if cpp_classes != py_classes:
+            py_classes = len(model_data.get('classes') or [])
+            if py_classes > 0 and cpp_classes != py_classes:
                 report['issues'].append(
                     f"NUM_CLASSES mismatch: C++={cpp_classes}, Python={py_classes}")
                 report['passed'] = False
@@ -297,6 +307,82 @@ class DeploymentValidator:
 
         return report
 
+    def _validate_cnn_code(self, header_code: str, source_code: str,
+                           model_data: Dict[str, Any],
+                           report: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate CNN-specific generated code.
+        CNN models operate on raw sensor windows — no feature extraction or scaling.
+        """
+        combined = header_code + source_code
+
+        # CNN Check 1: WINDOW_SIZE defined
+        ws_match = re.search(r'#define WINDOW_SIZE\s+(\d+)', header_code)
+        if ws_match:
+            report['checks_passed'].append(f"WINDOW_SIZE={ws_match.group(1)} ✓")
+        else:
+            report['issues'].append("Missing WINDOW_SIZE define for CNN")
+            report['passed'] = False
+
+        # CNN Check 2: N_CHANNELS defined
+        nc_match = re.search(r'#define N_CHANNELS\s+(\d+)', header_code)
+        if nc_match:
+            report['checks_passed'].append(f"N_CHANNELS={nc_match.group(1)} ✓")
+        else:
+            report['issues'].append("Missing N_CHANNELS define for CNN")
+            report['passed'] = False
+
+        # CNN Check 3: NUM_CLASSES matches model
+        num_classes_match = re.search(r'#define NUM_CLASSES\s+(\d+)', header_code)
+        if num_classes_match:
+            cpp_classes = int(num_classes_match.group(1))
+            py_classes = len(model_data.get('classes') or [])
+            if py_classes > 0 and cpp_classes != py_classes:
+                report['issues'].append(
+                    f"NUM_CLASSES mismatch: C++={cpp_classes}, Python={py_classes}")
+                report['passed'] = False
+            else:
+                report['checks_passed'].append(f"NUM_CLASSES={cpp_classes} ✓")
+
+        # CNN Check 4: Core CNN functions present
+        cnn_functions = [
+            ('conv1d', 'Conv1D layer function'),
+            ('har_predict_from_window', 'Window-based prediction function'),
+        ]
+        for func_name, desc in cnn_functions:
+            if func_name in combined:
+                report['checks_passed'].append(f"{desc} present ✓")
+            else:
+                report['issues'].append(f"Missing {desc} ({func_name})")
+                report['passed'] = False
+
+        # CNN Check 5: Weight arrays present
+        weight_arrays = re.findall(r'static\s+const\s+float\s+(\w+)\s*\[', combined)
+        if weight_arrays:
+            report['checks_passed'].append(
+                f"CNN weight arrays present ({len(weight_arrays)} arrays) ✓")
+        else:
+            report['issues'].append("No CNN weight arrays found")
+            report['passed'] = False
+
+        # CNN Check 6: Activity names match classes
+        for cls_name in model_data.get('classes', []):
+            if f'"{cls_name}"' not in combined:
+                report['warnings'].append(
+                    f"Class name '{cls_name}' not found in activity_names array")
+
+        # CNN Check 7: No feature extraction / scaling code (would be a bug for CNN)
+        if 'feature_means[NUM_FEATURES]' in source_code:
+            report['warnings'].append(
+                "CNN code contains feature_means — CNN should use raw windows, not features")
+        if 'extract_features' in source_code and 'extract_magnitude_stats' in source_code:
+            report['warnings'].append(
+                "CNN code contains feature extraction functions — CNN uses raw sensor data")
+
+        report['checks_passed'].append("CNN architecture: raw window input (no feature extraction needed) ✓")
+
+        return report
+
     def estimate_resources(self, model_data: Dict[str, Any],
                            device_key: str,
                            optimization: str = 'balanced') -> Dict[str, Any]:
@@ -315,15 +401,20 @@ class DeploymentValidator:
         if not device:
             return {'error': f"Unknown device: {device_key}"}
 
-        num_features = len(model_data.get('feature_names', []))
-        num_classes = len(model_data.get('classes', []))
+        num_features = len(model_data.get('feature_names') or [])
+        num_classes = len(model_data.get('classes') or [])
         model_type = model_data.get('model_type', 'unknown')
 
         # --- RAM Estimation ---
         # Sensor buffer: window_size * 6 axes * 4 bytes
         window_size = self._get_window_size(optimization)
         sensor_buffer_bytes = window_size * 6 * 4
-        
+
+        # CNN models: raw window buffer + layer activations, no feature extraction
+        if model_type in ('pytorch_cnn', 'cnn'):
+            return self._estimate_cnn_resources(
+                model_data, device, optimization, window_size, num_classes)
+
         # Feature arrays: raw + scaled
         feature_array_bytes = num_features * 4 * 2  # raw + scaled
         
@@ -582,6 +673,105 @@ void loop() {{
 }}
 """
 
+    def _estimate_cnn_resources(self, model_data: Dict[str, Any],
+                                device: Dict, optimization: str,
+                                window_size: int, num_classes: int) -> Dict[str, Any]:
+        """Estimate resources for CNN model (raw window input, no feature extraction)."""
+        n_channels = 6  # 6-axis IMU
+        # Raw sensor window buffer
+        sensor_buffer_bytes = window_size * n_channels * 4
+
+        # CNN layer activations (estimate from largest intermediate)
+        # Conv output: window_size * num_filters * 4 bytes
+        cnn_weights = model_data.get('cnn_weights', {})
+        num_filters = cnn_weights.get('num_filters', [16])[0] if cnn_weights else 16
+        conv_output_bytes = window_size * num_filters * 4
+        # Dense layer working memory
+        dense_working_bytes = num_filters * 4 + num_classes * 4
+        model_working_bytes = conv_output_bytes + dense_working_bytes
+
+        stack_overhead = 512
+        ram_total = sensor_buffer_bytes + model_working_bytes + stack_overhead
+
+        # Flash: code base + weight arrays
+        code_base_bytes = 6000  # Simpler than feature-based (no FE code)
+        # Weight estimation from model data
+        model_flash_bytes = 4000  # Default estimate
+        if cnn_weights:
+            total_params = 0
+            for key, val in cnn_weights.items():
+                if isinstance(val, (list, np.ndarray)):
+                    arr = np.array(val)
+                    total_params += arr.size
+            model_flash_bytes = total_params * 4 if total_params > 0 else 4000
+
+        flash_total = code_base_bytes + model_flash_bytes
+
+        # Power (same as feature-based)
+        sampling_rate = self._get_sampling_rate(optimization)
+        duty_cycle = self._get_duty_cycle(optimization, sampling_rate, window_size)
+        avg_power_mw = (device['power_active_mw'] * duty_cycle +
+                       device['power_sleep_mw'] * (1 - duty_cycle))
+        battery_cr2032_hours = 660 / avg_power_mw if avg_power_mw > 0 else 0
+        battery_aa_hours = 3750 / avg_power_mw if avg_power_mw > 0 else 0
+
+        # Inference time (CNN: multiply-accumulate per conv + dense)
+        conv_ops = window_size * n_channels * num_filters * 3  # kernel_size ≈ 3
+        dense_ops = num_filters * num_classes * 2
+        total_ops = conv_ops + dense_ops
+        if device['float_support'] == 'hardware_fpu_dp':
+            mflops = device['clock_mhz'] * 0.5
+        elif device['float_support'] == 'hardware_fpu':
+            mflops = device['clock_mhz'] * 0.3
+        else:
+            mflops = device['clock_mhz'] * 0.01
+        inference_time_ms = (total_ops / (mflops * 1e6)) * 1000 if mflops > 0 else 999
+
+        ram_ok = ram_total < device['ram_kb'] * 1024 * 0.8
+        flash_ok = flash_total < device['flash_kb'] * 1024 * 0.9
+
+        return {
+            'device': device,
+            'ram': {
+                'sensor_buffer': sensor_buffer_bytes,
+                'feature_arrays': 0,
+                'sort_buffer': 0,
+                'magnitude_buffers': 0,
+                'model_working': model_working_bytes,
+                'stack_overhead': stack_overhead,
+                'total_bytes': ram_total,
+                'total_kb': ram_total / 1024,
+                'usage_percent': (ram_total / (device['ram_kb'] * 1024)) * 100,
+                'fits': ram_ok,
+            },
+            'flash': {
+                'code_base': code_base_bytes,
+                'scaling_arrays': 0,
+                'model_weights': model_flash_bytes,
+                'total_bytes': flash_total,
+                'total_kb': flash_total / 1024,
+                'usage_percent': (flash_total / (device['flash_kb'] * 1024)) * 100,
+                'fits': flash_ok,
+            },
+            'power': {
+                'sampling_rate': sampling_rate,
+                'duty_cycle_percent': duty_cycle * 100,
+                'active_power_mw': device['power_active_mw'],
+                'sleep_power_mw': device['power_sleep_mw'],
+                'average_power_mw': avg_power_mw,
+                'battery_cr2032_hours': battery_cr2032_hours,
+                'battery_aa_hours': battery_aa_hours,
+            },
+            'performance': {
+                'feature_extraction_ops': 0,
+                'inference_ops': total_ops,
+                'total_ops': total_ops,
+                'estimated_inference_ms': inference_time_ms,
+                'max_predictions_per_sec': 1000 / inference_time_ms if inference_time_ms > 0 else 0,
+            },
+            'compatible': ram_ok and flash_ok,
+        }
+
     def _min_precision(self, value: float) -> int:
         """Find minimum decimal precision needed to represent a value non-zero."""
         if value == 0:
@@ -693,10 +883,12 @@ def validate_before_deployment(model_data: Dict[str, Any],
         if not code_report['passed']:
             report['passed'] = False
     
-    # Scaling validation
+    # Scaling validation (skip for CNN — CNN uses raw sensor windows, no feature scaling)
+    model_type = model_data.get('model_type', '')
+    is_cnn = model_type in ('pytorch_cnn', 'cnn')
     feature_means = model_data.get('feature_means', [])
     feature_stds = model_data.get('feature_stds', [])
-    if feature_means and feature_stds:
+    if feature_means and feature_stds and not is_cnn:
         # Determine precision from optimization level
         optimization = model_data.get('optimization', 'balanced')
         precision = {'accuracy': 6, 'balanced': 3, 'speed': 3, 'power': 3}.get(optimization, 3)
