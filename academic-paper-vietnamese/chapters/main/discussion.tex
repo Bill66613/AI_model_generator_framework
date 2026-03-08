@@ -109,6 +109,28 @@ Bộ 138 đặc trưng của chúng tôi sử dụng các thống kê miền th�
 
 Một phương pháp trung gian—sử dụng các bộ mã hóa tự động convolutional cho trích xuất đặc trưng học theo sau bởi ML cổ điển cho phân loại—có thể kết hợp lợi ích. Điều này vẫn là công việc tương lai.
 
+\subsection{Tạo Mã Trực tiếp vs Runtime Suy luận: Đánh Giá Thực tiễn}
+\label{sec:codegen_tradeoff_discussion}
+
+Phần~\ref{sec:codegen_rationale} trình bày lý do thiết kế cho việc chọn tạo mã trực tiếp thay vì runtime suy luận. Sau quá trình phát triển và xác thực hoàn chỉnh, chúng tôi có thể đánh giá liệu lựa chọn này có được minh chứng trong thực tế hay không.
+
+\paragraph{Lợi ích Đã được Xác nhận}
+Ba lợi ích dự kiến đã được xác nhận qua thực nghiệm:
+
+Thứ nhất, \textit{dấu chân bộ nhớ tối thiểu}: Neural Network chỉ chiếm 95KB flash---bao gồm trọng số mô hình, logic suy luận, trích xuất đặc trưng 15 thống kê, và chuẩn hóa StandardScaler. Với TFLite Micro, cùng chức năng sẽ yêu cầu thêm 150--250KB cho runtime interpreter, đẩy tổng lên 245--345KB và chiếm $>$25\% flash khả dụng chỉ cho suy luận. Trên Seeed XIAO (1MB flash), điều này vẫn khả thi; trên các vi điều khiển với 256KB flash (ví dụ: STM32F103, ATmega2560), phương pháp runtime sẽ không thể triển khai.
+
+Thứ hai, \textit{minh bạch cho gỡ lỗi}---đây là yếu tố có tác động lớn nhất ngoài dự kiến. Khi mô hình đã triển khai luôn dự đoán \texttt{walking\_downstairs}, chúng tôi có thể: (a) đọc chính xác mã C++ đã tạo để xác minh logic suy luận, (b) in giá trị đặc trưng trung gian trên serial để so sánh với Python, (c) xác định lỗi zero-padding và kurtosis formula bằng cách truy vết từng dòng. Với runtime đóng gói, bước (b) và (c) sẽ yêu cầu công cụ debugging chuyên biệt hoặc không thể thực hiện. Kinh nghiệm phát triển thực tế cho thấy 3 trong 10 phát hiện kỹ thuật (Finding 1: zero-padding, Finding 2: kurtosis, Finding 7: feature order) chỉ có thể phát hiện nhờ khả năng kiểm tra mã đã tạo dòng-theo-dòng.
+
+Thứ ba, \textit{hỗ trợ trực tiếp ML cổ điển}: Framework hỗ trợ Random Forest---thuật toán không có đường dẫn chuyển đổi trực tiếp sang TFLite Micro. Chuỗi scikit-learn $\rightarrow$ ONNX $\rightarrow$ TFLite giới thiệu rủi ro sai lệch; trong khi phương pháp trực tiếp đọc \texttt{model.estimators\_} (danh sách cây quyết định) và tạo mã duyệt cây nhị phân chính xác.
+
+\paragraph{Chi phí Phát triển Thực tế}
+Tạo mã trực tiếp cũng có chi phí không nhỏ. Framework yêu cầu triển khai và xác minh logic suy luận riêng cho mỗi thuật toán: lan truyền tiến cho Neural Network, tính kernel RBF và bỏ phiếu OvO cho SVM, duyệt cây nhị phân và bỏ phiếu đa số cho Random Forest. Tổng cộng, \texttt{base\_generator.py} chứa $\sim$1580 dòng mã cho trích xuất đặc trưng chung, và mỗi trình tạo đặc thù thêm 200--500 dòng. Bất kỳ lỗi nào trong logic suy luận đã tạo đều ảnh hưởng trực tiếp đến độ chính xác triển khai---như đã chứng minh bởi Finding 2 (kurtosis) và Finding 7 (feature order).
+
+Tuy nhiên, chi phí này là \textit{một lần}: sau khi trình tạo được xác minh cho một thuật toán, nó hoạt động chính xác cho mọi mô hình được huấn luyện bằng thuật toán đó, bất kể số lớp, số đặc trưng, hoặc siêu tham số.
+
+\paragraph{Kết luận về Đánh đổi}
+Tạo mã trực tiếp là lựa chọn đúng cho \textit{bối cảnh sử dụng cụ thể của framework}: tập dữ liệu vừa phải ($<$10K mẫu), thuật toán ML cổ điển, vi điều khiển bị giới hạn tài nguyên, và yêu cầu minh bạch cao. Đối với các bối cảnh khác---tập dữ liệu lớn, mạng sâu, vi điều khiển $>$4MB flash---runtime suy luận (TFLite Micro) hoặc trình biên dịch mô hình (TVM) sẽ phù hợp hơn. Framework được thiết kế modular để tích hợp đường dẫn TFLite Micro trong tương lai mà không thay thế phương pháp trực tiếp hiện có.
+
 \subsection{Các Chế Độ Tối Ưu Hóa}
 Bốn chế độ tối ưu hóa (accuracy, speed, power, balanced) cung cấp tính linh hoạt, nhưng yêu cầu người dùng hiểu các đánh đổi. Các thiết kế thay thế có thể:
 \begin{itemize}
@@ -118,6 +140,116 @@ Bốn chế độ tối ưu hóa (accuracy, speed, power, balanced) cung cấp t
 \end{itemize}
 
 Triển khai các chiến lược tinh vi này sẽ cải thiện khả năng sử dụng nhưng tăng độ phức tạp framework.
+
+\section{Tương đồng Huấn luyện-Triển khai trong Edge ML}
+\label{sec:training_deployment_parity}
+
+Một phát hiện quan trọng trong quá trình phát triển và xác thực framework là tầm quan trọng thiết yếu của \textit{tương đồng huấn luyện-triển khai} (training-deployment parity)---sự đảm bảo rằng quá trình trích xuất đặc trưng trong môi trường huấn luyện (Python) tạo ra kết quả \textbf{giống hệt} với quá trình trích xuất đặc trưng trên thiết bị biên (C++/MicroPython). Vấn đề này ít được nghiên cứu trong tài liệu edge ML nhưng có tác động nghiêm trọng đến hiệu suất triển khai thực tế \cite{paleyes2022challenges, sculley2015hidden}.
+
+\subsection{Các Nguồn Không khớp Được Xác định}
+Trong quá trình phát triển, chúng tôi xác định và giải quyết nhiều nguồn sai lệch giữa pipeline huấn luyện Python và mã suy luận C++ đã tạo:
+
+\paragraph{Artifact Đệm Số Không (Zero-Padding Artifact)}
+Pipeline trích xuất đặc trưng ban đầu đệm các cửa sổ ngắn hơn kích thước mục tiêu bằng hàng toàn số không. Trên thiết bị thực, bộ đệm trượt luôn chứa đầy dữ liệu cảm biến thực (không có giá trị zero), vì cảm biến liên tục đo gia tốc trọng trường. Sự khác biệt này tạo ra phân phối đặc trưng hoàn toàn khác nhau giữa huấn luyện ($\text{acc\_mag\_min} = 0$) và triển khai ($\text{acc\_mag\_min} \approx 9{,}81$), đẩy tất cả đặc trưng đầu vào ra ngoài vùng huấn luyện.
+
+\paragraph{Sai lệch Công thức Thống kê}
+Công thức độ nhọn (kurtosis) trong mã C++ tạo ra ban đầu sử dụng độ lệch chuẩn mẫu ($n-1$ ở mẫu số) cho chuẩn hóa z-scores, trong khi Python pandas sử dụng độ lệch chuẩn tổng thể ($n$ ở mẫu số). Sai lệch hệ thống:
+\begin{equation}
+    \text{Ratio} = \left(\frac{n-1}{n}\right)^2 \approx 0{,}987 \text{ cho } n = 150
+\end{equation}
+tương đương sai lệch $\sim$1,3\% cho mỗi đặc trưng kurtosis và skewness---nhỏ nhưng hệ thống và tích lũy qua 6 trục.
+
+\paragraph{Thứ tự Đặc trưng Không khớp}
+Python huấn luyện trên các cột DataFrame được sắp xếp theo thứ tự bảng chữ cái, trong khi C++ trích xuất đặc trưng theo thứ tự cố định (magnitude $\rightarrow$ per-axis). Mức reorder đặc trưng tại thời điểm tạo mã đảm bảo trọng số mô hình và tham số scaler tương ứng chính xác với thứ tự trích xuất C++.
+
+\subsection{Tác động Thực tế}
+Khi triển khai trên thiết bị Seeed XIAO nRF52840, các lỗi không khớp khiến mô hình luôn dự đoán lớp \texttt{walking\_downstairs} bất kể hoạt động thực tế. Phân tích cho thấy output biases của mạng nơ-ron $[-0{,}116; -0{,}160; -0{,}066; 0{,}116; 0{,}048]$ chi phối khi đặc trưng đầu vào nằm hoàn toàn ngoài phân phối huấn luyện---lớp có bias cao nhất ($0{,}116$, tương ứng \texttt{walking\_downstairs}) luôn thắng quyết.
+
+\subsection{Danh sách Kiểm tra Tương đồng}
+Bảng~\ref{tab:parity_checklist} tóm tắt 12 biện pháp đảm bảo tương đồng đã được triển khai và xác minh trong framework:
+
+\begin{table}[H]
+    \centering
+    \caption{Danh sách kiểm tra tương đồng huấn luyện-triển khai}
+    \small
+    \begin{tabular}{@{}clp{7cm}@{}}
+        \toprule
+        \# & Biện pháp & Mô tả \\
+        \midrule
+        1 & Loại bỏ FFT & Tránh sai lệch triển khai FFT giữa Python và C++ \\
+        2 & Edge-value replication & Thay thế zero-padding bằng lặp giá trị biên \\
+        3 & Kurtosis/skewness & Sử dụng population std cho z-scores, khớp pandas \\
+        4 & Thứ tự đặc trưng & Reorder tham số mô hình tại thời điểm tạo mã \\
+        5 & Đơn vị cảm biến & m/s² cho gia tốc, deg/s cho con quay hồi chuyển \\
+        6 & Tốc độ lấy mẫu & 100Hz trong cả thu thập và suy luận \\
+        7 & Kích thước cửa sổ & 150 mẫu, đọc từ metadata mô hình \\
+        8 & StandardScaler & Cùng mean/std, cùng clamp range \\
+        9 & Chuẩn hóa đơn & Scaling chỉ xảy ra 1 lần trong pipeline \\
+        10 & Feature order remap & Trọng số/scaler reorder cho thứ tự C++ \\
+        11 & Trích xuất idempotent & Tham số mô hình chỉ trích xuất 1 lần \\
+        12 & Xác thực kiến trúc & Phân biệt CNN (raw window) vs feature-based \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:parity_checklist}
+\end{table}
+
+\subsection{So sánh với Nền tảng Thương mại}
+Các nền tảng thương mại như Edge Impulse hoạt động theo mô hình hộp đen (black-box), trong đó pipeline trích xuất đặc trưng không thể kiểm tra hoặc xác minh bởi người dùng. Nếu một lỗi tương đồng tương tự tồn tại, người dùng không có cách nào phát hiện hoặc sửa chữa. Tính \textbf{minh bạch hoàn toàn} (full transparency) của framework cho phép:
+\begin{itemize}
+    \item Kiểm tra trực tiếp giá trị đặc trưng (phát hiện $\text{acc\_mag\_min} = 0$)
+    \item Truy vết ngược đến nguyên nhân gốc (zero-padding)
+    \item Xác minh từng công thức giữa Python và C++
+    \item Sửa lỗi và huấn luyện lại mà không chờ nhà cung cấp
+\end{itemize}
+
+Phát hiện này nhấn mạnh rằng \textbf{tính minh bạch không chỉ là triết lý mã nguồn mở mà là yêu cầu kỹ thuật thiết yếu} cho triển khai edge ML đáng tin cậy---đặc biệt khi lỗi biểu hiện ở cấp thiết bị chứ không phải ở cấp mô hình.
+
+\section{Tăng cường Dữ liệu và Thiết kế Nhận biết Lớp}
+\label{sec:augmentation_discussion}
+
+\subsection{Hiệu quả Tăng cường cho Dữ liệu IMU}
+Tăng cường dữ liệu là kỹ thuật đã được chứng minh hiệu quả trong cải thiện tổng quát hóa mô hình, đặc biệt với tập dữ liệu nhỏ \cite{um2017data, iwana2021empirical}. Tuy nhiên, việc áp dụng cho dữ liệu IMU đòi hỏi cân nhắc cẩn thận vì tín hiệu cảm biến quán tính có các ràng buộc vật lý nghiêm ngặt: gia tốc trọng trường luôn hiện diện, biên độ dao động phải nằm trong phạm vi vật lý, và tỷ lệ tín hiệu-trên-nhiễu (SNR) giữa các hoạt động khác nhau rất đáng kể.
+
+Năm phương pháp tăng cường được chọn mô phỏng các nguồn biến thiên thực tế mà mô hình sẽ gặp trong triển khai: nhiễu cảm biến (jitter), biến thiên cường độ (scaling), thay đổi vị trí đặt cảm biến (rotation), biến thiên tốc độ thực hiện (time warping) và tính bất biến với thứ tự thời gian (permutation). Sự kết hợp này bao phủ các nguồn biến thiên chính được xác định trong tài liệu HAR \cite{eyobu2018feature, rashid2022ahar}.
+
+\subsection{Bài học từ Tăng cường Không-Nhận-biết Lớp}
+Thực nghiệm ban đầu áp dụng tất cả năm phương pháp đồng nhất cho mọi lớp hoạt động, phát hiện vấn đề: mô hình Neural Network sau tăng cường thống nhất phân loại sai hoạt động \textit{still} thành \textit{walking\_downstairs} với tỷ lệ đáng kể. Nguyên nhân gốc: jitter ($\sigma = 0{,}05$) và rotation ($15°$) trên cửa sổ tĩnh tạo ra dao động nhân tạo có biên độ tương đương hoạt động cường độ thấp (đi xuống cầu thang chậm), dẫn đến chồng lấn vùng đặc trưng giữa hai lớp.
+
+Phân tích định lượng xác nhận: perturbation tối đa trên cửa sổ tĩnh với tăng cường đầy đủ đạt 0,6059 (tương đương dao động gia tốc đáng kể), trong khi cửa sổ tĩnh gốc có perturbation $< 0{,}01$. Chiến lược nhận biết lớp giảm perturbation tĩnh về $\leq 0{,}0002$ (micro-jitter), bảo toàn hoàn toàn đặc tính phân biệt.
+
+\subsection{Nguyên tắc Thiết kế}
+Kinh nghiệm này dẫn đến nguyên tắc thiết kế tăng cường cho IMU HAR:
+\begin{enumerate}
+    \item \textbf{Bảo toàn đặc tính phân biệt}: Tăng cường không được phá hủy đặc tính khiến một lớp khác biệt với các lớp khác---với hoạt động tĩnh, đó là biên độ dao động cực thấp
+    \item \textbf{Phân biệt theo tính chất hoạt động}: Hoạt động động và tĩnh có bản chất vật lý khác nhau cơ bản; áp dụng cùng phép biến đổi là không phù hợp
+    \item \textbf{Phát hiện tự động}: Framework nên phát hiện tự động lớp tĩnh/động thay vì yêu cầu người dùng cấu hình thủ công, giảm rào cản kỹ thuật
+\end{enumerate}
+
+Quan điểm này khác biệt với đa số nghiên cứu tăng cường dữ liệu cho HAR, vốn áp dụng biến đổi đồng nhất \cite{um2017data, le_guennec2016augmentation}. Chúng tôi cho rằng sự phân biệt nhận biết lớp là đặc biệt quan trọng cho các hệ thống triển khai biên, nơi số lượng lớp thường nhỏ và sai sót trên lớp tĩnh (ví dụ: phát hiện nhầm hoạt động khi bệnh nhân đứng yên) có thể có hậu quả lâm sàng nghiêm trọng.
+
+\section{Từ chối Hoạt động Dựa trên Ngưỡng Tin cậy}
+\label{sec:confidence_discussion}
+
+\subsection{Vấn đề Phân loại Ép buộc}
+Các hệ thống phân loại tiêu chuẩn gán một nhãn cho mọi đầu vào, kể cả khi đầu vào thuộc phân phối ngoài (out-of-distribution). Trong triển khai HAR thực tế, đây là vấn đề phổ biến: người dùng thường thực hiện các hoạt động không thuộc tập huấn luyện (ngồi xuống ghế, gãi đầu, cúi lấy đồ), và cảm biến ghi nhận tín hiệu chuyển động tương ứng. Bộ phân loại không có cơ chế từ chối sẽ phân loại sai các đầu vào này với độ tin cậy biểu kiến cao---hiện tượng được gọi là \textit{overconfident extrapolation} \cite{hendrycks2017baseline}.
+
+\subsection{Phương pháp Tin cậy Trực tiếp}
+Thay vì huấn luyện một mô hình phát hiện bất thường riêng biệt (approach của Edge Impulse), framework trích xuất tin cậy trực tiếp từ đầu ra phân loại hiện có. Phương pháp này có ba ưu điểm thực tế:
+\begin{itemize}
+    \item \textbf{Không tốn thêm bộ nhớ}: Không mô hình bổ sung, không tham số bổ sung
+    \item \textbf{Không cần dữ liệu bổ sung}: Không yêu cầu thu thập mẫu ``không hoạt động'' để huấn luyện
+    \item \textbf{Tích hợp tự nhiên}: Tin cậy được tính trong quá trình suy luận đã có, không thêm bước xử lý
+\end{itemize}
+
+\subsection{Hạn chế và Hướng Tương lai}
+Cần lưu ý rằng tin cậy softmax thường \textit{kém hiệu chỉnh} (poorly calibrated) \cite{guo2017calibration}---giá trị softmax 0,8 không nhất thiết có nghĩa 80\% xác suất đúng. Điều này có nghĩa:
+\begin{itemize}
+    \item Random Forest có tin cậy hiệu chỉnh tự nhiên tốt hơn (tỷ lệ bỏ phiếu có ý nghĩa thống kê xác suất)
+    \item Neural Network/SVM qua softmax có thể quá tự tin---các kỹ thuật hiệu chỉnh nhiệt độ (temperature scaling) \cite{guo2017calibration} có thể cải thiện chất lượng tin cậy
+    \item Ngưỡng $\tau = 0{,}6$ là giá trị thực nghiệm; điều chỉnh tự động dựa trên đường cong ROC tập xác thực là hướng tương lai
+\end{itemize}
+
+Dù vậy, ngay cả tin cậy chưa hiệu chỉnh cũng cung cấp ``tuyến phòng thủ đầu tiên'' hiệu quả chống lại các dự đoán sai nghiêm trọng, đặc biệt cho các đầu vào hoàn toàn ngoài phân phối nơi tất cả xác suất lớp đều thấp.
 
 \section{Ý Nghĩa cho Thực Hành}
 

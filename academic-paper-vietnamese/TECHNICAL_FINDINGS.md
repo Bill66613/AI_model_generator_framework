@@ -1,14 +1,14 @@
 # PHÁT HIỆN KỸ THUẬT QUAN TRỌNG
 # Technical Findings — Framework vs Commercial Platforms
 
-**Last updated:** 2026-03-05  
-**Version:** 5.0 (added finding 10: Confidence threshold for unknown activity rejection)
+**Last updated:** 2026-03-08  
+**Version:** 6.0 (added finding 11: Data augmentation with class-aware protection)
 
 ---
 
 ## QUICK CONTEXT (Read this first in any new session)
 
-This file documents **10 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
+This file documents **11 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
 
 | # | Finding | Severity | Status | Code Files Affected | Thesis Chapters |
 |---|---------|----------|--------|---------------------|-----------------|
@@ -22,6 +22,7 @@ This file documents **10 critical technical findings** discovered during framewo
 | 8 | Double extraction — reorder undone by 2nd extract call | CRITICAL | ✅ FIXED | `deployment/code_generator_factory.py` | Ch.5 §parity |
 | 9 | CNN validation false positives — architecture-unaware validator | MEDIUM | ✅ FIXED | `deployment/validation.py` | Ch.3 §CodeGen, Ch.5 §validation |
 | 10 | Confidence threshold for unknown activity rejection | FEATURE | ✅ IMPLEMENTED | `deployment/base_generator.py`, `*_generator.py` (all) | Ch.3 §CodeGen, Ch.4 §robustness |
+| 11 | Data augmentation with class-aware protection | FEATURE | ✅ IMPLEMENTED | `utils/data_augmentation.py`, `callbacks/feature_engineering_callbacks.py`, `layouts/feature_engineering.py` | Ch.3 §Augmentation, Ch.5 §augmentation |
 
 **Action required:** Collect longer recordings (≥1.5s per window), use sliding window to generate 50+ windows/class, retrain, collect before/after accuracy data for Ch.4.
 
@@ -656,6 +657,62 @@ predicted, confidence = har_predict(features)  # returns (int, float), -1 if bel
 **Differentiator vs Edge Impulse:** Edge Impulse's confidence rejection requires a separate "anomaly detection" block trained on additional data. Our approach extracts confidence directly from the model's existing outputs — zero additional training cost, zero additional memory.
 
 **Defense argument:** Shows the framework handles real deployment challenges (class overlap, out-of-distribution inputs) gracefully, which is a hallmark of production-ready systems. This is a key feature for safety-critical HAR applications.
+
+---
+
+## Finding 11: Data Augmentation with Class-Aware Protection
+
+**Severity:** FEATURE  
+**Status:** ✅ IMPLEMENTED  
+**Date:** 2026-03-08  
+**Files:** `utils/data_augmentation.py`, `callbacks/feature_engineering_callbacks.py`, `layouts/feature_engineering.py`
+
+### §11.1 Mô tả vấn đề
+
+With small, single-subject datasets typical of edge deployment prototyping (159 feature vectors across 5 classes), models are prone to overfitting. Data augmentation is a standard technique to improve generalization, but naive application to IMU data causes a subtle and serious problem.
+
+**Initial observation:** After implementing 5 augmentation methods (jitter, scaling, rotation, time warping, permutation) and training a Neural Network, the model performed *worse* on the "still" class — consistently predicting it as "walking_downstairs" with small vibrations.
+
+### §11.2 Dữ liệu chứng minh
+
+**Root cause analysis:** Augmentation methods like jitter (σ=0.05), rotation (15°), and scaling applied to a "still" window (near-zero variance, acc ≈ [0, 0, 9.81]) introduce artificial micro-movements:
+
+| Metric | Still window (original) | Still window (augmented, naive) | Walking window (augmented) |
+|--------|------------------------|--------------------------------|---------------------------|
+| Max perturbation | 0.0000 | 0.6059 | 0.6059 |
+| acc_std | < 0.01 | ~0.05-0.15 | ~0.3-1.2 |
+| Resembles | True stillness | Low-intensity walking | Walking (correct) |
+
+The augmented "still" windows developed feature profiles nearly identical to "walking_downstairs" (which has low-intensity, regular oscillations), causing class overlap in feature space.
+
+### §11.3 Giải pháp
+
+**Class-aware augmentation strategy:**
+
+1. **Auto-detection of static labels:** Framework scans activity labels for keywords: `still`, `stand`, `sit`, `lying`, `idle` (case-insensitive substring match)
+2. **Differentiated augmentation:**
+   - **Dynamic activities:** Full pipeline — all 5 methods with standard parameters (σ_jitter=0.05, rotation=15°, etc.)
+   - **Static activities:** Micro-jitter only (σ=0.01) — enough diversity for sensor noise simulation without destroying near-stationary characteristics
+3. **User override:** Manual static label specification via UI text input, for non-standard label names
+
+**Verification after fix:**
+
+| Metric | Still (micro-jitter) | Walking (full aug) |
+|--------|---------------------|-------------------|
+| Max perturbation | 0.0002 | 0.6059 |
+| Feature profile | Still-like ✅ | Walking-like ✅ |
+| Class confusion | None ✅ | None ✅ |
+
+### §11.4 Thesis Significance
+
+**Novel contribution:** While data augmentation for HAR/wearable sensors has been studied (Um et al. 2017, Iwana & Uchida 2021), class-aware augmentation that automatically differentiates static vs dynamic activities is not standard practice. Most literature applies transformations uniformly.
+
+**Differentiator vs commercial platforms:**
+- Edge Impulse: No built-in data augmentation for IMU data — users must augment externally
+- SensiML: Limited augmentation options, no class-aware strategy
+- Our framework: Integrated augmentation with automatic static activity protection
+
+**Defense argument:** Demonstrates deep understanding of IMU signal physics — not just applying generic ML techniques, but designing augmentation that respects the physical constraints of inertial measurement data. The "still" class confusion bug is a real-world problem that would affect any HAR system using naive augmentation.
 
 ---
 

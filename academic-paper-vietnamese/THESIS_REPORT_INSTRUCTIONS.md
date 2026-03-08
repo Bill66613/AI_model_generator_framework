@@ -1,7 +1,7 @@
 # HƯỚNG DẪN HOÀN THIỆN BÁO CÁO LUẬN VĂN
 
-**Last updated:** 2026-03-05  
-**Version:** 4.0 (added finding 9: CNN validation false positives)  
+**Last updated:** 2026-03-08  
+**Version:** 5.0 (added findings 10-11, updated Ch.3/5/6 with augmentation, confidence, parity)  
 **Sinh viên:** Nguyễn Trường Minh Hoàng (MSSV: 2270757)  
 **Đề tài:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người  
 **GVHD:** TS. Lê Trọng Nhân  
@@ -21,11 +21,11 @@
 |---------|------|--------|---------------|
 | Ch.1 Giới thiệu | `chapters/main/introduction.tex` | ✅ Written in Vietnamese | — |
 | Ch.2 Công trình liên quan | `chapters/main/relatedwork.tex` | ✅ Written in Vietnamese | — |
-| Ch.3 Phương pháp luận | `chapters/main/methodology.tex` | ⚠️ Needs update | Add padding strategy, parity verification |
+| Ch.3 Phương pháp luận | `chapters/main/methodology.tex` | ✅ Updated | Added: padding strategy, data augmentation (class-aware), confidence threshold |
 | Ch.4 Kết quả | `chapters/main/results.tex` | ⚠️ Placeholder numbers | Needs real data after retrain |
-| Ch.5 Thảo luận | `chapters/main/discussion.tex` | ⚠️ Needs new section | Add training-deployment parity analysis |
-| Ch.6 Kết luận | `chapters/main/conclusion.tex` | ⚠️ Needs update | Add new technical contributions |
-| References | `references.bib` | ✅ Complete | — |
+| Ch.5 Thảo luận | `chapters/main/discussion.tex` | ✅ Updated | Added: training-deployment parity, augmentation design, confidence analysis |
+| Ch.6 Kết luận | `chapters/main/conclusion.tex` | ✅ Updated | Added 3 new contributions (#5-7), updated validation + future work |
+| References | `references.bib` | ✅ Updated | Added 11 new refs (augmentation, confidence, parity, calibration) |
 | Figures | `figures/` | ❌ Missing | Need confusion matrix, architecture, UI screenshots |
 
 ### Key Technical Findings (detail in TECHNICAL_FINDINGS.md)
@@ -217,9 +217,11 @@
 ### Ưu tiên 2: Cập nhật Nội dung Báo cáo
 
 #### Chương 3 — Phương pháp luận:
-- [ ] Cập nhật mục Feature Extraction: giải thích edge-value replication padding
-- [ ] Thêm mục mới: "Đảm bảo tương đồng huấn luyện-triển khai" 
-- [ ] Giải thích tại sao loại bỏ FFT features (đã có) + tại sao padding quan trọng
+- [x] Cập nhật mục Feature Extraction: giải thích edge-value replication padding
+- [x] Thêm mục mới: "Đảm bảo tương đồng huấn luyện-triển khai" 
+- [x] Giải thích tại sao loại bỏ FFT features (đã có) + tại sao padding quan trọng
+- [x] Thêm mục mới: "Tăng cường Dữ liệu Nhận biết Lớp" (data augmentation with class-aware protection)
+- [x] Thêm mục mới: "Ngưỡng Tin cậy cho Từ chối Hoạt động Không xác định" (confidence threshold)
 - [ ] Cập nhật mục Code Generation: đề cập verified kurtosis/skewness formula
 - [ ] Sửa: "75 mẫu (0.75s)" → "150 mẫu (1.5s)" nếu chưa nhất quán
 
@@ -231,16 +233,21 @@
 - [ ] Chụp screenshots UI
 
 #### Chương 5 — Thảo luận:
-- [ ] Thêm mục: "Vấn đề Tương đồng Huấn luyện-Triển khai trong Edge ML"
+- [x] Thêm mục: "Vấn đề Tương đồng Huấn luyện-Triển khai trong Edge ML"
   - Zero-padding artifact
   - Numerical formula mismatch  
   - Tầm quan trọng của full-stack transparency
-- [ ] Cập nhật so sánh Edge Impulse: bổ sung điểm vượt trội mới
-- [ ] Thêm phân tích: tại sao hộp đen platforms không thể phát hiện lỗi này
+- [x] Thêm mục: "Tăng cường Dữ liệu và Thiết kế Nhận biết Lớp"
+- [x] Thêm mục: "Từ chối Hoạt động Dựa trên Ngưỡng Tin cậy"
+- [x] Cập nhật so sánh Edge Impulse: bổ sung điểm vượt trội mới
+- [x] Thêm phân tích: tại sao hộp đen platforms không thể phát hiện lỗi này
 
 #### Chương 6 — Kết luận:
-- [ ] Bổ sung đóng góp kỹ thuật mới: training-deployment parity verification
-- [ ] Nhấn mạnh: transparency giúp phát hiện và sửa lỗi mà hộp đen không thể
+- [x] Bổ sung đóng góp kỹ thuật mới: training-deployment parity verification
+- [x] Bổ sung đóng góp: data augmentation with class-aware protection
+- [x] Bổ sung đóng góp: confidence threshold for unknown activity rejection
+- [x] Nhấn mạnh: transparency giúp phát hiện và sửa lỗi mà hộp đen không thể
+- [x] Cập nhật mục tiêu nghiên cứu: thêm "Độ Tin Cậy Triển Khai"
 
 ### Ưu tiên 3: Hình ảnh và Tài liệu trực quan
 - [ ] `figures/confusion_matrix_nn.png` — Từ mô hình NN sau retrain
@@ -253,9 +260,11 @@
 - [ ] `figures/deployment_accuracy.png` — Biểu đồ độ chính xác trước/sau sửa
 
 ### Ưu tiên 4: Tham khảo bổ sung
-- [ ] Thêm tham khảo về training-deployment mismatch trong edge ML
-- [ ] Thêm tham khảo về signal padding strategies
-- [ ] Cập nhật references.bib
+- [x] Thêm tham khảo về training-deployment mismatch trong edge ML (Paleyes 2022, Sculley 2015)
+- [x] Thêm tham khảo về data augmentation cho IMU/HAR (Um 2017, Iwana 2021, Eyobu 2018)
+- [x] Thêm tham khảo về confidence/calibration (Hendrycks 2017, Guo 2017, Gal 2016)
+- [x] Thêm tham khảo về class-aware augmentation (Buda 2018)
+- [x] Cập nhật references.bib
 
 ### Ưu tiên 5: Chuẩn bị bảo vệ
 - [ ] Slide trình bày (15-20 phút)
@@ -356,6 +365,8 @@ mà là yêu cầu kỹ thuật thiết yếu} cho triển khai edge ML đáng t
 1. **Minh bạch → Phát hiện lỗi**: Zero-padding, kurtosis formula
 2. **Tương đồng huấn luyện-triển khai**: Bit-exact time-domain features
 3. **Chi phí = 0, chất lượng cạnh tranh**: 96.2% accuracy, 12ms inference
+4. **Tăng cường nhận biết lớp**: Tự động bảo vệ hoạt động tĩnh khỏi class confusion
+5. **Ngưỡng tin cậy zero-cost**: Từ chối dự đoán không chắc chắn mà không cần mô hình bổ sung
 
 ### Câu hỏi phản biện có thể gặp:
 
@@ -363,13 +374,19 @@ mà là yêu cầu kỹ thuật thiết yếu} cho triển khai edge ML đáng t
 A: Các mô hình ML cổ điển (RF, SVM, NN) biên dịch thành C++ nhỏ gọn (95-182KB), không cần runtime suy luận nặng (TFLite Micro thêm 100-300KB overhead). Trên Cortex-M4 64MHz, suy luận 12-18ms vs 60-120ms cho deep learning. Với tập dữ liệu vừa phải (<10K mẫu), hiệu suất tương đương (96.2% vs 96.5% TFLite).
 
 **Q: "Dataset chỉ 1 người, làm sao tổng quát hóa?"**
-A: Đúng, đây là hạn chế được thừa nhận. Tuy nhiên, mục tiêu chính là chứng minh khả năng của framework — pipeline từ dữ liệu → triển khai. Framework được thiết kế để người dùng mang dữ liệu riêng (multi-subject). Xác thực trên UCI HAR, WISDM là công việc tương lai.
+A: Đúng, đây là hạn chế được thừa nhận. Tuy nhiên, mục tiêu chính là chứng minh khả năng của framework — pipeline từ dữ liệu → triển khai. Framework được thiết kế để người dùng mang dữ liệu riêng (multi-subject). Xác thực trên UCI HAR, WISDM là công việc tương lai. Data augmentation cũng giúp cải thiện generalization từ single-subject data.
 
 **Q: "Edge Impulse hỗ trợ 85+ board, framework này chỉ hỗ trợ một vài?"**
 A: Đúng, nhưng kiến trúc modular (factory pattern) cho phép thêm nền tảng mới bằng cách kế thừa BaseCodeGenerator. Đã có: Arduino, ARM Cortex-M, Zephyr, MicroPython. Quan trọng hơn: code chúng tôi tạo ra **đã được xác minh** tương đồng với Python training — Edge Impulse không đảm bảo điều này.
 
 **Q: "Padding ảnh hưởng bao nhiêu phần trăm?"**
 A: [Cần retrain và đo] — Dự kiến improvement đáng kể vì tất cả windows đều bị zero-padded (53% cho running, 33% cho still, 20-27% cho walking).
+
+**Q: "Tại sao cần class-aware augmentation? Tăng cường đồng nhất không đủ?"**
+A: Thực nghiệm cho thấy tăng cường đồng nhất gây class confusion — "still" bị phân loại sai thành "walking_downstairs" do jitter/rotation tạo dao động nhân tạo. Với hoạt động tĩnh, đặc tính phân biệt chính là biên độ dao động cực thấp (σ < 0.1 m/s²); biến đổi mạnh phá hủy chính xác đặc tính này. Chiến lược micro-jitter (σ=0.01) bảo toàn đặc tính phân biệt.
+
+**Q: "Ngưỡng tin cậy có đủ tin cậy cho ứng dụng thực tế?"**
+A: Softmax confidence có thể kém hiệu chỉnh (overconfident), đây là hạn chế đã thừa nhận. Tuy nhiên, Random Forest có calibration tự nhiên tốt (tỷ lệ bỏ phiếu = xác suất thực). Với ngưỡng 0.6 (gấp 3× random cho 5 lớp), đây là tuyến phòng thủ đầu tiên hiệu quả. Temperature scaling là hướng tương lai để cải thiện calibration.
 
 ---
 
@@ -378,18 +395,18 @@ A: [Cần retrain và đo] — Dự kiến improvement đáng kể vì tất c�
 ```
 academic-paper-vietnamese/
 ├── main.tex                    # File chính
-├── references.bib              # Tài liệu tham khảo
+├── references.bib              # Tài liệu tham khảo (cập nhật: +11 refs mới)
 ├── THESIS_REPORT_INSTRUCTIONS.md  # ← File này (TODO list, LaTeX snippets, defense prep)
-├── TECHNICAL_FINDINGS.md       # ← Chi tiết phát hiện kỹ thuật (evidence, code, math)
+├── TECHNICAL_FINDINGS.md       # ← Chi tiết phát hiện kỹ thuật (11 findings)
 ├── chapters/
 │   ├── front/                  # Khai báo, lời cảm ơn, tóm tắt
 │   └── main/
 │       ├── introduction.tex    # ✅ Tiếng Việt
 │       ├── relatedwork.tex     # ✅ Tiếng Việt
-│       ├── methodology.tex     # ⚠️ Cần cập nhật padding strategy + parity verification
+│       ├── methodology.tex     # ✅ Cập nhật: padding, augmentation, confidence
 │       ├── results.tex         # ⚠️ Cần kết quả thực tế (placeholder numbers)
-│       ├── discussion.tex      # ⚠️ Cần thêm mục training-deployment parity
-│       └── conclusion.tex      # ⚠️ Cần bổ sung đóng góp mới
+│       ├── discussion.tex      # ✅ Cập nhật: parity, augmentation design, confidence
+│       └── conclusion.tex      # ✅ Cập nhật: 7 đóng góp (thêm #5-7), future work
 ├── figures/                    # ❌ Cần tạo hình ảnh
 └── tables/                     # ⚠️ Cần cập nhật bảng
 ```

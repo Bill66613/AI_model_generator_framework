@@ -97,6 +97,86 @@ Cho mỗi cửa sổ và mỗi trục cảm biến (tổng cộng 6 trục), fra
 
 Tổng số chiều vector đặc trưng: $15 \times 6 = 90$ đặc trưng mỗi cửa sổ. Cách tiếp cận chỉ miền thời gian này đảm bảo tương đồng hoàn hảo giữa huấn luyện (Python pandas/NumPy) và triển khai (tính toán trực tiếp C++), quan trọng để đạt được hiệu suất mô hình nhất quán trên các thiết bị biên. Biểu diễn thống kê toàn diện bắt giữ biên độ chuyển động, động lực học, đặc tính phân phối và thông tin giả tần số đầy đủ để phân biệt các hoạt động với các dấu hiệu sinh cơ học riêng biệt.
 
+\subsection{Chiến lược Đệm Cửa sổ (Window Padding Strategy)}
+\label{sec:window_padding}
+
+Trong quá trình phân đoạn dữ liệu, các cửa sổ thời gian được trích xuất từ tín hiệu thô có thể ngắn hơn kích thước mục tiêu (150 mẫu ở 100Hz = 1,5 giây). Điều này xảy ra khi người dùng chọn các phân đoạn hoạt động ngắn thông qua giao diện kéo thả, hoặc khi cửa sổ trượt cuối cùng trong một đoạn không đủ dài.
+
+\paragraph{Vấn đề với Đệm Số Không (Zero-Padding)}
+Phương pháp đệm bằng số không---thường được sử dụng trong xử lý tín hiệu số \cite{oppenheim1999discrete}---tạo ra các hàng dữ liệu có tất cả giá trị cảm biến bằng 0. Đối với gia tốc kế, điều này có nghĩa $a_x = a_y = a_z = 0$, dẫn đến magnitude gia tốc:
+\begin{equation}
+    ||\mathbf{a}|| = \sqrt{a_x^2 + a_y^2 + a_z^2} = 0
+\end{equation}
+Tuy nhiên, trong thực tế, magnitude gia tốc \textit{luôn lớn hơn 0} do gia tốc trọng trường ($\approx 9{,}81$ m/s²), kể cả khi thiết bị hoàn toàn đứng yên. Do đó, zero-padding tạo ra các giá trị \textbf{vật lý bất khả thi} (physically impossible) gây nhiễu nghiêm trọng cho phân phối đặc trưng thống kê: $\text{min} = 0$ thay vì $\approx 9{,}81$, median và phần trăm thứ 25 bị kéo về 0.
+
+\paragraph{Giải pháp: Lặp Giá trị Biên (Edge-Value Replication)}
+Framework sử dụng chiến lược lặp giá trị cuối cùng của cửa sổ để đệm đến kích thước mục tiêu. Cho cửa sổ $\mathbf{W} = [w_1, w_2, \ldots, w_k]$ với $k < N$ (kích thước mục tiêu), cửa sổ đệm trở thành:
+\begin{equation}
+    \mathbf{W}' = [w_1, w_2, \ldots, w_k, \underbrace{w_k, w_k, \ldots, w_k}_{N-k \text{ lần}}]
+\end{equation}
+Phương pháp này: (1) bảo toàn các đặc tính thống kê tín hiệu gốc, (2) không tạo ra artifact vật lý bất khả thi, và (3) đảm bảo tính nhất quán với dữ liệu suy luận trên thiết bị biên---nơi bộ đệm trượt luôn chứa đầy đủ dữ liệu cảm biến thực. Ngoài ra, các cửa sổ có ít hơn 30\% số mẫu mục tiêu được loại bỏ hoàn toàn, vì không chứa đủ thông tin chuyển động để trích xuất đặc trưng có ý nghĩa.
+
+\textit{Ý nghĩa thực nghiệm}: Trong quá trình phát triển, zero-padding khiến mô hình đã triển khai luôn dự đoán sai lớp \texttt{walking\_downstairs} bất kể hoạt động thực tế, do các đặc trưng đầu vào nằm ngoài phân phối huấn luyện (xem Mục~\ref{sec:training_deployment_parity} để phân tích chi tiết).
+
+\subsection{Tăng cường Dữ liệu cho Huấn luyện (Data Augmentation)}
+\label{sec:data_augmentation}
+
+Để cải thiện tính tổng quát hóa của mô hình và giảm hiện tượng quá khớp (overfitting), đặc biệt với các tập dữ liệu nhỏ điển hình của thu thập dữ liệu đối tượng đơn, framework tích hợp một hệ thống tăng cường dữ liệu (data augmentation) được thiết kế riêng cho dữ liệu IMU \cite{um2017data, iwana2021empirical}. Tăng cường được thực hiện ở cấp cửa sổ---trước khi trích xuất đặc trưng---để tạo ra các biến thể thực tế của tín hiệu gốc mà không làm thay đổi bản chất hoạt động.
+
+\subsubsection{Các Phương pháp Tăng cường}
+Năm phương pháp biến đổi được triển khai, mỗi phương pháp mô phỏng một nguồn biến thiên thực tế khác nhau trong dữ liệu cảm biến quán tính:
+
+\begin{enumerate}
+    \item \textbf{Nhiễu Jitter}: Thêm nhiễu Gaussian $\mathcal{N}(0, \sigma^2)$ vào mỗi mẫu, mô phỏng nhiễu cảm biến tự nhiên và biến thiên môi trường. Tham số $\sigma$ (mặc định: 0,05) kiểm soát cường độ nhiễu \cite{um2017data}.
+    
+    \item \textbf{Tỷ lệ (Scaling)}: Nhân toàn bộ cửa sổ với hệ số tỷ lệ ngẫu nhiên $s \sim \mathcal{N}(1, \sigma_s^2)$, mô phỏng sự khác biệt về cường độ chuyển động giữa các lần thực hiện. Ví dụ, $s = 1{,}15$ tương ứng với bước đi mạnh hơn 15\%.
+    
+    \item \textbf{Xoay (Rotation)}: Áp dụng ma trận xoay ngẫu nhiên lên các trục gia tốc kế và con quay hồi chuyển, mô phỏng sự thay đổi vị trí đặt cảm biến trên cơ thể---một nguồn biến thiên phổ biến và quan trọng trong ứng dụng HAR thực tế \cite{eyobu2018feature}. Góc xoay tối đa có thể cấu hình (mặc định: $15°$).
+    
+    \item \textbf{Biến dạng Thời gian (Time Warping)}: Áp dụng biến đổi phi tuyến lên trục thời gian qua nội suy cubic spline, mô phỏng sự biến thiên tốc độ tự nhiên trong thực hiện hoạt động---ví dụ, bước đi bắt đầu chậm và tăng tốc dần \cite{le_guennec2016augmentation}.
+    
+    \item \textbf{Hoán vị (Permutation)}: Chia cửa sổ thành $k$ đoạn (mặc định: $k = 4$) và hoán vị thứ tự ngẫu nhiên, giúp mô hình học các đặc trưng thống kê cục bộ thay vì phụ thuộc vào thứ tự thời gian toàn cục.
+\end{enumerate}
+
+\subsubsection{Tăng cường Nhận biết Lớp (Class-Aware Augmentation)}
+\label{sec:class_aware_augmentation}
+
+Một đóng góp quan trọng của framework là chiến lược tăng cường \textit{nhận biết lớp}, giải quyết một vấn đề tinh tế nhưng nghiêm trọng: việc áp dụng các phép biến đổi mạnh (jitter, rotation, scaling) lên các hoạt động tĩnh (static activities) như \textit{still}, \textit{standing} hay \textit{sitting} tạo ra tín hiệu nhân tạo có các dao động nhỏ giống với hoạt động cường độ thấp (ví dụ: \textit{walking\_downstairs} với rung nhẹ). Điều này gây \textbf{nhầm lẫn lớp} (class confusion), làm suy giảm đáng kể hiệu suất phát hiện hoạt động tĩnh.
+
+\textbf{Thiết kế giải pháp}: Framework tự động phát hiện các nhãn hoạt động tĩnh thông qua đối chiếu từ khóa (\textit{still}, \textit{stand}, \textit{sit}, \textit{lying}, \textit{idle}) và áp dụng chiến lược tăng cường phân biệt:
+\begin{itemize}
+    \item \textbf{Hoạt động động} (dynamic): Áp dụng đầy đủ cả năm phương pháp với tham số tiêu chuẩn ($\sigma_{\text{jitter}} = 0{,}05$)
+    \item \textbf{Hoạt động tĩnh} (static): Chỉ áp dụng nhiễu vi mô (micro-jitter) với $\sigma = 0{,}01$---đủ để tạo tính đa dạng cảm biến thực tế mà không phá vỡ đặc tính ``gần bất động'' (near-stationary) vốn xác định hoạt động tĩnh
+\end{itemize}
+
+Người dùng cũng có thể xác định thủ công danh sách nhãn tĩnh qua giao diện framework, phù hợp với các ứng dụng có nhãn không thuộc bộ từ khóa mặc định.
+
+\textbf{Cơ sở lý thuyết}: Chiến lược này tuân thủ nguyên tắc rằng tăng cường phải bảo toàn các đặc tính phân biệt (discriminative properties) của mỗi lớp \cite{buda2018systematic}. Với hoạt động tĩnh, đặc tính phân biệt chính là biên độ dao động cực thấp ($\sigma_{\text{acc}} < 0{,}1$ m/s²); các phép biến đổi mạnh phá hủy chính xác đặc tính này, trong khi micro-jitter bảo toàn nó.
+
+\subsection{Ngưỡng Tin cậy cho Từ chối Hoạt động Không xác định}
+\label{sec:confidence_threshold}
+
+Trong triển khai thực tế, thiết bị biên thường ghi nhận các chuyển động không thuộc bất kỳ lớp nào đã huấn luyện (ví dụ: ngồi xuống, cúi người, hoặc đeo thiết bị ở vị trí bất thường). Các hệ thống phân loại truyền thống bắt buộc phải gán một nhãn cho mọi đầu vào, bất kể mức độ tin cậy, dẫn đến các dự đoán sai với độ tin cậy cao---hiện tượng được gọi là \textit{overconfident misclassification} \cite{hendrycks2017baseline, guo2017calibration}.
+
+\textbf{Cơ chế từ chối}: Framework tích hợp ngưỡng tin cậy (confidence threshold) trực tiếp vào mã C++ đã tạo. Mỗi mô hình tính toán xác suất từng lớp, và nếu xác suất tối đa $\max_c P(y=c|\mathbf{x})$ thấp hơn ngưỡng $\tau$ (mặc định: $\tau = 0{,}6$), dự đoán trả về ``unknown'' thay vì ép buộc một nhãn cụ thể:
+\begin{equation}
+    \hat{y} = \begin{cases}
+        \arg\max_c P(y=c|\mathbf{x}) & \text{nếu } \max_c P(y=c|\mathbf{x}) \geq \tau \\
+        \text{unknown} & \text{nếu } \max_c P(y=c|\mathbf{x}) < \tau
+    \end{cases}
+\end{equation}
+
+\textbf{Tính toán tin cậy theo thuật toán}: Mỗi thuật toán sử dụng cơ chế tính xác suất riêng có sẵn:
+\begin{itemize}
+    \item \textbf{Neural Network}: Hàm softmax trên logits đầu ra: $P(c) = \frac{e^{z_c}}{\sum_j e^{z_j}}$
+    \item \textbf{Random Forest}: Tỷ lệ bỏ phiếu: $P(c) = \frac{\text{số cây bỏ phiếu cho } c}{\text{tổng số cây}}$
+    \item \textbf{SVM}: Softmax trên điểm quyết định One-vs-Rest (OvR)
+\end{itemize}
+
+Giá trị $\tau = 0{,}6$ được chọn để cân bằng giữa tỷ lệ từ chối và tỷ lệ dương tính giả: với bài toán 5 lớp, xác suất ngẫu nhiên là 20\%, do đó $\tau = 0{,}6$ yêu cầu mô hình tin cậy gấp 3 lần ngẫu nhiên.
+
+\textbf{So sánh với nền tảng thương mại}: Edge Impulse cung cấp chức năng ``anomaly detection'' yêu cầu huấn luyện một khối riêng biệt trên dữ liệu bổ sung. Cách tiếp cận của chúng tôi trích xuất tin cậy trực tiếp từ đầu ra mô hình hiện có---không tốn thêm bộ nhớ, không yêu cầu dữ liệu huấn luyện bổ sung, và tích hợp tự nhiên vào quy trình suy luận đã có.
+
 \section{Huấn luyện Mô hình Học máy}
 
 \subsection{Các Thuật toán Được Hỗ trợ}
@@ -203,6 +283,89 @@ Hệ thống con tạo mã dịch các mô hình scikit-learn đã huấn luyệ
         \item \texttt{ARMCortexGenerator}: Số học điểm cố định, tối ưu hóa ARM CMSIS-DSP (tùy chọn)
     \end{itemize}
 \end{itemize}
+
+\subsection{Lý do Chọn Tạo Mã Trực tiếp thay vì Runtime Suy luận}
+\label{sec:codegen_rationale}
+
+Một quyết định thiết kế cốt lõi của framework là \textbf{tạo mã C++ trực tiếp} (direct code generation) qua việc trích xuất trọng số, cấu trúc quyết định và tham số mô hình từ các đối tượng scikit-learn đã huấn luyện, thay vì sử dụng các runtime suy luận đóng gói (packaged inference runtimes). Phần này phân tích các phương pháp thay thế và lập luận cho lựa chọn đã chọn.
+
+\subsubsection{Các Phương pháp Triển khai Mô hình trên Vi điều khiển}
+
+Có ba cách tiếp cận chính để triển khai mô hình ML trên vi điều khiển, mỗi cách thể hiện đánh đổi khác nhau giữa tính tiện lợi, hiệu suất và kiểm soát:
+
+\paragraph{Phương pháp 1: Runtime suy luận (TensorFlow Lite Micro, ONNX Micro Runtime)}
+Mô hình được chuyển đổi sang định dạng trung gian (\texttt{.tflite}, \texttt{.onnx}), sau đó được tải bởi một runtime suy luận chung trên thiết bị. Runtime đọc biểu đồ tính toán và thực thi từng toán tử (operator) theo thứ tự.
+
+\textit{Ưu điểm:} Hỗ trợ nhiều kiến trúc mô hình (CNN, LSTM, Transformer); hệ sinh thái lớn với cộng đồng hỗ trợ mạnh; các tối ưu hóa lượng tử hóa tích hợp (INT8, FP16).
+
+\textit{Nhược điểm:} Runtime chiếm 100--300KB flash bổ sung \cite{warden2019tinyml}---đáng kể trên vi điều khiển có 256KB--1MB flash. Interpreter overhead thêm 15--40\% thời gian suy luận so với mã gốc \cite{lin2022mcunet}. Quan trọng nhất, runtime hoạt động như hộp đen: người dùng không thể kiểm tra hoặc xác minh quá trình trích xuất đặc trưng và tính toán bên trong.
+
+\paragraph{Phương pháp 2: Trình biên dịch mô hình (Edge Impulse EON Compiler, Apache TVM, microTVM)}
+Mô hình được biên dịch trước (ahead-of-time compilation) sang mã C tối ưu hóa, loại bỏ runtime nhưng vẫn hoạt động qua chuỗi công cụ đóng của nhà cung cấp.
+
+\textit{Ưu điểm:} Không có interpreter overhead; mã tối ưu hóa cho vi kiến trúc cụ thể; Edge Impulse EON Compiler giảm flash 35--55\% so với TFLite Micro (theo số liệu nhà cung cấp \cite{web:Edge_Impulse}).
+
+\textit{Nhược điểm:} Chuỗi công cụ đóng---mã đã tạo bởi EON Compiler khó kiểm toán và không thể sửa đổi. Apache TVM/microTVM yêu cầu kiến thức biên dịch cấp chuyên gia. Hầu hết các trình biên dịch mô hình bắt buộc mô hình đầu vào theo định dạng ONNX hoặc TFLite, loại trừ các mô hình scikit-learn cổ điển (RF, SVM) mà không qua bước chuyển đổi trung gian phức tạp.
+
+\paragraph{Phương pháp 3: Tạo mã trực tiếp (Direct Code Generation)---phương pháp đề xuất}
+Framework trích xuất trực tiếp các tham số đã huấn luyện từ đối tượng scikit-learn---trọng số và bias của mạng nơ-ron (\texttt{coefs\_}, \texttt{intercepts\_}), support vectors và hệ số kernel của SVM, cấu trúc cây nhị phân của Random Forest---rồi tạo mã C++ thuần (pure C++) triển khai thuật toán suy luận tương ứng.
+
+\textit{Ưu điểm:} Không phụ thuộc bên ngoài---mã tự chứa hoàn toàn; dấu chân bộ nhớ tối thiểu (chỉ chứa trọng số + logic suy luận); minh bạch hoàn toàn---mọi phép tính có thể kiểm tra và xác minh; hỗ trợ trực tiếp các thuật toán ML cổ điển mà không cần chuyển đổi định dạng.
+
+\textit{Nhược điểm:} Yêu cầu triển khai thủ công logic suy luận cho mỗi thuật toán; không hưởng các tối ưu hóa toán tử tự động cấp vi kiến trúc; khó mở rộng sang các kiến trúc phức tạp (CNN nhiều lớp, attention).
+
+\subsubsection{Phân tích So sánh Định lượng}
+
+Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên các tiêu chí quan trọng cho triển khai vi điều khiển bị giới hạn tài nguyên:
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh phương pháp triển khai mô hình ML trên vi điều khiển}
+    \small
+    \begin{tabular}{@{}p{3.2cm}ccc@{}}
+        \toprule
+        Tiêu chí & Runtime & Compiler & \textbf{Trực tiếp (Ours)} \\
+        \midrule
+        Overhead flash & 100--300KB & 15--50KB & \textbf{0KB} \\
+        Overhead suy luận & 15--40\% & $<$5\% & \textbf{0\%} \\
+        Hỗ trợ RF/SVM & Hạn chế$^\dag$ & Không$^\ddag$ & \textbf{Đầy đủ} \\
+        Minh bạch & Thấp & Trung bình & \textbf{Hoàn toàn} \\
+        Cần ONNX/TFLite & Có & Có & \textbf{Không} \\
+        Phức tạp triển khai & Thấp & Cao & Trung bình \\
+        Hỗ trợ DNN sâu & Tốt & Tốt & Hạn chế \\
+        \bottomrule
+    \end{tabular}
+    \small{$^\dag$TFLite Micro hỗ trợ RF/SVM hạn chế; cần chuyển đổi qua ONNX rồi TFLite.}\\
+    \small{$^\ddag$EON Compiler và TVM tập trung vào mạng nơ-ron; không hỗ trợ RF/SVM gốc.}
+    \label{tab:codegen_comparison}
+\end{table}
+
+\subsubsection{Lập luận cho Lựa chọn Thiết kế}
+
+Quyết định sử dụng tạo mã trực tiếp được lập luận bởi bốn yếu tố:
+
+\paragraph{(1) Dấu chân bộ nhớ tối thiểu}
+Trên vi điều khiển như Seeed XIAO nRF52840 (1MB flash, 256KB RAM), mỗi KB đều quan trọng. TFLite Micro interpreter chiếm khoảng 150--250KB flash \cite{warden2019tinyml, ray2023tinyml_survey}---tương đương 15--25\% tổng flash khả dụng---chỉ riêng runtime, trước khi tính trọng số mô hình. Phương pháp trực tiếp loại bỏ hoàn toàn overhead này: một mô hình Neural Network chỉ chiếm 95KB (trọng số + logic suy luận + trích xuất đặc trưng), để lại $>$900KB cho firmware ứng dụng.
+
+\paragraph{(2) Minh bạch và Khả năng Xác minh}
+Một bài học quan trọng từ phát triển framework (xem Phần~\ref{sec:training_deployment_parity}) là \textit{khả năng kiểm tra mã suy luận đã tạo là yêu cầu thiết yếu}, không phải tính năng tùy chọn. Khi phát hiện lỗi zero-padding và sai lệch công thức kurtosis, chúng tôi có thể truy vết trực tiếp đến mã C++ đã tạo, so sánh từng dòng với triển khai Python, và sửa chữa. Với runtime đóng gói (TFLite Micro) hoặc trình biên dịch đóng (EON Compiler), quá trình gỡ lỗi này sẽ không thể thực hiện---lỗi sẽ biểu hiện như ``mô hình hoạt động kém trên thiết bị'' mà không có cách xác định nguyên nhân gốc.
+
+Khả năng xác minh này đặc biệt quan trọng cho ứng dụng y tế và an toàn, nơi các tiêu chuẩn quy định (FDA, IEC 62304) yêu cầu khả năng truy vết và kiểm toán đầy đủ cho mọi thành phần phần mềm liên quan đến quyết định lâm sàng.
+
+\paragraph{(3) Hỗ trợ Trực tiếp các Thuật toán ML Cổ điển}
+Hệ sinh thái TFLite Micro và ONNX Runtime Micro được thiết kế chủ yếu cho mạng nơ-ron. Triển khai Random Forest hoặc SVM qua các nền tảng này yêu cầu chuyển đổi nhiều bước: scikit-learn $\rightarrow$ ONNX (\texttt{skl2onnx}) $\rightarrow$ TFLite (\texttt{onnx-tf}) $\rightarrow$ TFLite Micro. Mỗi bước chuyển đổi giới thiệu rủi ro sai lệch số và mất thông tin (ví dụ: ONNX không hỗ trợ chính xác tham số \texttt{class\_weight} của scikit-learn). Phương pháp trực tiếp đọc các thuộc tính nội bộ của scikit-learn (\texttt{model.coefs\_}, \texttt{model.support\_vectors\_}, \texttt{model.estimators\_}) mà không qua định dạng trung gian, loại bỏ hoàn toàn chuỗi chuyển đổi dễ lỗi này.
+
+\paragraph{(4) Các Thuật toán Cổ điển là Lựa chọn Phù hợp cho HAR Biên}
+Lựa chọn tạo mã trực tiếp liên kết chặt chẽ với lựa chọn thuật toán. Cho bài toán HAR 5--10 lớp với $<$1000 vectors đặc trưng và 90 đặc trưng thống kê, các thuật toán cổ điển đạt hiệu suất cạnh tranh (93,8--96,2\%) với chi phí tài nguyên thấp hơn đáng kể. Các mô hình này có cấu trúc suy luận đơn giản---nhân ma trận cho NN, duyệt cây cho RF, tính kernel cho SVM---có thể triển khai chính xác trong vài trăm dòng C++ mà không cần framework tính toán phức tạp. Điều này tạo thành một \textit{sweet spot} giữa hiệu suất mô hình và tính khả thi triển khai cho các thiết bị đeo bị giới hạn tài nguyên.
+
+\subsubsection{Hạn chế và Các Phương pháp Bổ sung Tương lai}
+Tạo mã trực tiếp không phải giải pháp phổ quát. Nó không phù hợp cho:
+\begin{itemize}
+    \item \textbf{Mạng sâu phức tạp}: CNN nhiều lớp convolution, LSTM, hoặc Transformer yêu cầu các toán tử phức tạp (batch normalization, pooling, attention) mà triển khai thủ công dễ lỗi và khó bảo trì
+    \item \textbf{Lượng tử hóa nâng cao}: INT8 inference với hiệu chỉnh phạm vi per-channel yêu cầu hạ tầng runtime mà TFLite Micro cung cấp sẵn
+    \item \textbf{Mô hình thay đổi thường xuyên}: Nếu mô hình cần cập nhật OTA (over-the-air) mà không biên dịch lại firmware, runtime interpreter là lựa chọn tốt hơn
+\end{itemize}
+Các phiên bản tương lai của framework nên tích hợp đường dẫn TFLite Micro bên cạnh tạo mã trực tiếp, cho phép người dùng chọn phương pháp phù hợp với ràng buộc của họ: tạo mã trực tiếp cho ML cổ điển và TFLite Micro cho học sâu.
 
 \subsection{Cấu trúc Mã Đã Tạo}
 Đối với mỗi mô hình đã huấn luyện, trình tạo sản xuất ba tệp:

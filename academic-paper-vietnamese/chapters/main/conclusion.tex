@@ -14,6 +14,12 @@ Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển đ�
     \item \textbf{Tạo Mã Nhận Biết Tối Ưu Hóa}: Kiến trúc trình tạo modular tạo ra các triển khai C++ đặc thù nền tảng với bốn hồ sơ tối ưu hóa (accuracy, speed, power, balanced). Mã được tạo đạt độ trễ suy luận 12-18ms và dấu chân bộ nhớ 95-182KB trên vi điều khiển 64MHz—hiệu suất cạnh tranh với các triển khai thủ công chuyên gia trong khi yêu cầu không có chuyên môn hệ thống nhúng.
 
     \item \textbf{Xử Lý Mất Cân Bằng Lớp}: Bằng cách làm cho \texttt{class\_weight='balanced'} là một cấu hình mặc định thay vì tham số tùy chọn, framework hệ thống giải quyết một thách thức quan trọng nhưng thường bị bỏ qua trong theo dõi chuyển động thực tế. Các thử nghiệm của chúng tôi chứng minh cải thiện +42-47\% trong recall lớp thiểu số, chuyển đổi các mô hình từ các nguyên mẫu nghiên cứu thành các hệ thống sẵn sàng triển khai.
+
+    \item \textbf{Đảm Bảo Tương Đồng Huấn Luyện-Triển Khai}: Chúng tôi xác định và giải quyết một thách thức ít được nghiên cứu trong edge ML: sự không khớp giữa pipeline trích xuất đặc trưng huấn luyện (Python) và suy luận (C++). Quy trình xác minh 12 điểm kiểm tra đảm bảo tính nhất quán bit-exact cho các đặc trưng miền thời gian, bao gồm sửa lỗi zero-padding, thống nhất công thức kurtosis/skewness, và reorder đặc trưng tự động tại thời điểm tạo mã. Phát hiện này nhấn mạnh rằng tính minh bạch không chỉ là triết lý mã nguồn mở mà là yêu cầu kỹ thuật thiết yếu cho triển khai edge ML đáng tin cậy \cite{paleyes2022challenges}.
+
+    \item \textbf{Tăng Cường Dữ Liệu Nhận Biết Lớp}: Framework tích hợp hệ thống tăng cường dữ liệu với năm phương pháp biến đổi đặc thù IMU \cite{um2017data}, cùng với chiến lược nhận biết lớp mới lạ tự động phân biệt hoạt động tĩnh và động. Hoạt động tĩnh chỉ nhận micro-jitter ($\sigma = 0{,}01$) thay vì biến đổi đầy đủ, bảo toàn đặc tính phân biệt ``gần bất động'' thiết yếu cho phân loại chính xác. Thiết kế này giải quyết vấn đề class confusion được quan sát khi áp dụng tăng cường đồng nhất.
+
+    \item \textbf{Ngưỡng Tin Cậy cho Từ Chối Hoạt Động Không Xác Định}: Mã C++ đã tạo tích hợp cơ chế từ chối dự đoán dựa trên ngưỡng tin cậy, trích xuất trực tiếp từ đầu ra mô hình hiện có (softmax/tỷ lệ bỏ phiếu) mà không yêu cầu mô hình phát hiện bất thường riêng biệt \cite{hendrycks2017baseline}. Phương pháp này không tốn thêm bộ nhớ, không cần dữ liệu huấn luyện bổ sung, và là bước phòng thủ thiết yếu cho triển khai thực tế nơi đầu vào ngoài phân phối là phổ biến.
 \end{enumerate}
 
 \subsection{Xác Thực Thực Nghiệm}
@@ -23,6 +29,9 @@ Các thử nghiệm toàn diện sử dụng tập dữ liệu Nhận Dạng Ho�
     \item \textbf{Hiệu Suất Theo Từng Lớp}: F1-scores cân bằng (0.93-0.98) trên tất cả các lớp hoạt động, bao gồm các lớp thiểu số đầy thách thức, chứng minh khả năng áp dụng mạnh mẽ
     \item \textbf{Tính Khả Thi Thời Gian Thực}: Suy luận 9-18ms trên ARM Cortex-M4 @ 64MHz với tiêu thụ điện năng 30mW, cho phép hoạt động pin liên tục 65+ giờ
     \item \textbf{Định Vị Cạnh Tranh}: Vượt trội các nền tảng thương mại (Edge Impulse, SensiML) 1.4-3.1\% độ chính xác trong khi vẫn hoàn toàn miễn phí và mã nguồn mở
+    \item \textbf{Tương Đồng Huấn Luyện-Triển Khai}: Xác minh 12 điểm kiểm tra đảm bảo đặc trưng miền thời gian giống hệt giữa Python và C++, loại bỏ nguồn gốc chính của suy giảm hiệu suất triển khai biên
+    \item \textbf{Tăng Cường Nhận Biết Lớp}: Chiến lược tăng cường phân biệt tĩnh/động ngăn chặn class confusion được quan sát với tăng cường đồng nhất, bảo toàn đặc tính phân biệt của hoạt động tĩnh
+    \item \textbf{Từ Chối Hoạt Động Không Xác Định}: Ngưỡng tin cậy tích hợp cho phép thiết bị biên từ chối dự đoán khi không đủ tin cậy, tăng độ tin cậy cho triển khai thực tế
 \end{itemize}
 
 \subsection{Tác Động Rộng Hơn}
@@ -48,6 +57,8 @@ Các mục tiêu nghiên cứu ban đầu được nêu trong Mục 1.3 đã đ�
     \item \textbf{Xác Thực Hiệu Quả Framework} \checkmark: Đánh giá toàn diện chứng minh độ chính xác cạnh tranh (96.2\%), hiệu suất thời gian thực (suy luận 12ms) và sự vượt trội so với các lựa chọn thay thế thương mại trên các số liệu chi phí-hiệu suất
     
     \item \textbf{Khả Năng Tiếp Cận} \checkmark: GUI dựa trên web với đường cong học tập thấp làm cho phát triển edge AI tiên tiến có thể tiếp cận với phi chuyên gia trong khi duy trì khả năng cấp chuyên nghiệp
+    
+    \item \textbf{Độ Tin Cậy Triển Khai} \checkmark: Quy trình xác minh tương đồng huấn luyện-triển khai 12 điểm, ngưỡng tin cậy và tăng cường dữ liệu nhận biết lớp đảm bảo mô hình hoạt động đáng tin cậy trên phần cứng thực, không chỉ trong môi trường mô phỏng
 \end{enumerate}
 
 \section{Các Ứng Dụng Thực Tế}
@@ -99,6 +110,8 @@ Xác thực hiện tại sử dụng dữ liệu đối tượng đơn cho sáu 
     \item \textbf{AI Có Thể Giải Thích}: Trực quan hóa các mẫu cảm biến nào kích hoạt dự đoán cụ thể (tích hợp LIME, SHAP)
     \item \textbf{Học Liên Bang}: Huấn luyện mô hình cộng tác bảo vệ quyền riêng tư trên nhiều thiết bị
     \item \textbf{Backend Đám Mây}: Sao lưu dữ liệu tùy chọn, phiên bản mô hình và chia sẻ mô hình cộng đồng trong khi duy trì kiến trúc local-first
+    \item \textbf{Hiệu Chỉnh Tin Cậy}: Áp dụng temperature scaling \cite{guo2017calibration} hoặc Platt scaling để cải thiện chất lượng hiệu chỉnh tin cậy softmax, và điều chỉnh ngưỡng $\tau$ tự động dựa trên đường cong ROC tập xác thực
+    \item \textbf{Tăng Cường Thích Ứng}: Mở rộng chiến lược nhận biết lớp để tự động xác định tham số tăng cường tối ưu cho từng lớp dựa trên đặc tính tín hiệu (phương sai, entropy), thay vì chỉ phân biệt nhị phân tĩnh/động
 \end{itemize}
 
 \section{Suy Nghĩ Cuối Cùng}
