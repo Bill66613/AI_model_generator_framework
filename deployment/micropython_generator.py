@@ -180,9 +180,10 @@ def main():
     for iteration in range(10):  # Change to `while True:` for continuous
         sensor_data = read_sensor_window()
         features = extract_features(sensor_data, WINDOW_SIZE)
-        predicted = har_predict(features)
+        predicted, confidence = har_predict(features)
         name = get_activity_name(predicted)
-        print("[{{:04d}}] Predicted: {{}} (class {{}})".format(iteration, name, predicted))
+        print("[{{:04d}}] Predicted: {{}} (class {{}}, conf {{:.2f}})".format(
+            iteration, name, predicted, confidence))
 
     print("Done.")
 
@@ -211,6 +212,7 @@ Optimization : {self.optimization}
             f"NUM_CLASSES = {len(self.classes)}\n"
             f"SAMPLING_RATE = {self.sampling_rate}\n"
             f"WINDOW_SIZE = {self.window_size}\n"
+            f"CONFIDENCE_THRESHOLD = 0.6\n"
         )
 
     def _py_activity_names(self) -> str:
@@ -345,6 +347,14 @@ def _scale_features(features):
 
     def _py_predict(self) -> str:
         return '''
+def _softmax(scores):
+    """Softmax normalization for confidence estimation."""
+    max_s = max(scores)
+    exps = [math.exp(s - max_s) for s in scores]
+    total = sum(exps)
+    return [e / total for e in exps]
+
+
 def har_predict(features):
     """Predict activity class from a raw (unscaled) feature vector.
 
@@ -352,13 +362,21 @@ def har_predict(features):
         features: list of NUM_FEATURES floats
 
     Returns:
-        int — predicted class index
+        tuple (int, float) — (predicted class index or -1, confidence 0..1)
+        Returns -1 when confidence is below CONFIDENCE_THRESHOLD.
     """
     scaled = _scale_features(features)
-    result = _predict_internal(scaled)
+    result, scores = _predict_internal(scaled)
     if result < 0 or result >= NUM_CLASSES:
-        return 0
-    return result
+        return -1, 0.0
+
+    # Compute confidence from scores
+    probs = _softmax(scores)
+    confidence = max(probs)
+
+    if confidence < CONFIDENCE_THRESHOLD:
+        return -1, confidence
+    return result, confidence
 '''
 
     def _py_predict_internal(self) -> str:
@@ -392,17 +410,21 @@ def _predict_tree(tree, features):
 
 
 def _predict_internal(features):
-    """Random Forest — majority vote across all trees."""
+    """Random Forest — majority vote across all trees.
+    Returns (predicted_class, scores_list)."""
     votes = [0] * NUM_CLASSES
+    total = 0
     for tree in TREES:
         cls = _predict_tree(tree, features)
         if 0 <= cls < NUM_CLASSES:
             votes[cls] += 1
+        total += 1
+    scores = [v / total if total > 0 else 0.0 for v in votes]
     best = 0
     for i in range(1, NUM_CLASSES):
         if votes[i] > votes[best]:
             best = i
-    return best
+    return best, scores
 '''
 
     def _py_nn_predict(self) -> str:
@@ -412,7 +434,8 @@ def _relu(x):
 
 
 def _predict_internal(features):
-    """Neural Network — forward pass through all layers."""
+    """Neural Network — forward pass through all layers.
+    Returns (predicted_class, output_scores)."""
     current = list(features)
     num_layers = len(NN_WEIGHTS)
     for layer_idx in range(num_layers):
@@ -435,7 +458,7 @@ def _predict_internal(features):
     for i in range(1, len(current)):
         if current[i] > current[best]:
             best = i
-    return best
+    return best, current
 '''
 
     def _py_svm_predict(self) -> str:
@@ -453,7 +476,8 @@ def _rbf_kernel(x1, x2, gamma):
 
 
 def _predict_internal(features):
-    """SVM — One-vs-Rest with RBF kernel."""
+    """SVM — One-vs-Rest with RBF kernel.
+    Returns (predicted_class, decision_scores)."""
     scores = [0.0] * NUM_CLASSES
     for sv_idx in range(SVM_NUM_SV):
         k = _rbf_kernel(features, SVM_SUPPORT_VECTORS[sv_idx], SVM_GAMMA)
@@ -465,7 +489,7 @@ def _predict_internal(features):
     for i in range(1, NUM_CLASSES):
         if scores[i] > scores[best]:
             best = i
-    return best
+    return best, scores
 '''
 
     # --- Feature extraction ----------------------------------------- #
@@ -776,7 +800,7 @@ def get_activity_name(class_id):
     """Return human-readable activity label."""
     if 0 <= class_id < NUM_CLASSES:
         return ACTIVITY_NAMES[class_id]
-    return "UNKNOWN"
+    return "unknown"
 '''
 
     # ================================================================ #

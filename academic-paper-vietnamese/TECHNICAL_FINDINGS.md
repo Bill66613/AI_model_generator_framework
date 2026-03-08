@@ -2,13 +2,13 @@
 # Technical Findings — Framework vs Commercial Platforms
 
 **Last updated:** 2026-03-05  
-**Version:** 4.0 (added finding 9: CNN validation false positives)
+**Version:** 5.0 (added finding 10: Confidence threshold for unknown activity rejection)
 
 ---
 
 ## QUICK CONTEXT (Read this first in any new session)
 
-This file documents **9 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
+This file documents **10 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
 
 | # | Finding | Severity | Status | Code Files Affected | Thesis Chapters |
 |---|---------|----------|--------|---------------------|-----------------|
@@ -21,6 +21,7 @@ This file documents **9 critical technical findings** discovered during framewor
 | 7 | Feature order mismatch — alphabetical vs C++ computation order | CRITICAL | ✅ FIXED | `deployment/code_generator_factory.py`, `deployment/neural_network_generator.py` | Ch.3 §CodeGen, Ch.5 §parity |
 | 8 | Double extraction — reorder undone by 2nd extract call | CRITICAL | ✅ FIXED | `deployment/code_generator_factory.py` | Ch.5 §parity |
 | 9 | CNN validation false positives — architecture-unaware validator | MEDIUM | ✅ FIXED | `deployment/validation.py` | Ch.3 §CodeGen, Ch.5 §validation |
+| 10 | Confidence threshold for unknown activity rejection | FEATURE | ✅ IMPLEMENTED | `deployment/base_generator.py`, `*_generator.py` (all) | Ch.3 §CodeGen, Ch.4 §robustness |
 
 **Action required:** Collect longer recordings (≥1.5s per window), use sliding window to generate 50+ windows/class, retrain, collect before/after accuracy data for Ch.4.
 
@@ -37,6 +38,7 @@ This file documents **9 critical technical findings** discovered during framewor
 - **Finding 7 (feature order mismatch)** → Code: `deployment/code_generator_factory.py` (reorder functions), `deployment/neural_network_generator.py` (weight reorder) → Thesis: Ch.3 code generation, Ch.5 parity
 - **Finding 8 (double extraction)** → Code: `deployment/code_generator_factory.py` line 589 removed → Thesis: Ch.5 pipeline correctness
 - **Finding 9 (CNN validation)** → Code: `deployment/validation.py` (CNN-aware validation branch + `_validate_cnn_code` + `_estimate_cnn_resources`) → Thesis: Ch.3 multi-architecture support, Ch.5 validation framework
+- **Finding 10 (Confidence threshold)** → Code: `deployment/base_generator.py` (har_predict wrapper + softmax), `deployment/neural_network_generator.py`, `deployment/random_forest_generator.py`, `deployment/svm_generator.py`, `deployment/cnn_generator.py`, `deployment/micropython_generator.py` → Thesis: Ch.3 code generation robustness, Ch.4 real-world deployment
 
 ---
 
@@ -585,6 +587,75 @@ Training-deployment parity trong edge ML là một vấn đề **ít được ng
 2. Slide key: "Phát hiện lỗi mà hộp đen không thể" 
 3. Biểu đồ so sánh phân phối đặc trưng (training vs device)
 4. Video thiết bị hoạt động chính xác sau fix
+
+---
+
+---
+
+## Finding 10: Confidence Threshold for Unknown Activity Rejection
+
+**Severity:** FEATURE  
+**Status:** ✅ IMPLEMENTED  
+**Date:** 2026-03-06  
+**Files:** All code generators (`deployment/*_generator.py`, `deployment/base_generator.py`)
+
+### §10.1 Mô tả vấn đề
+
+During device testing (Session 21), all 4 trained models showed severe class confusion:
+- SVM predicted `walking_downstairs` 100% of the time (26/26 windows)
+- NN predicted `walking` 0% of the time, heavy bias toward `walking_downstairs`
+- RF and MLP showed similar patterns
+
+Root cause: with orientation-invariant features (magnitude-based), walking/walking_downstairs/walking_upstairs have nearly identical feature distributions (acc_mag: [9.74-11.62], gyro_mag: [65-122] for all three). The model was always forced to pick one class even when it had no confidence.
+
+Commercial platforms like Edge Impulse include an "anomaly detection" layer for uncertain inputs. Our framework lacked any uncertainty rejection mechanism.
+
+### §10.2 Giải pháp
+
+Implemented confidence threshold across ALL generated code:
+
+**Approach:** Each model computes per-class probabilities, and if the max probability is below `CONFIDENCE_THRESHOLD` (default 0.6), the prediction returns -1 ("unknown").
+
+**Confidence computation by model type:**
+- **Neural Network (MLP):** Softmax over output logits → max(softmax) as confidence
+- **Random Forest:** Vote proportion = votes[class] / total_trees → max proportion as confidence  
+- **SVM:** Softmax over OvR decision scores → max(softmax) as confidence
+- **CNN:** Softmax over final dense layer logits → max(softmax) as confidence
+
+**API changes (C/C++):**
+```c
+// Before:
+int har_predict(float features[NUM_FEATURES]);
+int har_predict_from_window(float window[WINDOW_SIZE][N_CHANNELS]);
+
+// After:
+int har_predict(float features[NUM_FEATURES], float* confidence);  // returns -1 if below threshold
+int har_predict_from_window(float window[WINDOW_SIZE][N_CHANNELS], float* confidence);  // same
+```
+
+**MicroPython API changes:**
+```python
+# Before:
+predicted = har_predict(features)  # returns int
+
+# After:
+predicted, confidence = har_predict(features)  # returns (int, float), -1 if below threshold
+```
+
+### §10.3 Hậu quả / Phân tích
+
+- Predicted class -1 maps to `get_activity_name(-1)` → "unknown" string
+- Device Test tab already handles arbitrary activity name strings in CSV format
+- Default threshold 0.6 means model must be ≥60% confident to make a prediction
+- For 5-class problem, random chance is 20%, so 60% is 3× random — a reasonable bar
+- RF confidence is naturally interpretable (e.g., 80/100 trees agree = 0.8 confidence)
+- NN/SVM confidence via softmax may overestimate — calibration could improve this in future
+
+### §10.4 Thesis Significance
+
+**Differentiator vs Edge Impulse:** Edge Impulse's confidence rejection requires a separate "anomaly detection" block trained on additional data. Our approach extracts confidence directly from the model's existing outputs — zero additional training cost, zero additional memory.
+
+**Defense argument:** Shows the framework handles real deployment challenges (class overlap, out-of-distribution inputs) gracefully, which is a hallmark of production-ready systems. This is a key feature for safety-critical HAR applications.
 
 ---
 

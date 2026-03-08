@@ -111,7 +111,8 @@ void loop() {
       extract_features(sensor_buffer, WINDOW_SIZE, features);
 
       // Make prediction
-      int predicted_class = har_predict(features);
+      float confidence = 0.0f;
+      int predicted_class = har_predict(features, &confidence);
       const char* activity_name = get_activity_name(predicted_class);
 
       // Print result

@@ -315,7 +315,8 @@ float relu(float x) {
             # 3-layer network: Input → Hidden1 → Hidden2 → Output
             return """// Internal neural network prediction function (3-layer architecture)
 // NOTE: This function expects ALREADY SCALED features from har_predict()
-int har_predict_internal(float features[NUM_FEATURES]) {
+// probs_out receives softmax probabilities for confidence computation
+int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {
     // Layer 1: Input → Hidden1 (ReLU activation)
     float hidden1_outputs[HIDDEN_LAYER_SIZE];
     for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {
@@ -346,12 +347,26 @@ int har_predict_internal(float features[NUM_FEATURES]) {
         output_scores[o] = sum;  // Linear activation (no ReLU on output)
     }
 
-    // Find class with highest score
-    int predicted_class = 0;
-    float max_score = output_scores[0];
+    // Softmax: convert logits to probabilities
+    float max_logit = output_scores[0];
     for (int i = 1; i < OUTPUT_SIZE; i++) {
-        if (output_scores[i] > max_score) {
-            max_score = output_scores[i];
+        if (output_scores[i] > max_logit) max_logit = output_scores[i];
+    }
+    float sum_exp = 0.0f;
+    for (int i = 0; i < OUTPUT_SIZE; i++) {
+        probs_out[i] = expf(output_scores[i] - max_logit);
+        sum_exp += probs_out[i];
+    }
+    for (int i = 0; i < OUTPUT_SIZE; i++) {
+        probs_out[i] /= sum_exp;
+    }
+
+    // Find class with highest probability
+    int predicted_class = 0;
+    float max_prob = probs_out[0];
+    for (int i = 1; i < OUTPUT_SIZE; i++) {
+        if (probs_out[i] > max_prob) {
+            max_prob = probs_out[i];
             predicted_class = i;
         }
     }
@@ -362,7 +377,8 @@ int har_predict_internal(float features[NUM_FEATURES]) {
             # 2-layer network: Input → Hidden → Output
             return """// Internal neural network prediction function (2-layer architecture)
 // NOTE: This function expects ALREADY SCALED features from har_predict()
-int har_predict_internal(float features[NUM_FEATURES]) {
+// probs_out receives softmax probabilities for confidence computation
+int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {
     // Layer 1: Input → Hidden (ReLU activation)
     float hidden_outputs[HIDDEN_LAYER_SIZE];
     for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {
@@ -383,12 +399,26 @@ int har_predict_internal(float features[NUM_FEATURES]) {
         output_scores[o] = sum;  // Linear activation
     }
 
-    // Find class with highest score
-    int predicted_class = 0;
-    float max_score = output_scores[0];
+    // Softmax: convert logits to probabilities
+    float max_logit = output_scores[0];
     for (int i = 1; i < OUTPUT_SIZE; i++) {
-        if (output_scores[i] > max_score) {
-            max_score = output_scores[i];
+        if (output_scores[i] > max_logit) max_logit = output_scores[i];
+    }
+    float sum_exp = 0.0f;
+    for (int i = 0; i < OUTPUT_SIZE; i++) {
+        probs_out[i] = expf(output_scores[i] - max_logit);
+        sum_exp += probs_out[i];
+    }
+    for (int i = 0; i < OUTPUT_SIZE; i++) {
+        probs_out[i] /= sum_exp;
+    }
+
+    // Find class with highest probability
+    int predicted_class = 0;
+    float max_prob = probs_out[0];
+    for (int i = 1; i < OUTPUT_SIZE; i++) {
+        if (probs_out[i] > max_prob) {
+            max_prob = probs_out[i];
             predicted_class = i;
         }
     }

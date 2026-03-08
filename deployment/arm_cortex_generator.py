@@ -131,8 +131,9 @@ void arm_optimized_feature_scaling(float* features, float* scaled_features) {
         # Safety fallback – should never happen if model_type is valid
         return """// ERROR: No model-specific prediction logic available.
 // The ARM Cortex-M generator could not determine the model type.
-int har_predict_internal(float features[NUM_FEATURES]) {
+int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {
     // Features are ALREADY SCALED by har_predict()
+    for (int i = 0; i < NUM_CLASSES; i++) probs_out[i] = 0.0f;
     return 0;  // Fallback – always predicts class 0
 }"""
 

@@ -92,7 +92,8 @@ void har_print_system_info(void);
         if self._inner:
             return self._inner._generate_prediction_function()
         return (
-            "int har_predict_internal(float features[NUM_FEATURES]) {\n"
+            "int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {\n"
+            "    for (int i = 0; i < NUM_CLASSES; i++) probs_out[i] = 0.0f;\n"
             "    return 0;  /* fallback */\n"
             "}\n"
         )
@@ -228,7 +229,7 @@ void main(void) {{
         }}
 
         extract_features(sensor_data, WINDOW_SIZE, features);
-        int predicted_class = har_predict(features);
+        int predicted_class = har_predict(features, NULL);
         const char *activity = get_activity_name(predicted_class);
 
         LOG_INF("[%04d] Predicted: %s (class %d)", iteration, activity, predicted_class);

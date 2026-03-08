@@ -649,12 +649,14 @@ void setup() {{
     
     // Run prediction
     Serial.println("\\n--- Prediction ---");
-    int prediction = har_predict(features);
+    float confidence = 0.0f;
+    int prediction = har_predict(features, &confidence);
     Serial.print("Predicted class: ");
     Serial.print(prediction);
     Serial.print(" (");
     Serial.print(get_activity_name(prediction));
-    Serial.println(")");
+    Serial.print(") confidence: ");
+    Serial.println(confidence, 4);
     
     // Memory usage
     Serial.println("\\n--- Memory ---");

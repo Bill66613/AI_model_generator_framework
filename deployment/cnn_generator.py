@@ -128,9 +128,12 @@ class CNNCodeGenerator(BaseCodeGenerator):
 // Max intermediate buffer size (floats)
 #define CNN_BUF_SIZE   {buf_info['max_buf']}
 
+// Confidence threshold — prediction returns -1 when below this
+#define CONFIDENCE_THRESHOLD 0.6f
+
 // Public API
 void har_init(void);
-int  har_predict_from_window(float window[WINDOW_SIZE][N_CHANNELS]);
+int  har_predict_from_window(float window[WINDOW_SIZE][N_CHANNELS], float* confidence);
 const char* get_activity_name(int class_id);
 
 #endif /* HAR_CNN_MODEL_H */
@@ -257,7 +260,9 @@ void har_init(void) {{
     // No initialisation required — weights are const arrays.
 }}
 
-int har_predict_from_window(float window[WINDOW_SIZE][N_CHANNELS]) {{
+// Returns predicted class id, or -1 if confidence is below CONFIDENCE_THRESHOLD.
+// If confidence != NULL, the confidence value (0..1) is written to *confidence.
+int har_predict_from_window(float window[WINDOW_SIZE][N_CHANNELS], float* confidence) {{
 {self._generate_forward_pass()}
 }}
 
@@ -265,7 +270,7 @@ const char* get_activity_name(int class_id) {{
     if (class_id >= 0 && class_id < NUM_CLASSES) {{
         return activity_names[class_id];
     }}
-    return "Unknown";
+    return "unknown";
 }}
 """
         return code
@@ -361,8 +366,13 @@ void loop() {{
         // Run inference when a full window is available
         const char* activity_name = NULL;
         if (window_ready) {{
-            int prediction = har_predict_from_window(sensor_window);
-            activity_name = get_activity_name(prediction);
+            float confidence = 0.0f;
+            int prediction = har_predict_from_window(sensor_window, &confidence);
+            if (prediction >= 0) {{
+                activity_name = get_activity_name(prediction);
+            }} else {{
+                activity_name = "unknown";
+            }}
             window_ready = false;   // wait for next full window
         }}
 
@@ -414,7 +424,7 @@ int main(void) {{
 
     float window[WINDOW_SIZE][N_CHANNELS];
     if (read_sensor_window(window) == 0) {{
-        int cls = har_predict_from_window(window);
+        int cls = har_predict_from_window(window, NULL);
         printf("Prediction: %s\\n", get_activity_name(cls));
     }}
     return 0;
@@ -439,7 +449,7 @@ void app_main(void) {{
     float window[WINDOW_SIZE][N_CHANNELS];
     /* TODO: fill window from IMU */
 
-    int cls = har_predict_from_window(window);
+    int cls = har_predict_from_window(window, NULL);
     ESP_LOGI(TAG, "Prediction: %s", get_activity_name(cls));
 }}
 """
@@ -611,19 +621,32 @@ void app_main(void) {{
                     lines.append(f"    dense({prev_out}, d{dense_idx}_out, {tag}_w, {tag}_b, L{i}_IN, L{i}_OUT, {relu_flag});")
                     lines.append("")
 
-        # argmax over final dense output
+        # Softmax + confidence + threshold over final dense output
         final_dense_var = f"d{dense_idx}_out"
         final_dense_layer = [l for l in self.layers if l['type'] == 'dense'][-1]
         final_idx = self.layers.index(final_dense_layer)
-        lines.append(f"    // Argmax")
-        lines.append(f"    int best = 0;")
-        lines.append(f"    float best_score = {final_dense_var}[0];")
+        lines.append(f"    // Softmax: convert logits to probabilities")
+        lines.append(f"    float max_logit = {final_dense_var}[0];")
         lines.append(f"    for (int i = 1; i < L{final_idx}_OUT; i++) {{")
-        lines.append(f"        if ({final_dense_var}[i] > best_score) {{")
-        lines.append(f"            best_score = {final_dense_var}[i];")
+        lines.append(f"        if ({final_dense_var}[i] > max_logit) max_logit = {final_dense_var}[i];")
+        lines.append(f"    }}")
+        lines.append(f"    float probs[L{final_idx}_OUT];")
+        lines.append(f"    float sum_exp = 0.0f;")
+        lines.append(f"    for (int i = 0; i < L{final_idx}_OUT; i++) {{")
+        lines.append(f"        probs[i] = expf({final_dense_var}[i] - max_logit);")
+        lines.append(f"        sum_exp += probs[i];")
+        lines.append(f"    }}")
+        lines.append(f"    float max_prob = 0.0f;")
+        lines.append(f"    int best = 0;")
+        lines.append(f"    for (int i = 0; i < L{final_idx}_OUT; i++) {{")
+        lines.append(f"        probs[i] /= sum_exp;")
+        lines.append(f"        if (probs[i] > max_prob) {{")
+        lines.append(f"            max_prob = probs[i];")
         lines.append(f"            best = i;")
         lines.append(f"        }}")
         lines.append(f"    }}")
+        lines.append(f"    if (confidence) *confidence = max_prob;")
+        lines.append(f"    if (max_prob < CONFIDENCE_THRESHOLD) return -1;")
         lines.append(f"    return best;")
 
         return "\n".join(lines)

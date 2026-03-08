@@ -112,7 +112,8 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
 
     def _generate_prediction_function(self) -> str:
         """Generate SVM prediction function."""
-        return """int har_predict_internal(float features[NUM_FEATURES]) {
+        return """// probs_out receives softmax probabilities over decision scores
+int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {
     // NOTE: Features are already scaled by har_predict() wrapper function
     // Do NOT scale again here
 
@@ -141,12 +142,26 @@ float rbf_kernel(float* x1, float* x2, float gamma) {{
         decision_scores[i] += intercepts[i];
     }
 
-    // Return class with highest decision score (argmax)
-    int predicted_class = 0;
+    // Softmax: convert decision scores to probabilities
     float max_score = decision_scores[0];
     for (int i = 1; i < NUM_CLASSES; i++) {
-        if (decision_scores[i] > max_score) {
-            max_score = decision_scores[i];
+        if (decision_scores[i] > max_score) max_score = decision_scores[i];
+    }
+    float sum_exp = 0.0f;
+    for (int i = 0; i < NUM_CLASSES; i++) {
+        probs_out[i] = expf(decision_scores[i] - max_score);
+        sum_exp += probs_out[i];
+    }
+    for (int i = 0; i < NUM_CLASSES; i++) {
+        probs_out[i] /= sum_exp;
+    }
+
+    // Return class with highest probability
+    int predicted_class = 0;
+    float max_prob = probs_out[0];
+    for (int i = 1; i < NUM_CLASSES; i++) {
+        if (probs_out[i] > max_prob) {
+            max_prob = probs_out[i];
             predicted_class = i;
         }
     }

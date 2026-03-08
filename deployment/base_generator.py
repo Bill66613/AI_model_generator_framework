@@ -76,6 +76,9 @@ class BaseCodeGenerator(ABC):
 #define SAMPLING_RATE {self.sampling_rate}
 #define WINDOW_SIZE {self.window_size}
 
+// Confidence threshold — prediction returns -1 when below this
+#define CONFIDENCE_THRESHOLD 0.6f
+
 {self._get_model_specific_declarations()}
 
 // Optimization settings
@@ -119,7 +122,8 @@ class BaseCodeGenerator(ABC):
 {self._get_impl_includes()}
 
 // Forward declaration of internal prediction function
-int har_predict_internal(float features[NUM_FEATURES]);
+// Writes per-class probabilities into probs_out[] for confidence computation
+int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]);
 
 // Activity class names
 const char* activity_names[NUM_CLASSES] = {{
@@ -137,9 +141,12 @@ void har_init() {{
 }}
 
 // Safe prediction wrapper with input validation and feature scaling
-int har_predict(float features[NUM_FEATURES]) {{
+// Returns predicted class id, or -1 if confidence is below CONFIDENCE_THRESHOLD.
+// If confidence != NULL, the confidence value (0..1) is written to *confidence.
+int har_predict(float features[NUM_FEATURES], float* confidence) {{
     // Input validation
     if (features == NULL) {{
+        if (confidence) *confidence = 0.0f;
         return -1; // Error: null pointer
     }}
 
@@ -164,11 +171,26 @@ int har_predict(float features[NUM_FEATURES]) {{
     }}
 
     // Call model-specific prediction function with SCALED features
-    int result = har_predict_internal(scaled_features);
+    // probs_out receives per-class probabilities for confidence computation
+    float probs_out[NUM_CLASSES];
+    int result = har_predict_internal(scaled_features, probs_out);
+
+    // Confidence = max per-class probability (already normalized by model)
+    float conf = 0.0f;
+    for (int i = 0; i < NUM_CLASSES; i++) {{
+        if (probs_out[i] > conf) conf = probs_out[i];
+    }}
+    if (confidence) *confidence = conf;
 
     // Validate prediction result
     if (result < 0 || result >= NUM_CLASSES) {{
-        return 0; // Return first class if invalid result
+        if (confidence) *confidence = 0.0f;
+        return -1;
+    }}
+
+    // Return -1 (unknown) if confidence is below threshold
+    if (conf < CONFIDENCE_THRESHOLD) {{
+        return -1;
     }}
 
     return result;
@@ -182,7 +204,7 @@ const char* get_activity_name(int class_id) {{
     if (class_id >= 0 && class_id < NUM_CLASSES) {{
         return activity_names[class_id];
     }}
-    return "UNKNOWN";
+    return "unknown";
 }}
 
 {self._generate_utility_functions()}
@@ -285,7 +307,7 @@ const char* get_activity_name(int class_id) {{
                 'extern "C" {\n'
                 '#endif\n\n'
                 'void har_init(void);\n'
-                'int har_predict(float features[NUM_FEATURES]);\n'
+                'int har_predict(float features[NUM_FEATURES], float* confidence);\n'
                 'void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]);\n'
                 'const char* get_activity_name(int class_id);\n\n'
                 '#ifdef __cplusplus\n'
@@ -295,7 +317,7 @@ const char* get_activity_name(int class_id) {{
         else:
             return (
                 'void har_init();\n'
-                'int har_predict(float features[NUM_FEATURES]);\n'
+                'int har_predict(float features[NUM_FEATURES], float* confidence);\n'
                 'void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]);\n'
                 'const char* get_activity_name(int class_id);'
             )
@@ -990,7 +1012,7 @@ int main({"void" if not is_cpp else ""}) {{
 
         extract_features(sensor_data, WINDOW_SIZE, features);
 
-        int predicted_class = har_predict(features);
+        int predicted_class = har_predict(features, NULL);
         const char* activity = get_activity_name(predicted_class);
 
         printf("[%04d] Predicted: %s (class %d)\\n",
@@ -1059,7 +1081,7 @@ void app_main(void) {{
         }}
 
         extract_features(sensor_data, WINDOW_SIZE, features);
-        int predicted_class = har_predict(features);
+        int predicted_class = har_predict(features, NULL);
         const char* activity = get_activity_name(predicted_class);
 
         ESP_LOGI(TAG, "Predicted: %s (class %d)", activity, predicted_class);
@@ -1171,8 +1193,13 @@ void loop() {{
 
             // Extract features and predict
             extract_features(sensor_buffer, WINDOW_SIZE, features);
-            int predicted_class = har_predict(features);
-            activity_name = get_activity_name(predicted_class);
+            float confidence = 0.0f;
+            int predicted_class = har_predict(features, &confidence);
+            if (predicted_class >= 0) {{
+                activity_name = get_activity_name(predicted_class);
+            }} else {{
+                activity_name = "unknown";
+            }}
         }}
 
         // Always output sensor CSV (for Device Test graph plotting)

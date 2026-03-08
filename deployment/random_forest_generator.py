@@ -74,9 +74,11 @@ int predict_tree(const TreeNode* nodes, int tree_start, float* features) {{
     def _generate_prediction_function(self) -> str:
         """Generate Random Forest prediction function."""
         return f"""// Internal prediction function - receives ALREADY SCALED features from har_predict()
-int har_predict_internal(float features[NUM_FEATURES]) {{
+// scores_out receives vote proportions (0..1) per class for confidence computation
+int har_predict_internal(float features[NUM_FEATURES], float scores_out[NUM_CLASSES]) {{
     // Random Forest prediction using all trees
     int votes[NUM_CLASSES] = {{0}};
+    int total_trees = 0;
 
     // Predict with each tree and accumulate votes
     for (int tree = 0; tree < NUM_TREES && tree < {min(self.num_trees, 100)}; tree++) {{
@@ -84,6 +86,12 @@ int har_predict_internal(float features[NUM_FEATURES]) {{
         if (tree_prediction >= 0 && tree_prediction < NUM_CLASSES) {{
             votes[tree_prediction]++;
         }}
+        total_trees++;
+    }}
+
+    // Convert votes to proportions for confidence computation
+    for (int i = 0; i < NUM_CLASSES; i++) {{
+        scores_out[i] = (total_trees > 0) ? (float)votes[i] / (float)total_trees : 0.0f;
     }}
 
     // Return class with most votes
