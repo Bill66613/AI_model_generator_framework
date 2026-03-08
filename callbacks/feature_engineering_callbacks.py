@@ -3,7 +3,7 @@ Feature Engineering Callbacks
 Handles unified feature engineering across multiple activity labels
 """
 
-from dash import  Input, Output, State, no_update, html, ctx
+from dash import Input, Output, State, no_update, html, ctx
 import json
 import os
 import pandas as pd
@@ -18,6 +18,7 @@ from config.config import (
     SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE
 )
 from utils.model_training import extract_time_domain_features, extract_frequency_domain_features, create_feature_vector
+from utils.data_augmentation import augment_windows, AUGMENTATION_METHODS
 
 
 # Placeholder callbacks - to be implemented
@@ -69,7 +70,6 @@ def register_callbacks(app):
             print(f"Error loading activity labels: {e}")
             return []
 
-
     @app.callback(
         Output('windows-per-label-display', 'children'),
         Input('activity-labels-selector', 'value'),
@@ -98,7 +98,8 @@ def register_callbacks(app):
             # Count windows per label
             label_counts = {}
             for dataset_name, dataset_info in metadata.items():
-                label = dataset_info.get('label', dataset_name.replace('.csv', ''))
+                label = dataset_info.get(
+                    'label', dataset_name.replace('.csv', ''))
                 if label in selected_labels and 'dragged_samples' in dataset_info:
                     # Count existing files
                     window_count = len(
@@ -118,7 +119,8 @@ def register_callbacks(app):
                     html.Div([
                         html.Span(f"{label.title()}: ", style={
                                   'font-weight': 'bold'}),
-                        html.Span(f"{count} windows", style={'color': '#28a745'})
+                        html.Span(f"{count} windows", style={
+                                  'color': '#28a745'})
                     ], style={'margin-bottom': '8px'})
                 )
 
@@ -135,7 +137,6 @@ def register_callbacks(app):
 
         except Exception as e:
             return html.Div(f"Error: {str(e)}", style={'color': '#ff0000'})
-
 
     @app.callback(
         [Output('activity-labels-selector', 'value', allow_duplicate=True)],
@@ -161,7 +162,6 @@ def register_callbacks(app):
             return [[]]
 
         return [no_update]
-
 
     @app.callback(
         Output('feature-count-display', 'children'),
@@ -216,7 +216,6 @@ def register_callbacks(app):
 
         return "Select a feature extraction method"
 
-
     @app.callback(
         [Output('global-test-split-display', 'children'),
          Output('execute-feature-engineering-btn', 'disabled')],
@@ -246,6 +245,32 @@ def register_callbacks(app):
 
         return f"{test_ratio*100:.0f}%", False
 
+    # --- Data Augmentation UI callbacks ---
+
+    @app.callback(
+        Output('augmentation-options-container', 'style'),
+        Input('augmentation-enable', 'value')
+    )
+    def toggle_augmentation_options(enabled):
+        """Show/hide augmentation options based on the enable checkbox."""
+        if enabled and 'enabled' in enabled:
+            return {'display': 'block', 'margin-top': '10px'}
+        return {'display': 'none'}
+
+    @app.callback(
+        Output('augmentation-factor-display', 'children'),
+        Input('augmentation-factor', 'value')
+    )
+    def update_augmentation_factor_display(factor):
+        """Display the current augmentation factor with explanation."""
+        if factor is None:
+            factor = 2
+        return html.Span(
+            f"Each original window will generate {factor} augmented "
+            f"version{'s' if factor > 1 else ''} → "
+            f"dataset grows by ~{factor}×",
+            style={'color': '#495057', 'fontSize': '13px'}
+        )
 
     @app.callback(
         [Output('feature-engineering-results', 'children'),
@@ -260,12 +285,18 @@ def register_callbacks(app):
          State('global-train-split', 'value'),
          State('global-val-split', 'value'),
          State('global-random-state', 'value'),
-         State('working-directory-store', 'data')],
+         State('working-directory-store', 'data'),
+         State('augmentation-enable', 'value'),
+         State('augmentation-methods', 'value'),
+         State('augmentation-factor', 'value'),
+         State('augmentation-static-labels', 'value')],
         prevent_initial_call=True
     )
     def execute_feature_engineering(n_clicks, selected_labels, feature_method,
                                     normalization_method, target_window_size, sampling_rate,
-                                    train_ratio, val_ratio, random_state, base_dir):
+                                    train_ratio, val_ratio, random_state, base_dir,
+                                    augmentation_enabled, aug_methods, aug_factor,
+                                    aug_static_labels_str):
         """
         Main feature engineering executor.
         Applies consistent settings across all selected activity labels.
@@ -314,7 +345,8 @@ def register_callbacks(app):
             label_window_counts = {}
 
             for dataset_name, dataset_info in metadata.items():
-                label = dataset_info.get('label', dataset_name.replace('.csv', ''))
+                label = dataset_info.get(
+                    'label', dataset_name.replace('.csv', ''))
                 if label in selected_labels and 'dragged_samples' in dataset_info:
                     window_files = [
                         f for f in dataset_info['dragged_samples'] if os.path.exists(f)]
@@ -384,6 +416,38 @@ def register_callbacks(app):
                     f"samples). Need longer data selections.",
                     style={'color': '#dc3545', 'padding': '15px'}), "", {}
 
+            # Step 2.5: Apply data augmentation (if enabled)
+            # Augmentation generates synthetic windows from real data to
+            # improve model robustness.  Operates on raw sensor arrays
+            # BEFORE feature extraction so that features reflect the
+            # augmented signals naturally.
+            aug_stats = None
+            original_window_count = len(padded_windows)
+            if (augmentation_enabled and 'enabled' in augmentation_enabled
+                    and aug_methods and aug_factor and aug_factor >= 1):
+                try:
+                    # Parse user-specified static labels (comma-separated)
+                    # or None for auto-detection
+                    _static = None
+                    if aug_static_labels_str and aug_static_labels_str.strip():
+                        _static = [s.strip() for s in aug_static_labels_str.split(
+                            ',') if s.strip()]
+                    aug_windows, aug_labels, aug_stats = augment_windows(
+                        padded_windows, all_labels, aug_methods,
+                        int(aug_factor), sensor_cols,
+                        random_seed=random_state,
+                        static_labels=_static,
+                    )
+                    padded_windows.extend(aug_windows)
+                    all_labels.extend(aug_labels)
+                    print(f"[Augmentation] Added {len(aug_windows)} synthetic "
+                          f"windows ({aug_stats['methods']}). "
+                          f"Total: {len(padded_windows)} windows.")
+                except Exception as aug_err:
+                    print(f"[Augmentation] Warning — augmentation failed, "
+                          f"continuing with original data: {aug_err}")
+                    aug_stats = {'error': str(aug_err)}
+
             # Step 3: Extract features uniformly (with edge-padded windows)
 
             feature_list = []
@@ -450,7 +514,7 @@ def register_callbacks(app):
                         orientation_robust=False,
                         include_per_axis=True
                     )
-                
+
                 # Convert to dict and add label
                 features = feature_df.iloc[0].to_dict()
                 features['activity'] = label
@@ -464,7 +528,8 @@ def register_callbacks(app):
             # is saved with the model and used correctly during deployment)
             X = df_features.drop('activity', axis=1).values
             y = df_features['activity'].values
-            feature_names = df_features.drop('activity', axis=1).columns.tolist()
+            feature_names = df_features.drop(
+                'activity', axis=1).columns.tolist()
             # Note: normalization_method is stored in metadata for reference only
 
             # Also save raw windowed sensor data for CNN training
@@ -518,7 +583,8 @@ def register_callbacks(app):
             if len(selected_labels) > 3:
                 dataset_name += f"_and_{len(selected_labels)-3}_more"
 
-            existing_fe_meta = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
+            existing_fe_meta = glob.glob(os.path.join(
+                training_dir, '*_fe_metadata.json'))
             fe_dataset_names = {
                 os.path.basename(f).replace('_fe_metadata.json', '')
                 for f in existing_fe_meta
@@ -553,24 +619,32 @@ def register_callbacks(app):
             # dataset_name was already computed above (before cleanup)
 
             # Save to CSV files
-            train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
+            train_file = os.path.join(
+                training_dir, f"{dataset_name}_train.csv")
             test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
 
             df_train.to_csv(train_file, index=False)
             df_test.to_csv(test_file, index=False)
 
             if len(X_val) > 0:
-                val_file = os.path.join(training_dir, f"{dataset_name}_val.csv")
+                val_file = os.path.join(
+                    training_dir, f"{dataset_name}_val.csv")
                 df_val.to_csv(val_file, index=False)
 
             # Save raw windowed sensor data for CNN training (numpy arrays)
-            np.save(os.path.join(training_dir, f"{dataset_name}_raw_train.npy"), rw_train)
-            np.save(os.path.join(training_dir, f"{dataset_name}_raw_test.npy"), rw_test)
-            np.save(os.path.join(training_dir, f"{dataset_name}_raw_train_labels.npy"), y_train)
-            np.save(os.path.join(training_dir, f"{dataset_name}_raw_test_labels.npy"), y_test)
+            np.save(os.path.join(training_dir,
+                    f"{dataset_name}_raw_train.npy"), rw_train)
+            np.save(os.path.join(training_dir,
+                    f"{dataset_name}_raw_test.npy"), rw_test)
+            np.save(os.path.join(training_dir,
+                    f"{dataset_name}_raw_train_labels.npy"), y_train)
+            np.save(os.path.join(training_dir,
+                    f"{dataset_name}_raw_test_labels.npy"), y_test)
             if len(rw_val) > 0:
-                np.save(os.path.join(training_dir, f"{dataset_name}_raw_val.npy"), rw_val)
-                np.save(os.path.join(training_dir, f"{dataset_name}_raw_val_labels.npy"), y_val)
+                np.save(os.path.join(training_dir,
+                        f"{dataset_name}_raw_val.npy"), rw_val)
+                np.save(os.path.join(training_dir,
+                        f"{dataset_name}_raw_val_labels.npy"), y_val)
 
             # Save feature-engineering metadata so that the training &
             # code-generation stages can recover window_size, sampling_rate,
@@ -595,6 +669,13 @@ def register_callbacks(app):
                 'val_split': val_ratio,
                 'test_split': test_ratio,
                 'random_state': random_state,
+                'augmentation': {
+                    'enabled': aug_stats is not None and 'error' not in (aug_stats or {}),
+                    'methods': aug_methods if aug_stats else [],
+                    'factor': int(aug_factor) if aug_factor else 0,
+                    'original_windows': original_window_count,
+                    'synthetic_windows': (aug_stats or {}).get('generated', 0),
+                } if aug_stats else None,
             }
             fe_meta_file = os.path.join(
                 training_dir, f"{dataset_name}_fe_metadata.json")
@@ -647,7 +728,8 @@ def register_callbacks(app):
 
             stats_table = dash_table.DataTable(
                 data=stats_data,
-                columns=[{'name': col, 'id': col} for col in stats_data[0].keys()],
+                columns=[{'name': col, 'id': col}
+                         for col in stats_data[0].keys()],
                 style_cell={'textAlign': 'left', 'padding': '10px'},
                 style_header={'backgroundColor': '#2E86AB',
                               'color': 'white', 'fontWeight': 'bold'},
@@ -658,9 +740,34 @@ def register_callbacks(app):
             )
 
             # Success message
-            pad_info = f"Edge-padded windows: {padding_stats['padded']} / {total_all}"
+            pad_info = f"Edge-padded windows: {padding_stats['padded']} / {original_window_count}"
             if padding_stats['discarded'] > 0:
                 pad_info += f" ({padding_stats['discarded']} discarded as too short)"
+
+            # Build augmentation info line
+            if aug_stats and 'error' not in aug_stats:
+                static_info = ""
+                if aug_stats.get('static_labels'):
+                    static_info = (
+                        f" | 🛡️ {', '.join(aug_stats['static_labels'])} "
+                        f"protected (micro-jitter only)"
+                    )
+                aug_info = (
+                    f"🔄 Data augmentation: {aug_stats['generated']} "
+                    f"synthetic windows added "
+                    f"({', '.join(aug_stats.get('methods', []))}, "
+                    f"{int(aug_factor)}× factor) — "
+                    f"total {original_window_count} → {len(padded_windows)} windows"
+                    f"{static_info}"
+                )
+                aug_li = html.Li(aug_info, style={
+                                 'color': '#6f42c1', 'fontWeight': 'bold'})
+            elif aug_stats and 'error' in aug_stats:
+                aug_li = html.Li(
+                    f"⚠️ Augmentation skipped (error: {aug_stats['error']})",
+                    style={'color': '#ff9800'})
+            else:
+                aug_li = html.Li("Data augmentation: OFF")
 
             success_msg = html.Div([
                 html.H4("✅ Feature Engineering Complete!",
@@ -671,10 +778,9 @@ def register_callbacks(app):
                     html.Li(
                         f"Target window size: {target_window_size}ms ({target_window_samples} samples @ {sampling_rate}Hz)"),
                     html.Li(pad_info),
+                    aug_li,
                     html.Li(
                         f"Features extracted: {len(feature_names)} features using '{feature_method}' method"),
-                    html.Li("Rotation augmentation: ON (only for orientation_invariant)" if feature_method ==
-                            'orientation_invariant' else "Rotation augmentation: OFF"),
                     html.Li(
                         f"Normalization: {normalization_method.title() if normalization_method != 'none' else 'None'}"),
                     html.Li(
@@ -696,4 +802,3 @@ def register_callbacks(app):
                          'fontSize': '12px', 'background': '#f8f9fa', 'padding': '10px'})
             ], style={'padding': '15px', 'background-color': '#f8d7da', 'border-radius': '5px'})
             return error_msg, "", {}
-

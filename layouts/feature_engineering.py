@@ -227,9 +227,142 @@ layout = html.Div([
             'margin-bottom': '30px'
         }),
 
-        # Step 3: Train/Val/Test Split Configuration
+        # Step 3: Data Augmentation (optional)
         html.Div([
-            html.H3("📊 Step 3: Configure Dataset Split", style={
+            html.H3("🔁 Step 3: Data Augmentation (Optional)", style={
+                'color': '#2E86AB', 'margin-bottom': '10px'}),
+            html.P(
+                "Generate synthetic training windows to improve model robustness. "
+                "Augmentation is applied to raw sensor signals before feature extraction, "
+                "so new features are computed naturally from augmented data.",
+                style={'color': '#666', 'margin-bottom': '20px'}),
+
+            # Enable toggle
+            html.Div([
+                dcc.Checklist(
+                    id='augmentation-enable',
+                    options=[
+                        {'label': '  Enable Data Augmentation', 'value': 'enabled'}],
+                    value=[],
+                    style={'font-weight': 'bold',
+                           'font-size': '16px', 'margin-bottom': '15px'}
+                ),
+            ]),
+
+            # Augmentation options (collapsible)
+            html.Div(id='augmentation-options-container', children=[
+                # Method selection
+                html.Div([
+                    html.Label("Augmentation Methods:", style={
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                    dcc.Checklist(
+                        id='augmentation-methods',
+                        options=[
+                            {'label': '  📊 Jittering — Add Gaussian noise (simulates sensor noise variation)',
+                             'value': 'jitter'},
+                            {'label': '  📏 Scaling — Vary amplitude ±10% (simulates different movement intensities)',
+                             'value': 'scaling'},
+                            {'label': '  🔄 Rotation — Random 3D rotation ±20° (simulates device orientation changes) ⭐ RECOMMENDED',
+                             'value': 'rotation'},
+                            {'label': '  ⏱️ Time Warping — Smooth speed variation (simulates pace changes)',
+                             'value': 'time_warp'},
+                            {'label': '  🔀 Permutation — Shuffle temporal segments (order-invariant features)',
+                             'value': 'permutation'},
+                        ],
+                        value=['jitter', 'rotation'],
+                        style={'line-height': '2.2'}
+                    ),
+                ], style={'margin-bottom': '20px'}),
+
+                # Augmentation factor
+                html.Div([
+                    html.Div([
+                        html.Label("Augmentation Factor (copies per window):", style={
+                            'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                        dcc.Slider(
+                            id='augmentation-factor',
+                            min=1,
+                            max=10,
+                            step=1,
+                            value=2,
+                            marks={1: '1×', 2: '2×',
+                                   3: '3×', 5: '5×', 10: '10×'},
+                            tooltip={"placement": "bottom",
+                                     "always_visible": True}
+                        ),
+                        html.Div(id='augmentation-factor-display', style={
+                            'color': '#666', 'font-size': '13px', 'margin-top': '8px'
+                        })
+                    ], style={'width': '60%', 'display': 'inline-block', 'vertical-align': 'top'}),
+
+                    html.Div([
+                        html.Div([
+                            html.Strong("💡 Recommendation:"),
+                            html.Br(),
+                            "• 2-3× for small datasets (<200 windows)",
+                            html.Br(),
+                            "• 1-2× for balanced datasets (>500 windows)",
+                            html.Br(),
+                            "• Rotation + Jitter is the best combination for HAR",
+                        ], style={
+                            'padding': '12px',
+                            'backgroundColor': '#e8f5e9',
+                            'borderLeft': '4px solid #4caf50',
+                            'borderRadius': '6px',
+                            'fontSize': '12px',
+                            'color': '#2e7d32',
+                        })
+                    ], style={'width': '35%', 'display': 'inline-block',
+                              'margin-left': '5%', 'vertical-align': 'top'})
+                ], style={'margin-bottom': '15px'}),
+
+                # Static / stationary class protection
+                html.Div([
+                    html.Div([
+                        html.Strong("🛡️ Class-Aware Protection"),
+                        html.Span(" — Static activities get micro-jitter only",
+                                  style={'color': '#666', 'fontSize': '13px'}),
+                    ], style={'margin-bottom': '8px'}),
+                    html.P(
+                        "Activities like 'still' or 'standing' are defined by the absence of motion. "
+                        "Full augmentation (rotation, scaling) would make them resemble low-intensity "
+                        "movement and cause class confusion. These labels receive only σ=0.01 sensor "
+                        "noise instead.",
+                        style={'color': '#666', 'fontSize': '12px', 'margin-bottom': '10px'}),
+                    html.Label("Static activity labels (auto-detected, editable):", style={
+                        'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block',
+                        'fontSize': '13px'}),
+                    dcc.Input(
+                        id='augmentation-static-labels',
+                        type='text',
+                        placeholder='e.g. still, standing, sitting  (comma-separated)',
+                        value='',
+                        style={'width': '100%', 'padding': '8px', 'borderRadius': '5px',
+                               'border': '1px solid #ced4da', 'fontSize': '13px'}
+                    ),
+                    html.Div(
+                        "Leave blank for auto-detection (keywords: still, stand, sit, lying, idle)",
+                        style={'color': '#999', 'fontSize': '11px', 'margin-top': '4px'}),
+                ], style={
+                    'padding': '15px',
+                    'backgroundColor': '#fff3e0',
+                    'borderLeft': '4px solid #ff9800',
+                    'borderRadius': '6px',
+                    'margin-bottom': '15px',
+                }),
+                # hidden by default, shown when enabled
+            ], style={'display': 'none'}),
+        ], style={
+            'background': 'white',
+            'padding': '25px',
+            'border-radius': '10px',
+            'box-shadow': '0 2px 8px rgba(0,0,0,0.1)',
+            'margin-bottom': '30px'
+        }),
+
+        # Step 4: Train/Val/Test Split Configuration
+        html.Div([
+            html.H3("📊 Step 4: Configure Dataset Split", style={
                 'color': '#2E86AB', 'margin-bottom': '20px'}),
             html.P("Define how to split the combined dataset into train/validation/test sets",
                    style={'color': '#666', 'margin-bottom': '20px'}),
@@ -311,9 +444,9 @@ layout = html.Div([
             'margin-bottom': '30px'
         }),
 
-        # Step 4: Execute Feature Engineering
+        # Step 5: Execute Feature Engineering
         html.Div([
-            html.H3("🚀 Step 4: Execute Feature Engineering", style={
+            html.H3("🚀 Step 5: Execute Feature Engineering", style={
                 'color': '#2E86AB', 'margin-bottom': '20px'}),
 
             html.Button(
