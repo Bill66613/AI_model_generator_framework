@@ -11,8 +11,10 @@ from .base_generator import BaseCodeGenerator
 class RandomForestCodeGenerator(BaseCodeGenerator):
     """Code generator specifically for Random Forest models."""
 
-    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5):
-        super().__init__(model_data, platform, optimization, overlap)
+    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
+                 optimization: str = 'balanced', overlap: float = 0.5,
+                 quantization: str = 'none'):
+        super().__init__(model_data, platform, optimization, overlap, quantization)
         self.trees = model_data.get('trees', [])
         self.num_trees = len(self.trees)
 

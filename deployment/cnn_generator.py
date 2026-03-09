@@ -16,7 +16,8 @@ class CNNCodeGenerator(BaseCodeGenerator):
     """Code generator for 1D-CNN models (PyTorch HARCNN)."""
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
-                 optimization: str = 'balanced', overlap: float = 0.5):
+                 optimization: str = 'balanced', overlap: float = 0.5,
+                 quantization: str = 'none'):
         # CNN doesn't use traditional feature_names — provide channel names
         # as placeholder so the base class validation passes.
         if not model_data.get('feature_names'):
@@ -24,7 +25,7 @@ class CNNCodeGenerator(BaseCodeGenerator):
             model_data = dict(model_data)  # shallow copy
             model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
 
-        super().__init__(model_data, platform, optimization, overlap)
+        super().__init__(model_data, platform, optimization, overlap, quantization)
 
         self.layers: List[Dict[str, Any]] = []
         self.n_channels = model_data.get('n_channels', 6)
@@ -93,6 +94,7 @@ class CNNCodeGenerator(BaseCodeGenerator):
  * Classes: {len(self.classes)}
  * Platform: {self.platform}
  * Optimization: {self.optimization.title()}
+ * {self._get_quantization_comment()}
  */
 
 #ifndef HAR_CNN_MODEL_H
@@ -168,89 +170,7 @@ const char* activity_names[NUM_CLASSES] = {{
 // Generic layer functions
 // ==================================================================
 
-/**
- * 1D convolution  (same-padding when pad = kernel_size/2).
- * input  : [seq_len][in_ch]
- * output : [seq_len][out_ch]   (same length when padding is correct)
- * weights: [out_ch][in_ch][kernel_size]
- * bias   : [out_ch]
- */
-static void conv1d(const float *input, float *output,
-                   const float *weights, const float *bias,
-                   int seq_len, int in_ch, int out_ch,
-                   int kernel_size, int padding) {{
-    for (int o = 0; o < out_ch; o++) {{
-        for (int t = 0; t < seq_len; t++) {{
-            float sum = bias[o];
-            for (int ic = 0; ic < in_ch; ic++) {{
-                for (int k = 0; k < kernel_size; k++) {{
-                    int pos = t - padding + k;
-                    if (pos >= 0 && pos < seq_len) {{
-                        sum += input[pos * in_ch + ic]
-                             * weights[(o * in_ch + ic) * kernel_size + k];
-                    }}
-                }}
-            }}
-            // fused ReLU
-            output[t * out_ch + o] = (sum > 0.0f) ? sum : 0.0f;
-        }}
-    }}
-}}
-
-/**
- * 1D max-pooling with stride = kernel_size (no overlap).
- * input  : [seq_len][channels]
- * output : [seq_len / pool_k][channels]
- */
-static void maxpool1d(const float *input, float *output,
-                      int seq_len, int channels, int pool_k) {{
-    int out_len = seq_len / pool_k;
-    for (int t = 0; t < out_len; t++) {{
-        for (int c = 0; c < channels; c++) {{
-            float mx = -1e30f;
-            for (int p = 0; p < pool_k; p++) {{
-                float v = input[(t * pool_k + p) * channels + c];
-                if (v > mx) mx = v;
-            }}
-            output[t * channels + c] = mx;
-        }}
-    }}
-}}
-
-/**
- * Global average pooling over the time dimension.
- * input  : [seq_len][channels]
- * output : [channels]
- */
-static void global_avg_pool(const float *input, float *output,
-                            int seq_len, int channels) {{
-    for (int c = 0; c < channels; c++) {{
-        float sum = 0.0f;
-        for (int t = 0; t < seq_len; t++) {{
-            sum += input[t * channels + c];
-        }}
-        output[c] = sum / (float)seq_len;
-    }}
-}}
-
-/**
- * Fully-connected (dense) layer with optional ReLU.
- * input   : [in_features]
- * output  : [out_features]
- * weights : [in_features][out_features]  (row-major)
- * bias    : [out_features]
- */
-static void dense(const float *input, float *output,
-                  const float *weights, const float *bias,
-                  int in_features, int out_features, int apply_relu) {{
-    for (int o = 0; o < out_features; o++) {{
-        float sum = bias[o];
-        for (int i = 0; i < in_features; i++) {{
-            sum += input[i] * weights[i * out_features + o];
-        }}
-        output[o] = (apply_relu && sum < 0.0f) ? 0.0f : sum;
-    }}
-}}
+{self._generate_layer_functions()}
 
 // ==================================================================
 // Predict from raw sensor window
@@ -473,10 +393,154 @@ void app_main(void) {{
     def _generate_utility_functions(self) -> str:
         return ""
 
+    # ---- layer functions ----
+
+    def _generate_layer_functions(self) -> str:
+        """Generate conv1d, maxpool1d, global_avg_pool, dense functions.
+        
+        When quantization is active, the conv1d and dense functions accept
+        quantized weight pointers and a scale factor.
+        """
+        from .quantization import get_c_type
+
+        maxpool_fn = """
+/**
+ * 1D max-pooling with stride = kernel_size (no overlap).
+ */
+static void maxpool1d(const float *input, float *output,
+                      int seq_len, int channels, int pool_k) {
+    int out_len = seq_len / pool_k;
+    for (int t = 0; t < out_len; t++) {
+        for (int c = 0; c < channels; c++) {
+            float mx = -1e30f;
+            for (int p = 0; p < pool_k; p++) {
+                float v = input[(t * pool_k + p) * channels + c];
+                if (v > mx) mx = v;
+            }
+            output[t * channels + c] = mx;
+        }
+    }
+}"""
+        gap_fn = """
+/**
+ * Global average pooling over the time dimension.
+ */
+static void global_avg_pool(const float *input, float *output,
+                            int seq_len, int channels) {
+    for (int c = 0; c < channels; c++) {
+        float sum = 0.0f;
+        for (int t = 0; t < seq_len; t++) {
+            sum += input[t * channels + c];
+        }
+        output[c] = sum / (float)seq_len;
+    }
+}"""
+
+        if self.quantization in ('int8', 'int16'):
+            c_type = get_c_type(self.quantization)
+            conv_fn = f"""
+/**
+ * Quantized 1D convolution ({self.quantization.upper()} weights, float activations).
+ * weights are {c_type}, dequantized on-the-fly via scale factor.
+ */
+static void conv1d(const float *input, float *output,
+                   const {c_type} *weights, const float *bias, float w_scale,
+                   int seq_len, int in_ch, int out_ch,
+                   int kernel_size, int padding) {{
+    for (int o = 0; o < out_ch; o++) {{
+        for (int t = 0; t < seq_len; t++) {{
+            float sum = bias[o];
+            for (int ic = 0; ic < in_ch; ic++) {{
+                for (int k = 0; k < kernel_size; k++) {{
+                    int pos = t - padding + k;
+                    if (pos >= 0 && pos < seq_len) {{
+                        sum += input[pos * in_ch + ic]
+                             * ((float)weights[(o * in_ch + ic) * kernel_size + k] * w_scale);
+                    }}
+                }}
+            }}
+            // fused ReLU
+            output[t * out_ch + o] = (sum > 0.0f) ? sum : 0.0f;
+        }}
+    }}
+}}"""
+            dense_fn = f"""
+/**
+ * Quantized fully-connected layer ({self.quantization.upper()} weights, float bias).
+ */
+static void dense(const float *input, float *output,
+                  const {c_type} *weights, const float *bias, float w_scale,
+                  int in_features, int out_features, int apply_relu) {{
+    for (int o = 0; o < out_features; o++) {{
+        float sum = bias[o];
+        for (int i = 0; i < in_features; i++) {{
+            sum += input[i] * ((float)weights[i * out_features + o] * w_scale);
+        }}
+        output[o] = (apply_relu && sum < 0.0f) ? 0.0f : sum;
+    }}
+}}"""
+        else:
+            # float32 or float16 (both emit float arrays)
+            conv_fn = """
+/**
+ * 1D convolution  (same-padding when pad = kernel_size/2).
+ * input  : [seq_len][in_ch]
+ * output : [seq_len][out_ch]
+ * weights: [out_ch][in_ch][kernel_size]
+ */
+static void conv1d(const float *input, float *output,
+                   const float *weights, const float *bias,
+                   int seq_len, int in_ch, int out_ch,
+                   int kernel_size, int padding) {
+    for (int o = 0; o < out_ch; o++) {
+        for (int t = 0; t < seq_len; t++) {
+            float sum = bias[o];
+            for (int ic = 0; ic < in_ch; ic++) {
+                for (int k = 0; k < kernel_size; k++) {
+                    int pos = t - padding + k;
+                    if (pos >= 0 && pos < seq_len) {
+                        sum += input[pos * in_ch + ic]
+                             * weights[(o * in_ch + ic) * kernel_size + k];
+                    }
+                }
+            }
+            // fused ReLU
+            output[t * out_ch + o] = (sum > 0.0f) ? sum : 0.0f;
+        }
+    }
+}"""
+            dense_fn = """
+/**
+ * Fully-connected (dense) layer with optional ReLU.
+ */
+static void dense(const float *input, float *output,
+                  const float *weights, const float *bias,
+                  int in_features, int out_features, int apply_relu) {
+    for (int o = 0; o < out_features; o++) {
+        float sum = bias[o];
+        for (int i = 0; i < in_features; i++) {
+            sum += input[i] * weights[i * out_features + o];
+        }
+        output[o] = (apply_relu && sum < 0.0f) ? 0.0f : sum;
+    }
+}"""
+
+        return conv_fn + maxpool_fn + gap_fn + dense_fn
+
     # ---- weight arrays ----
 
     def _generate_weight_arrays(self) -> str:
-        """Emit const float arrays for every parameterised layer."""
+        """Emit weight arrays for every parameterised layer.
+        
+        When quantization is enabled, emits int8/int16 arrays + scale factors
+        instead of float arrays.
+        """
+        if self.quantization != 'none':
+            return self._generate_quantized_weight_arrays()
+        return self._generate_float_weight_arrays()
+
+    def _generate_float_weight_arrays(self) -> str:
+        """Emit const float arrays for every parameterised layer (original path)."""
         parts: List[str] = []
         for i, layer in enumerate(self.layers):
             tag = f"l{i}"
@@ -491,6 +555,50 @@ void app_main(void) {{
                 parts.append(self._fmt_2d(w, f"{tag}_w"))
                 parts.append(self._fmt_1d(b, f"{tag}_b"))
         return "\n\n".join(parts)
+
+    def _generate_quantized_weight_arrays(self) -> str:
+        """Emit quantized weight arrays + scale factors + info comment."""
+        from .quantization import (
+            quantize_tensor, format_quantized_1d, format_quantized_2d,
+            format_quantized_3d, generate_quantization_info_comment,
+            generate_dequant_helper, QuantizationReport, compute_quantization_error,
+        )
+
+        mode = self.quantization
+        report = QuantizationReport(mode=mode)
+        parts: List[str] = []
+
+        for i, layer in enumerate(self.layers):
+            tag = f"l{i}"
+            if layer['type'] == 'conv1d':
+                w = np.array(layer['weights'], dtype=np.float32)  # (out_ch, in_ch, k)
+                b = np.array(layer['bias'], dtype=np.float32)
+                qt_w = quantize_tensor(w, mode)
+                report.tensors[f'{tag}_w'] = qt_w
+                parts.append(format_quantized_3d(
+                    qt_w, f"{tag}_w", w.shape[0], w.shape[1], w.shape[2],
+                    precision=self.feature_precision, static=True))
+                # Biases stay float for numerical accuracy
+                parts.append(self._fmt_1d(b, f"{tag}_b"))
+            elif layer['type'] == 'dense':
+                w = np.array(layer['weights'], dtype=np.float32)
+                b = np.array(layer['bias'], dtype=np.float32)
+                qt_w = quantize_tensor(w, mode)
+                report.tensors[f'{tag}_w'] = qt_w
+                parts.append(format_quantized_2d(
+                    qt_w, f"{tag}_w", w.shape[0], w.shape[1],
+                    precision=self.feature_precision, static=True))
+                parts.append(self._fmt_1d(b, f"{tag}_b"))
+
+        # Compute totals
+        for name, qt in report.tensors.items():
+            report.total_quantized_bytes += qt.memory_bytes
+            report.total_original_bytes += qt.original_bytes
+
+        info = generate_quantization_info_comment(report)
+        dequant = generate_dequant_helper(mode)
+
+        return info + '\n\n' + '\n\n'.join(parts) + '\n' + dequant
 
     def _fmt_1d(self, arr: np.ndarray, name: str) -> str:
         """Format 1-D array as const float[]."""
@@ -556,6 +664,7 @@ void app_main(void) {{
         """Generate the body of har_predict_from_window()."""
         lines: List[str] = []
         buf_info = self._compute_buffer_sizes()
+        is_quantized = self.quantization in ('int8', 'int16')
 
         # We ping-pong between two large buffers to avoid extra copies.
         lines.append(f"    static float buf_a[CNN_BUF_SIZE];")
@@ -583,7 +692,10 @@ void app_main(void) {{
             tag = f"l{i}"
             if layer['type'] == 'conv1d':
                 lines.append(f"    // Layer {i}: Conv1D({layer['in_channels']}→{layer['out_channels']}, k={layer['kernel_size']}, pad={layer['padding']}) + ReLU")
-                lines.append(f"    conv1d({src}, {dst}, {tag}_w, {tag}_b,")
+                if is_quantized:
+                    lines.append(f"    conv1d({src}, {dst}, {tag}_w, {tag}_b, {tag}_w_scale,")
+                else:
+                    lines.append(f"    conv1d({src}, {dst}, {tag}_w, {tag}_b,")
                 lines.append(f"           {seq_len_expr}, L{i}_IN_CH, L{i}_OUT_CH, L{i}_KSIZE, L{i}_PAD);")
                 ch_expr = f"L{i}_OUT_CH"
                 src, dst = dst, src  # swap
@@ -604,6 +716,9 @@ void app_main(void) {{
                 relu_flag = "0" if is_last else "1"
                 relu_comment = "" if is_last else " + ReLU"
 
+                # Extra scale argument for quantized weights
+                scale_arg = f", {tag}_w_scale" if is_quantized else ""
+
                 if dense_idx == 1:
                     # First dense layer — preceded by global avg pool
                     lines.append(f"    // Global average pooling → {layer['in_features']} features")
@@ -612,13 +727,13 @@ void app_main(void) {{
                     lines.append(f"")
                     lines.append(f"    // Layer {i}: Dense({layer['in_features']}→{layer['out_features']}){relu_comment}")
                     lines.append(f"    float d{dense_idx}_out[L{i}_OUT];")
-                    lines.append(f"    dense(gap_out, d{dense_idx}_out, {tag}_w, {tag}_b, L{i}_IN, L{i}_OUT, {relu_flag});")
+                    lines.append(f"    dense(gap_out, d{dense_idx}_out, {tag}_w, {tag}_b{scale_arg}, L{i}_IN, L{i}_OUT, {relu_flag});")
                     lines.append("")
                 else:
                     prev_out = f"d{dense_idx-1}_out"
                     lines.append(f"    // Layer {i}: Dense({layer['in_features']}→{layer['out_features']}){relu_comment}")
                     lines.append(f"    float d{dense_idx}_out[L{i}_OUT];")
-                    lines.append(f"    dense({prev_out}, d{dense_idx}_out, {tag}_w, {tag}_b, L{i}_IN, L{i}_OUT, {relu_flag});")
+                    lines.append(f"    dense({prev_out}, d{dense_idx}_out, {tag}_w, {tag}_b{scale_arg}, L{i}_IN, L{i}_OUT, {relu_flag});")
                     lines.append("")
 
         # Softmax + confidence + threshold over final dense output

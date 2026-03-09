@@ -21,7 +21,8 @@ class ARMCortexMCodeGenerator(BaseCodeGenerator):
     """
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'arm_cortex_m',
-                 optimization: str = 'balanced', overlap: float = 0.5):
+                 optimization: str = 'balanced', overlap: float = 0.5,
+                 quantization: str = 'none'):
         # CNN models don't use traditional features — provide placeholders
         model_type = model_data.get('model_type', '')
         if model_type == 'pytorch_cnn' and not model_data.get('feature_names'):
@@ -29,19 +30,19 @@ class ARMCortexMCodeGenerator(BaseCodeGenerator):
             n_ch = model_data.get('n_channels', 6)
             model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
 
-        super().__init__(model_data, platform, optimization, overlap)
+        super().__init__(model_data, platform, optimization, overlap, quantization)
         self.optimization_level = optimization
 
         # Create the inner model-specific generator to delegate prediction to
         model_type = model_data.get('model_type', '')
         if model_type == 'random_forest':
-            self._inner = RandomForestCodeGenerator(model_data, platform, optimization, overlap)
+            self._inner = RandomForestCodeGenerator(model_data, platform, optimization, overlap, quantization)
         elif model_type in ('neural_network', 'pytorch_mlp'):
-            self._inner = NeuralNetworkCodeGenerator(model_data, platform, optimization, overlap)
+            self._inner = NeuralNetworkCodeGenerator(model_data, platform, optimization, overlap, quantization)
         elif model_type == 'svm':
-            self._inner = SVMCodeGenerator(model_data, platform, optimization, overlap)
+            self._inner = SVMCodeGenerator(model_data, platform, optimization, overlap, quantization)
         elif model_type == 'pytorch_cnn':
-            self._inner = CNNCodeGenerator(model_data, platform, optimization, overlap)
+            self._inner = CNNCodeGenerator(model_data, platform, optimization, overlap, quantization)
         else:
             # Fallback: no inner generator – will use parent's abstract stubs
             self._inner = None

@@ -696,17 +696,20 @@ def register_callbacks(app):
          State('output-framework-selector', 'value'),
          State('target-board-selector', 'value'),
          State('optimization-level', 'value'),
+         State('quantization-mode', 'value'),
          State('deployment-stride', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
-    def generate_embedded_code(n_clicks, model_filename, framework, target_board, optimization, stride, base_dir):
+    def generate_embedded_code(n_clicks, model_filename, framework, target_board, optimization, quantization, stride, base_dir):
         """
         Generate embedded C/C++ code from the trained model using actual metadata.
         Model type is automatically detected from the selected model.
         Parameters are loaded from model metadata to ensure consistency.
         Uses the working directory from the store.
         """
+        if not quantization:
+            quantization = 'none'
         if not model_filename:
             return no_update, html.Div("⚠️ Please select a model first",
                                        style={'color': '#ff9800', 'padding': '10px'}), {'display': 'none'}, {}, True, True, no_update, no_update
@@ -807,7 +810,7 @@ def register_callbacks(app):
 
             # Generate code using proper code generators
             generated_code_files = generate_deployment_code(
-                model_type, model_data, platform, optimization, overlap_fraction
+                model_type, model_data, platform, optimization, overlap_fraction, quantization
             )
 
             # Run pre-deployment validation
@@ -831,7 +834,7 @@ def register_callbacks(app):
             # Also save to working directory in organized structure
             output_dir = os.path.join(base_dir, 'generated')
             saved_files = generate_and_save_deployment_code(
-                model_type, model_data, platform, output_dir, optimization, overlap_fraction
+                model_type, model_data, platform, output_dir, optimization, overlap_fraction, quantization
             )
 
             # Get the first generated file for preview (typically the sketch/example)

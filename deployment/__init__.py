@@ -19,6 +19,11 @@ from .code_generator_factory import (
     get_deployment_info
 )
 from .validation import DeploymentValidator, validate_before_deployment
+from .quantization import (
+    quantize_tensor, quantize_symmetric_int8, quantize_symmetric_int16,
+    quantize_float16, compute_quantization_error, QUANTIZATION_MODES,
+    QuantizedTensor, QuantizationReport
+)
 
 __all__ = [
     'BaseCodeGenerator',
@@ -36,4 +41,8 @@ __all__ = [
     'get_deployment_info',
     'DeploymentValidator',
     'validate_before_deployment',
+    'quantize_tensor',
+    'QUANTIZATION_MODES',
+    'QuantizedTensor',
+    'QuantizationReport',
 ]

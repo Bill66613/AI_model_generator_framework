@@ -25,7 +25,9 @@ class OptimizationError(ValidationError):
 class BaseCodeGenerator(ABC):
     """Abstract base class for all code generators."""
 
-    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5):
+    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
+                 optimization: str = 'balanced', overlap: float = 0.5,
+                 quantization: str = 'none'):
         # Validate inputs before proceeding
         self._validate_model_data(model_data)
         self._validate_optimization(optimization)
@@ -39,6 +41,10 @@ class BaseCodeGenerator(ABC):
         self.optimization = optimization
         self.overlap = max(0.0, min(0.99, overlap))  # Clamp between 0-99%
 
+        # Quantization mode: 'none', 'int8', 'int16', 'float16'
+        from .quantization import QUANTIZATION_MODES
+        self.quantization = quantization if quantization in QUANTIZATION_MODES else 'none'
+
         # Extract common parameters
         self.feature_means = model_data.get(
             'feature_means', [0.0] * len(self.feature_names))
@@ -51,6 +57,18 @@ class BaseCodeGenerator(ABC):
         # Set optimization-specific parameters
         self._set_optimization_parameters()
 
+    def _get_quantization_comment(self) -> str:
+        """Return a header comment describing quantization mode."""
+        if self.quantization == 'none':
+            return 'Quantization: None (float32)'
+        elif self.quantization == 'int8':
+            return 'Quantization: INT8 symmetric (75% weight memory reduction)'
+        elif self.quantization == 'int16':
+            return 'Quantization: INT16 symmetric (50% weight memory reduction)'
+        elif self.quantization == 'float16':
+            return 'Quantization: FLOAT16 (reduced precision)'
+        return f'Quantization: {self.quantization}'
+
     def generate_header(self) -> str:
         """Generate common header file content."""
         header = f"""/*
@@ -62,12 +80,14 @@ class BaseCodeGenerator(ABC):
  * Platform: {self.platform}
  * Optimization: {self.optimization.title()}
  * {self._get_optimization_comment()}
+ * {self._get_quantization_comment()}
  */
 
 #ifndef HAR_MODEL_H
 #define HAR_MODEL_H
 
 {self._get_platform_includes()}
+{self._get_quantization_includes()}
 
 // Model configuration
 #define NUM_FEATURES {len(self.feature_names)}
@@ -75,6 +95,10 @@ class BaseCodeGenerator(ABC):
 #define N_CHANNELS  6
 #define SAMPLING_RATE {self.sampling_rate}
 #define WINDOW_SIZE {self.window_size}
+
+// Quantization mode
+#define QUANTIZATION_MODE "{self.quantization}"
+#define QUANTIZATION_ENABLED {1 if self.quantization != 'none' else 0}
 
 // Confidence threshold — prediction returns -1 when below this
 #define CONFIDENCE_THRESHOLD 0.6f
@@ -277,6 +301,17 @@ const char* get_activity_name(int class_id) {{
         else:
             # Arduino / ESP32 / seeed_xiao / teensy
             return '#include <Arduino.h>'
+
+    def _get_quantization_includes(self) -> str:
+        """Return additional #include directives needed for quantization."""
+        if self.quantization in ('int8', 'int16'):
+            # stdint.h is needed for int8_t / int16_t
+            # Most platform includes already pull it in, but be safe
+            if self.platform in ('arduino', 'esp32', 'seeed_xiao', 'teensy'):
+                return '#include <stdint.h>   // for int8_t/int16_t (quantized weights)'
+            # generic_c, generic_cpp, esp_idf, zephyr, arm_cortex_m already include stdint.h
+            return '// stdint.h already included above (needed for quantized weights)'
+        return ''
 
     def _get_enum_or_define_classes(self) -> str:
         """Generate activity class constants — enum in C++, #defines in pure C."""

@@ -540,7 +540,8 @@ class CodeGeneratorFactory:
 
     @classmethod
     def create_generator(cls, model_type: str, model_data: Dict[str, Any],
-                         platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5) -> BaseCodeGenerator:
+                         platform: str = 'arduino', optimization: str = 'balanced',
+                         overlap: float = 0.5, quantization: str = 'none') -> BaseCodeGenerator:
         """
         Create appropriate code generator based on model type and platform.
 
@@ -550,6 +551,7 @@ class CodeGeneratorFactory:
             platform: Target platform ('arduino', 'arm_cortex_m', etc.)
             optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
             overlap: Window overlap fraction (0.0 to 0.99)
+            quantization: Weight quantization mode ('none', 'int8', 'int16', 'float16')
 
         Returns:
             Appropriate code generator instance
@@ -566,15 +568,15 @@ class CodeGeneratorFactory:
 
             # For ARM Cortex-M platform, use specialized generator
             if platform == 'arm_cortex_m':
-                return cls._generators['arm_cortex_m'](model_data, platform, optimization, overlap)
+                return cls._generators['arm_cortex_m'](model_data, platform, optimization, overlap, quantization)
 
             # For MicroPython platform, use MicroPython generator
             if platform == 'micropython':
-                return cls._generators['micropython'](model_data, platform, optimization, overlap)
+                return cls._generators['micropython'](model_data, platform, optimization, overlap, quantization)
 
             # For Zephyr RTOS platform, use Zephyr generator
             if platform == 'zephyr':
-                return cls._generators['zephyr'](model_data, platform, optimization, overlap)
+                return cls._generators['zephyr'](model_data, platform, optimization, overlap, quantization)
 
             # For other platforms, use model-specific generators
             if model_type not in cls._generators:
@@ -585,7 +587,7 @@ class CodeGeneratorFactory:
                                  f"Supported types: {available_types}")
 
             generator_class = cls._generators[model_type]
-            return generator_class(model_data, platform, optimization, overlap)
+            return generator_class(model_data, platform, optimization, overlap, quantization)
 
         except (ValidationError, ModelDataError, OptimizationError) as e:
             # Re-raise validation errors with context
@@ -625,7 +627,8 @@ class CodeGeneratorFactory:
 
 
 def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
-                             platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5) -> Dict[str, str]:
+                             platform: str = 'arduino', optimization: str = 'balanced',
+                             overlap: float = 0.5, quantization: str = 'none') -> Dict[str, str]:
     """
     Convenience function to generate deployment code with organized naming.
 
@@ -635,6 +638,7 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         platform: Target platform
         optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
         overlap: Window overlap percentage (0.0 to 0.99)
+        quantization: Weight quantization mode ('none', 'int8', 'int16', 'float16')
 
     Returns:
         Dictionary with descriptive filename as key and code content as value
@@ -651,7 +655,7 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
             model_data = extract_real_model_parameters(model_data)
 
         generator = CodeGeneratorFactory.create_generator(
-            model_type, model_data, platform, optimization, overlap)
+            model_type, model_data, platform, optimization, overlap, quantization)
 
         # Create organized filenames
         if platform == 'arm_cortex_m':
@@ -724,7 +728,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
                                       platform: str = 'arduino',
                                       output_dir: str = 'generated_code',
                                       optimization: str = 'balanced',
-                                      overlap: float = 0.5) -> Dict[str, str]:
+                                      overlap: float = 0.5,
+                                      quantization: str = 'none') -> Dict[str, str]:
     """
     Generate deployment code and save to organized folder structure.
 
@@ -735,6 +740,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
         output_dir: Base output directory for generated files
         optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
         overlap: Window overlap percentage (0.0 to 0.99)
+        quantization: Weight quantization mode ('none', 'int8', 'int16', 'float16')
 
     Returns:
         Dictionary with full file paths as keys and success messages as values
@@ -751,7 +757,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
 
     # Generate code with organized naming and optimization
     generated_code = generate_deployment_code(
-        model_type, model_data, platform, optimization, overlap)
+        model_type, model_data, platform, optimization, overlap, quantization)
 
     # Save files and return file paths
     saved_files = {}

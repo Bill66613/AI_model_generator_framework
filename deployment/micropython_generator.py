@@ -23,7 +23,8 @@ class MicroPythonCodeGenerator(BaseCodeGenerator):
     """
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'micropython',
-                 optimization: str = 'balanced', overlap: float = 0.5):
+                 optimization: str = 'balanced', overlap: float = 0.5,
+                 quantization: str = 'none'):
         # CNN models don't use traditional features — provide placeholders
         model_type_name = model_data.get('model_type', 'unknown')
         if model_type_name == 'pytorch_cnn' and not model_data.get('feature_names'):
@@ -31,7 +32,7 @@ class MicroPythonCodeGenerator(BaseCodeGenerator):
             n_ch = model_data.get('n_channels', 6)
             model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
 
-        super().__init__(model_data, platform, optimization, overlap)
+        super().__init__(model_data, platform, optimization, overlap, quantization)
 
         self.model_type_name = model_data.get('model_type', 'unknown')
 

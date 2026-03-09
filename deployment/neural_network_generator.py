@@ -1,6 +1,7 @@
 """
 Neural Network Code Generator
-Generates Arduino C++ code specifically for Neural Network models
+Generates Arduino C++ code specifically for Neural Network models.
+Supports optional INT8/INT16/FLOAT16 weight quantization.
 """
 
 import numpy as np
@@ -11,8 +12,10 @@ from .base_generator import BaseCodeGenerator
 class NeuralNetworkCodeGenerator(BaseCodeGenerator):
     """Code generator specifically for Neural Network models."""
 
-    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino', optimization: str = 'balanced', overlap: float = 0.5):
-        super().__init__(model_data, platform, optimization, overlap)
+    def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
+                 optimization: str = 'balanced', overlap: float = 0.5,
+                 quantization: str = 'none'):
+        super().__init__(model_data, platform, optimization, overlap, quantization)
         self.weights = model_data.get('weights', {})
         self.hidden_size = self.weights.get('hidden_size', 50)
 
@@ -159,7 +162,18 @@ void print_network_outputs(float features[]);
         return declarations
 
     def _generate_model_specific_implementation(self) -> str:
-        """Generate Neural Network implementation with real or placeholder weights."""
+        """Generate Neural Network implementation with real or placeholder weights.
+        
+        When quantization is enabled, emits int8/int16 weight arrays plus
+        per-layer scale factors instead of float arrays.
+        """
+        if self.quantization != 'none' and hasattr(self, 'input_weights') and self.input_weights:
+            return self._generate_quantized_implementation()
+
+        return self._generate_float_implementation()
+
+    def _generate_float_implementation(self) -> str:
+        """Generate standard float32 weight arrays (original path)."""
 
         # Generate input weights array
         if hasattr(self, 'input_weights') and self.input_weights:
@@ -259,6 +273,104 @@ float relu(float x) {
 }"""
         return implementation
 
+    def _generate_quantized_implementation(self) -> str:
+        """Generate weight arrays using INT8/INT16/FLOAT16 quantization."""
+        from .quantization import (
+            quantize_tensor, generate_dequant_helper,
+            generate_quantization_info_comment, QuantizationReport,
+            format_quantized_1d, format_quantized_2d, compute_quantization_error,
+            get_c_type,
+        )
+
+        mode = self.quantization
+        is_multilayer = hasattr(self, 'final_weights') and self.final_weights
+        report = QuantizationReport(mode=mode)
+        parts = []
+
+        # Quantize input weights (2D: INPUT_SIZE × HIDDEN_LAYER_SIZE)
+        iw = np.array(self.input_weights, dtype=np.float32)
+        qt_iw = quantize_tensor(iw, mode)
+        report.tensors['input_weights'] = qt_iw
+        parts.append(format_quantized_2d(
+            qt_iw, 'input_weights', iw.shape[0], iw.shape[1],
+            precision=self.feature_precision))
+
+        # Quantize hidden biases (1D) — biases stay float for accuracy
+        hb = np.array(self.hidden_biases, dtype=np.float32)
+        parts.append(self._format_1d_array(self.hidden_biases, 'hidden_biases',
+                                           self.feature_precision))
+
+        if is_multilayer:
+            # 3-layer: hidden2 weights + biases + final weights + biases
+            ow = np.array(self.output_weights, dtype=np.float32)
+            qt_ow = quantize_tensor(ow, mode)
+            report.tensors['hidden2_weights'] = qt_ow
+            parts.append(format_quantized_2d(
+                qt_ow, 'hidden2_weights', ow.shape[0], ow.shape[1],
+                precision=self.feature_precision))
+
+            parts.append(self._format_1d_array(
+                self.output_biases, 'hidden2_biases', self.feature_precision))
+
+            fw = np.array(self.final_weights, dtype=np.float32)
+            qt_fw = quantize_tensor(fw, mode)
+            report.tensors['final_weights'] = qt_fw
+            parts.append(format_quantized_2d(
+                qt_fw, 'final_weights', fw.shape[0], fw.shape[1],
+                precision=self.feature_precision))
+
+            parts.append(self._format_1d_array(
+                self.final_biases, 'final_biases', self.feature_precision))
+        else:
+            # 2-layer: output weights + biases
+            ow = np.array(self.output_weights, dtype=np.float32)
+            qt_ow = quantize_tensor(ow, mode)
+            report.tensors['output_weights'] = qt_ow
+            parts.append(format_quantized_2d(
+                qt_ow, 'output_weights', ow.shape[0], ow.shape[1],
+                precision=self.feature_precision))
+
+            parts.append(self._format_1d_array(
+                self.output_biases, 'output_biases', self.feature_precision))
+
+        # Compute report totals
+        for name, qt in report.tensors.items():
+            report.total_quantized_bytes += qt.memory_bytes
+            report.total_original_bytes += qt.original_bytes
+            # Get the matching original array
+            if name == 'input_weights':
+                orig = iw
+            elif name in ('output_weights', 'hidden2_weights'):
+                orig = ow
+            elif name == 'final_weights':
+                orig = fw
+            else:
+                continue
+            max_err, mean_err = compute_quantization_error(orig, qt)
+            report.max_quantization_error = max(report.max_quantization_error, max_err)
+            report.mean_quantization_error = max(report.mean_quantization_error, mean_err)
+
+        # Build final implementation
+        arch = '3-layer (Input→Hidden1→Hidden2→Output)' if is_multilayer else '2-layer (Input→Hidden→Output)'
+        header_comment = f"""// Neural Network Model Implementation — QUANTIZED ({mode.upper()})
+// Architecture: {arch}
+{generate_quantization_info_comment(report)}"""
+
+        dequant_helper = generate_dequant_helper(mode)
+
+        implementation = header_comment + '\n\n' + '\n\n'.join(parts)
+        implementation += '\n' + dequant_helper
+        implementation += """
+// Activation functions
+float sigmoid(float x) {
+    return 1.0 / (1.0 + exp(-x));
+}
+
+float relu(float x) {
+    return x > 0 ? x : 0;
+}"""
+        return implementation
+
     def _format_1d_array(self, array, name, precision=4):
         """Format 1D array for C++ code with proper precision."""
         if not array:
@@ -307,9 +419,15 @@ float relu(float x) {
 }};"""
 
     def _generate_prediction_function(self) -> str:
-        """Generate Neural Network prediction function."""
-        # Check if this is a 3-layer network
+        """Generate Neural Network prediction function.
+        
+        When quantization is enabled, uses dequantizing dot-product helpers
+        instead of direct float array access.
+        """
         is_multilayer = hasattr(self, 'final_weights')
+
+        if self.quantization != 'none' and self.quantization in ('int8', 'int16'):
+            return self._generate_quantized_prediction(is_multilayer)
 
         if is_multilayer:
             # 3-layer network: Input → Hidden1 → Hidden2 → Output
@@ -425,6 +543,101 @@ int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASS
 
     return predicted_class;
 }"""
+
+    def _generate_quantized_prediction(self, is_multilayer: bool) -> str:
+        """Generate prediction function using quantized dot-product helpers."""
+        from .quantization import get_c_type
+        c_type = get_c_type(self.quantization)
+        dot_fn = 'dot_product_q8' if self.quantization == 'int8' else 'dot_product_q16'
+
+        # Softmax tail is shared
+        softmax_tail = """
+    // Softmax: convert logits to probabilities
+    float max_logit = output_scores[0];
+    for (int i = 1; i < OUTPUT_SIZE; i++) {
+        if (output_scores[i] > max_logit) max_logit = output_scores[i];
+    }
+    float sum_exp = 0.0f;
+    for (int i = 0; i < OUTPUT_SIZE; i++) {
+        probs_out[i] = expf(output_scores[i] - max_logit);
+        sum_exp += probs_out[i];
+    }
+    for (int i = 0; i < OUTPUT_SIZE; i++) {
+        probs_out[i] /= sum_exp;
+    }
+
+    // Find class with highest probability
+    int predicted_class = 0;
+    float max_prob = probs_out[0];
+    for (int i = 1; i < OUTPUT_SIZE; i++) {
+        if (probs_out[i] > max_prob) {
+            max_prob = probs_out[i];
+            predicted_class = i;
+        }
+    }
+
+    return predicted_class;
+}"""
+
+        if is_multilayer:
+            return f"""// Internal NN prediction — QUANTIZED {self.quantization.upper()} (3-layer)
+// Weights are stored as {c_type}, dequantized on-the-fly during dot products
+int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {{
+    // Layer 1: Input → Hidden1 (quantized weights + float bias → ReLU)
+    float hidden1_outputs[HIDDEN_LAYER_SIZE];
+    for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {{
+        // Column h of input_weights: stride = HIDDEN_LAYER_SIZE, offset = h
+        float sum = hidden_biases[h];
+        for (int i = 0; i < INPUT_SIZE; i++) {{
+            sum += features[i] * (({c_type})input_weights[i * HIDDEN_LAYER_SIZE + h]) * input_weights_scale;
+        }}
+        hidden1_outputs[h] = relu(sum);
+    }}
+
+    // Layer 2: Hidden1 → Hidden2 (quantized weights + float bias → ReLU)
+    float hidden2_outputs[HIDDEN2_LAYER_SIZE];
+    for (int h = 0; h < HIDDEN2_LAYER_SIZE; h++) {{
+        float sum = hidden2_biases[h];
+        for (int i = 0; i < HIDDEN_LAYER_SIZE; i++) {{
+            sum += hidden1_outputs[i] * (({c_type})hidden2_weights[i * HIDDEN2_LAYER_SIZE + h]) * hidden2_weights_scale;
+        }}
+        hidden2_outputs[h] = relu(sum);
+    }}
+
+    // Layer 3: Hidden2 → Output (quantized weights + float bias → linear)
+    float output_scores[OUTPUT_SIZE];
+    for (int o = 0; o < OUTPUT_SIZE; o++) {{
+        float sum = final_biases[o];
+        for (int h = 0; h < HIDDEN2_LAYER_SIZE; h++) {{
+            sum += hidden2_outputs[h] * (({c_type})final_weights[h * OUTPUT_SIZE + o]) * final_weights_scale;
+        }}
+        output_scores[o] = sum;
+    }}
+{softmax_tail}"""
+        else:
+            return f"""// Internal NN prediction — QUANTIZED {self.quantization.upper()} (2-layer)
+// Weights are stored as {c_type}, dequantized on-the-fly during dot products
+int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {{
+    // Layer 1: Input → Hidden (quantized weights + float bias → ReLU)
+    float hidden_outputs[HIDDEN_LAYER_SIZE];
+    for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {{
+        float sum = hidden_biases[h];
+        for (int i = 0; i < INPUT_SIZE; i++) {{
+            sum += features[i] * (({c_type})input_weights[i * HIDDEN_LAYER_SIZE + h]) * input_weights_scale;
+        }}
+        hidden_outputs[h] = relu(sum);
+    }}
+
+    // Layer 2: Hidden → Output (quantized weights + float bias → linear)
+    float output_scores[OUTPUT_SIZE];
+    for (int o = 0; o < OUTPUT_SIZE; o++) {{
+        float sum = output_biases[o];
+        for (int h = 0; h < HIDDEN_LAYER_SIZE; h++) {{
+            sum += hidden_outputs[h] * (({c_type})output_weights[h * OUTPUT_SIZE + o]) * output_weights_scale;
+        }}
+        output_scores[o] = sum;
+    }}
+{softmax_tail}"""
 
     def _generate_utility_functions(self) -> str:
         """Generate Neural Network utility functions (platform-portable)."""

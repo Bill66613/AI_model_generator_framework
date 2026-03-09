@@ -143,6 +143,32 @@ layout = html.Div([
                         style={'margin-bottom': '15px'}
                     ),
 
+                    html.Label("Weight Quantization:", style={
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                    dcc.Dropdown(
+                        id='quantization-mode',
+                        options=[
+                            {'label': '🔢 None (Float32) — Full precision', 'value': 'none'},
+                            {'label': '⚡ INT8 — 75% smaller weights, minimal accuracy loss', 'value': 'int8'},
+                            {'label': '📊 INT16 — 50% smaller weights, higher precision', 'value': 'int16'},
+                            {'label': '🔀 Float16 — Reduced precision floats', 'value': 'float16'}
+                        ],
+                        value='none',
+                        placeholder="Select weight quantization",
+                        style={'margin-bottom': '5px'}
+                    ),
+                    html.Div([
+                        html.Div("💡 Quantization reduces model weight storage on the microcontroller",
+                                 style={'margin-bottom': '3px'}),
+                        html.Div("• INT8: Best for NN/CNN — 4× smaller weights, ~1-2% accuracy loss", style={
+                                 'margin-bottom': '3px'}),
+                        html.Div("• INT16: Good balance — 2× smaller, negligible accuracy loss", style={
+                                 'margin-bottom': '3px'}),
+                        html.Div("• Less effective for Random Forest / SVM (tree thresholds need precision)", style={
+                                 'font-size': '11px', 'color': '#999'})
+                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic',
+                              'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px', 'margin-bottom': '15px'}),
+
                     html.Label("Window Overlap (%):", style={
                         'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
                     dcc.Input(

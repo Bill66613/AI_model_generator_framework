@@ -26,7 +26,8 @@ class ZephyrCodeGenerator(BaseCodeGenerator):
     """
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'zephyr',
-                 optimization: str = 'balanced', overlap: float = 0.5):
+                 optimization: str = 'balanced', overlap: float = 0.5,
+                 quantization: str = 'none'):
         # CNN models don't use traditional features — provide placeholders
         model_type_name = model_data.get('model_type', '')
         if model_type_name == 'pytorch_cnn' and not model_data.get('feature_names'):
@@ -34,19 +35,19 @@ class ZephyrCodeGenerator(BaseCodeGenerator):
             n_ch = model_data.get('n_channels', 6)
             model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
 
-        super().__init__(model_data, platform, optimization, overlap)
+        super().__init__(model_data, platform, optimization, overlap, quantization)
         self.model_type_name = model_data.get('model_type', '')
 
         # Create inner model-specific generator
         if self.model_type_name == 'random_forest':
-            self._inner = RandomForestCodeGenerator(model_data, platform, optimization, overlap)
+            self._inner = RandomForestCodeGenerator(model_data, platform, optimization, overlap, quantization)
         elif self.model_type_name in ('neural_network', 'pytorch_mlp'):
-            self._inner = NeuralNetworkCodeGenerator(model_data, platform, optimization, overlap)
+            self._inner = NeuralNetworkCodeGenerator(model_data, platform, optimization, overlap, quantization)
         elif self.model_type_name == 'svm':
-            self._inner = SVMCodeGenerator(model_data, platform, optimization, overlap)
+            self._inner = SVMCodeGenerator(model_data, platform, optimization, overlap, quantization)
         elif self.model_type_name == 'pytorch_cnn':
             from .cnn_generator import CNNCodeGenerator
-            self._inner = CNNCodeGenerator(model_data, platform, optimization, overlap)
+            self._inner = CNNCodeGenerator(model_data, platform, optimization, overlap, quantization)
         else:
             self._inner = None
 
