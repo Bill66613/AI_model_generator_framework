@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(*)",
+      "Edit(*)",
+      "Bash(python *)",
+      "Bash(pytest *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git worktree*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git checkout*)",
+      "Bash(git stash*)",
+      "Bash(pdflatex*)",
+      "Bash(bibtex*)",
+      "Bash(pip install*)",
+      "Bash(pip list*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(rm -rf*)",
+      "Bash(del /s*)",
+      "Bash(Remove-Item -Recurse -Force /)"
+    ]
+  },
+  "env": {
+    "HAR_PROJECT_ROOT": ".",
+    "PERSISTENT_DATA": "./persistent_data"
+  }
+}

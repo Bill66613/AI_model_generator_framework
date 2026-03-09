@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Create|Write",
+        "hook": ".claude/hooks/pre-edit-parity-check.sh",
+        "description": "Warn when editing parity-critical files"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Create",
+        "hook": ".claude/hooks/post-edit-reminder.sh",
+        "description": "Remind about parity and MicroPython sync after edits"
+      }
+    ],
+    "PreCommit": [
+      {
+        "hook": ".claude/hooks/pre-commit-checks.sh",
+        "description": "Run tests and parity validation before commit"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hook": ".claude/hooks/session-start.sh",
+        "description": "Load session context and check worktree status"
+      }
+    ]
+  }
+}

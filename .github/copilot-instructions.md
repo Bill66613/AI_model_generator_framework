@@ -124,3 +124,41 @@ pdflatex main.tex && bibtex main && pdflatex main.tex && pdflatex main.tex
 - **Kurtosis/skewness formulas**: Must use population std (not sample std) for z-score normalization to match pandas. Already fixed in all generators — see `TECHNICAL_FINDINGS.md` §2.
 - **Backward-compat paths**: Config path helpers check old flat `persistent_data/` location before new subdirectory. Don't remove this fallback.
 - **Inline styles**: Nearly all CSS is inline Python dicts. Only `assets/sticky.css` exists for the sticky header. No external CSS framework besides dash-bootstrap-components.
+
+## Specialized Agents & Prompts
+
+This project has specialized Copilot agents and prompts in `.github/`:
+
+**Agents** (select in agent picker or auto-delegated):
+- `@thesis` — Vietnamese LaTeX thesis writing
+- `@codegen` — Code generator modifications (parity-critical)
+- `@frontend` — Dash layout/callback work
+- `@deploy` — Device deployment and serial testing
+- `@review` — Read-only code review with parity checks
+
+**Prompts** (type `/` in chat):
+- `/test` — Run tests
+- `/status` — Project health check
+- `/worktree-create` — Create parallel worktree
+- `/worktree-merge` — Merge branch back
+- `/handoff` — Save session context
+- `/resume` — Resume from previous session
+
+**File Instructions** (auto-loaded when editing matching files):
+- `deployment/**/*.py` → parity rules
+- `callbacks/**/*.py` → callback patterns
+- `utils/feature_extraction.py` → feature extraction parity
+- `academic-paper-vietnamese/**` → thesis conventions
+
+**Hooks** (`.github/hooks/`):
+- Pre-edit: warns on parity-critical file changes
+- Post-edit: reminds about testing and sync
+
+## Git Worktree Convention
+
+This project uses git worktrees for parallel agent sessions:
+- `main` — stable, tested code
+- Feature branches get their own worktree in `../GUI_app-{branch-name}/`
+- Each agent session works in its own worktree to avoid conflicts
+- Use `/worktree-create` and `/worktree-merge` prompts to manage
+- PowerShell helpers: `. .\.claude\scripts\worktree-helpers.ps1`

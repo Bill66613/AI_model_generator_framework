@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "python .github/hooks/parity_guard.py",
+        "windows": "python .github/hooks/parity_guard.py",
+        "timeout": 10
+      }
+    ],
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "python .github/hooks/post_edit_check.py",
+        "windows": "python .github/hooks/post_edit_check.py",
+        "timeout": 10
+      }
+    ]
+  }
+}

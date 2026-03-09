@@ -336,6 +336,10 @@ dist
 .vscode
 data/
 persistent_data/
+
+# Claude Code session notes (ephemeral, per-session)
+.claude/sessions/*.md
+!.claude/sessions/README.md
 persistent*/
 generated/
 tmp/
