@@ -128,6 +128,34 @@ layout = html.Div([
                         })
                     ]),
 
+                    html.Label("Deployment Approach:", style={
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                    dcc.Dropdown(
+                        id='deployment-approach',
+                        options=[
+                            {'label': '🔧 Direct C/C++ Code Generation — Standalone, no runtime dependency',
+                             'value': 'direct'},
+                            {'label': '🧠 TFLite Micro — TensorFlow Lite for Microcontrollers runtime',
+                             'value': 'tflite_micro'},
+                            {'label': '📦 ONNX Runtime — Open Neural Network Exchange runtime',
+                             'value': 'onnx_runtime'}
+                        ],
+                        value='direct',
+                        placeholder="Select deployment approach",
+                        style={'margin-bottom': '5px'}
+                    ),
+                    html.Div([
+                        html.Div("💡 Choose how the model is deployed on the target device:",
+                                 style={'margin-bottom': '3px'}),
+                        html.Div("• Direct: Framework generates all C/C++ code — no external runtime needed", style={
+                                 'margin-bottom': '3px'}),
+                        html.Div("• TFLite Micro: Converts to .tflite, uses TF Lite Micro interpreter (requires tensorflow)", style={
+                                 'margin-bottom': '3px'}),
+                        html.Div("• ONNX Runtime: Exports .onnx model, uses ONNX Runtime C++ API (requires onnx, skl2onnx)", style={
+                                 'font-size': '11px', 'color': '#999'})
+                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic',
+                              'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px', 'margin-bottom': '15px'}),
+
                     html.Label("Optimization Level:", style={
                         'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
                     dcc.Dropdown(

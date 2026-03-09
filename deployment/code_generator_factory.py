@@ -15,6 +15,11 @@ from .arm_cortex_generator import ARMCortexMCodeGenerator
 from .micropython_generator import MicroPythonCodeGenerator
 from .zephyr_generator import ZephyrCodeGenerator
 from .cnn_generator import CNNCodeGenerator
+from .tflite_generator import TFLiteMicroCodeGenerator
+from .onnx_generator import ONNXRuntimeCodeGenerator
+
+# Valid deployment approaches
+DEPLOYMENT_APPROACHES = ('direct', 'tflite_micro', 'onnx_runtime')
 
 
 def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
@@ -541,9 +546,10 @@ class CodeGeneratorFactory:
     @classmethod
     def create_generator(cls, model_type: str, model_data: Dict[str, Any],
                          platform: str = 'arduino', optimization: str = 'balanced',
-                         overlap: float = 0.5, quantization: str = 'none') -> BaseCodeGenerator:
+                         overlap: float = 0.5, quantization: str = 'none',
+                         deployment_approach: str = 'direct') -> BaseCodeGenerator:
         """
-        Create appropriate code generator based on model type and platform.
+        Create appropriate code generator based on model type, platform, and deployment approach.
 
         Args:
             model_type: Type of model ('random_forest', 'neural_network', 'svm')
@@ -552,12 +558,13 @@ class CodeGeneratorFactory:
             optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
             overlap: Window overlap fraction (0.0 to 0.99)
             quantization: Weight quantization mode ('none', 'int8', 'int16', 'float16')
+            deployment_approach: Deployment approach ('direct', 'tflite_micro', 'onnx_runtime')
 
         Returns:
             Appropriate code generator instance
 
         Raises:
-            ValueError: If model_type is not supported
+            ValueError: If model_type or deployment_approach is not supported
             ValidationError: If input parameters are invalid
             ModelDataError: If model_data is invalid
         """
@@ -565,6 +572,23 @@ class CodeGeneratorFactory:
             # Validate model_type first
             if not isinstance(model_type, str):
                 raise ValueError("model_type must be a string")
+
+            # Validate deployment approach
+            if deployment_approach not in DEPLOYMENT_APPROACHES:
+                raise ValueError(
+                    f"Unsupported deployment approach: '{deployment_approach}'. "
+                    f"Supported: {DEPLOYMENT_APPROACHES}")
+
+            # Route to alternative deployment approach generators
+            if deployment_approach == 'tflite_micro':
+                return TFLiteMicroCodeGenerator(
+                    model_data, platform, optimization, overlap, quantization)
+
+            if deployment_approach == 'onnx_runtime':
+                return ONNXRuntimeCodeGenerator(
+                    model_data, platform, optimization, overlap, quantization)
+
+            # --- Direct code generation (default) ---
 
             # For ARM Cortex-M platform, use specialized generator
             if platform == 'arm_cortex_m':
@@ -628,7 +652,8 @@ class CodeGeneratorFactory:
 
 def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
                              platform: str = 'arduino', optimization: str = 'balanced',
-                             overlap: float = 0.5, quantization: str = 'none') -> Dict[str, str]:
+                             overlap: float = 0.5, quantization: str = 'none',
+                             deployment_approach: str = 'direct') -> Dict[str, str]:
     """
     Convenience function to generate deployment code with organized naming.
 
@@ -639,6 +664,7 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
         overlap: Window overlap percentage (0.0 to 0.99)
         quantization: Weight quantization mode ('none', 'int8', 'int16', 'float16')
+        deployment_approach: Deployment approach ('direct', 'tflite_micro', 'onnx_runtime')
 
     Returns:
         Dictionary with descriptive filename as key and code content as value
@@ -655,9 +681,16 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
             model_data = extract_real_model_parameters(model_data)
 
         generator = CodeGeneratorFactory.create_generator(
-            model_type, model_data, platform, optimization, overlap, quantization)
+            model_type, model_data, platform, optimization, overlap, quantization,
+            deployment_approach)
 
         # Create organized filenames
+        # For alternative deployment approaches, generate files differently
+        if deployment_approach == 'tflite_micro':
+            return _generate_tflite_files(generator, model_type, platform, model_data, optimization)
+        elif deployment_approach == 'onnx_runtime':
+            return _generate_onnx_files(generator, model_type, platform, model_data, optimization)
+
         if platform == 'arm_cortex_m':
             cortex_filename = create_organized_filename(
                 model_type, platform, 'cortex_source', model_data, optimization)
@@ -700,6 +733,67 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
             f"Unexpected error generating code for {model_type}: {str(e)}") from e
 
 
+def _generate_tflite_files(generator, model_type: str, platform: str,
+                           model_data: Dict[str, Any],
+                           optimization: str) -> Dict[str, str]:
+    """Generate file set for TFLite Micro deployment."""
+    # Naming: har_tflite_model.h, har_tflite_model.cpp, har_tflite.ino
+    base_name = f"har_tflite_{model_type}"
+
+    header_filename = f"{base_name}.h"
+    source_filename = f"{base_name}.cpp"
+
+    if platform in ('arduino', 'seeed_xiao', 'esp32', 'teensy'):
+        sketch_filename = f"{base_name}.ino"
+    elif platform == 'generic_c':
+        sketch_filename = f"{base_name}_main.c"
+    else:
+        sketch_filename = f"{base_name}_main.cpp"
+
+    files = {
+        header_filename: generator.generate_header(),
+        source_filename: generator.generate_implementation(header_filename),
+        sketch_filename: generator.generate_example_sketch(header_filename),
+    }
+
+    # Also save the raw .tflite model file if available
+    if hasattr(generator, '_tflite_bytes') and generator._tflite_bytes:
+        files[f"{base_name}.tflite"] = generator._tflite_bytes
+
+    return files
+
+
+def _generate_onnx_files(generator, model_type: str, platform: str,
+                         model_data: Dict[str, Any],
+                         optimization: str) -> Dict[str, str]:
+    """Generate file set for ONNX Runtime deployment."""
+    base_name = f"har_onnx_{model_type}"
+
+    header_filename = f"{base_name}.h"
+    source_filename = f"{base_name}.cpp"
+
+    if platform in ('arduino', 'seeed_xiao', 'esp32', 'teensy'):
+        sketch_filename = f"{base_name}.ino"
+    elif platform in ('generic_c', 'esp_idf', 'zephyr'):
+        sketch_filename = f"{base_name}_main.c"
+    else:
+        sketch_filename = f"{base_name}_main.cpp"
+
+    files = {
+        header_filename: generator.generate_header(),
+        source_filename: generator.generate_implementation(header_filename),
+        sketch_filename: generator.generate_example_sketch(header_filename),
+    }
+
+    # Also save the raw .onnx model file if available
+    if hasattr(generator, 'get_onnx_bytes'):
+        onnx_bytes = generator.get_onnx_bytes()
+        if onnx_bytes:
+            files[f"{base_name}.onnx"] = onnx_bytes
+
+    return files
+
+
 # Legacy function for compatibility - returns tuple format
 def generate_deployment_code_files(model_type: str, model_data: Dict[str, Any],
                                    platform: str = 'arduino') -> tuple:
@@ -729,7 +823,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
                                       output_dir: str = 'generated_code',
                                       optimization: str = 'balanced',
                                       overlap: float = 0.5,
-                                      quantization: str = 'none') -> Dict[str, str]:
+                                      quantization: str = 'none',
+                                      deployment_approach: str = 'direct') -> Dict[str, str]:
     """
     Generate deployment code and save to organized folder structure.
 
@@ -741,6 +836,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
         optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
         overlap: Window overlap percentage (0.0 to 0.99)
         quantization: Weight quantization mode ('none', 'int8', 'int16', 'float16')
+        deployment_approach: Deployment approach ('direct', 'tflite_micro', 'onnx_runtime')
 
     Returns:
         Dictionary with full file paths as keys and success messages as values
@@ -757,7 +853,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
 
     # Generate code with organized naming and optimization
     generated_code = generate_deployment_code(
-        model_type, model_data, platform, optimization, overlap, quantization)
+        model_type, model_data, platform, optimization, overlap, quantization,
+        deployment_approach)
 
     # Save files and return file paths
     saved_files = {}
@@ -765,12 +862,21 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
     for filename, content in generated_code.items():
         full_path = os.path.join(folder_path, filename)
 
-        try:
-            with open(full_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            saved_files[full_path] = f"✅ Successfully saved {len(content)} characters"
-        except Exception as e:
-            saved_files[full_path] = f"❌ Error saving file: {str(e)}"
+        # Handle binary content (e.g., .onnx, .tflite files)
+        if isinstance(content, bytes):
+            try:
+                with open(full_path, 'wb') as f:
+                    f.write(content)
+                saved_files[full_path] = f"✅ Successfully saved {len(content)} bytes (binary)"
+            except Exception as e:
+                saved_files[full_path] = f"❌ Error saving file: {str(e)}"
+        else:
+            try:
+                with open(full_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                saved_files[full_path] = f"✅ Successfully saved {len(content)} characters"
+            except Exception as e:
+                saved_files[full_path] = f"❌ Error saving file: {str(e)}"
 
     return saved_files
 

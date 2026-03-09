@@ -11,12 +11,15 @@ from .cnn_generator import CNNCodeGenerator
 from .arm_cortex_generator import ARMCortexMCodeGenerator
 from .micropython_generator import MicroPythonCodeGenerator
 from .zephyr_generator import ZephyrCodeGenerator
+from .tflite_generator import TFLiteMicroCodeGenerator
+from .onnx_generator import ONNXRuntimeCodeGenerator
 from .code_generator_factory import (
     CodeGeneratorFactory, 
     generate_deployment_code, 
     analyze_resource_requirements,
     generate_and_save_deployment_code,
-    get_deployment_info
+    get_deployment_info,
+    DEPLOYMENT_APPROACHES,
 )
 from .validation import DeploymentValidator, validate_before_deployment
 from .quantization import (
@@ -34,11 +37,14 @@ __all__ = [
     'ARMCortexMCodeGenerator',
     'MicroPythonCodeGenerator',
     'ZephyrCodeGenerator',
+    'TFLiteMicroCodeGenerator',
+    'ONNXRuntimeCodeGenerator',
     'CodeGeneratorFactory',
     'generate_deployment_code',
     'analyze_resource_requirements',
     'generate_and_save_deployment_code',
     'get_deployment_info',
+    'DEPLOYMENT_APPROACHES',
     'DeploymentValidator',
     'validate_before_deployment',
     'quantize_tensor',

@@ -695,21 +695,26 @@ def register_callbacks(app):
         [State('deployment-model-selector', 'value'),
          State('output-framework-selector', 'value'),
          State('target-board-selector', 'value'),
+         State('deployment-approach', 'value'),
          State('optimization-level', 'value'),
          State('quantization-mode', 'value'),
          State('deployment-stride', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
-    def generate_embedded_code(n_clicks, model_filename, framework, target_board, optimization, quantization, stride, base_dir):
+    def generate_embedded_code(n_clicks, model_filename, framework, target_board,
+                               deployment_approach, optimization, quantization, stride, base_dir):
         """
         Generate embedded C/C++ code from the trained model using actual metadata.
         Model type is automatically detected from the selected model.
         Parameters are loaded from model metadata to ensure consistency.
         Uses the working directory from the store.
+        Supports multiple deployment approaches: direct, tflite_micro, onnx_runtime.
         """
         if not quantization:
             quantization = 'none'
+        if not deployment_approach:
+            deployment_approach = 'direct'
         if not model_filename:
             return no_update, html.Div("⚠️ Please select a model first",
                                        style={'color': '#ff9800', 'padding': '10px'}), {'display': 'none'}, {}, True, True, no_update, no_update
@@ -810,10 +815,15 @@ def register_callbacks(app):
 
             # Generate code using proper code generators
             generated_code_files = generate_deployment_code(
-                model_type, model_data, platform, optimization, overlap_fraction, quantization
+                model_type, model_data, platform, optimization, overlap_fraction, quantization,
+                deployment_approach
             )
 
-            # Run pre-deployment validation
+            # Filter out binary files (e.g., .onnx, .tflite) for text-based processing
+            text_code_files = {k: v for k, v in generated_code_files.items()
+                               if isinstance(v, str)}
+
+            # Run pre-deployment validation (text files only)
             # Map platform to device key for resource estimation
             device_key_mapping = {
                 'arduino': 'arduino_uno',
@@ -828,22 +838,23 @@ def register_callbacks(app):
             validation_model_data['optimization'] = optimization
             
             validation_report = validate_before_deployment(
-                validation_model_data, generated_code_files, device_key
+                validation_model_data, text_code_files, device_key
             )
 
             # Also save to working directory in organized structure
             output_dir = os.path.join(base_dir, 'generated')
             saved_files = generate_and_save_deployment_code(
-                model_type, model_data, platform, output_dir, optimization, overlap_fraction, quantization
+                model_type, model_data, platform, output_dir, optimization, overlap_fraction, quantization,
+                deployment_approach
             )
 
             # Get the first generated file for preview (typically the sketch/example)
-            # Priority: sketch > source > header
+            # Priority: sketch > source > header (text files only)
             sketch_file = None
             source_file = None
             header_file = None
 
-            for filename, code in generated_code_files.items():
+            for filename, code in text_code_files.items():
                 if '.ino' in filename or 'example' in filename.lower():
                     sketch_file = (filename, code)
                 elif '.cpp' in filename or '.c' in filename:
@@ -853,7 +864,7 @@ def register_callbacks(app):
 
             # Show sketch first, then source, then header
             preview_file = sketch_file or source_file or header_file or list(
-                generated_code_files.items())[0]
+                text_code_files.items())[0]
             preview_code = preview_file[1]
             preview_filename = preview_file[0]
 
@@ -883,11 +894,22 @@ def register_callbacks(app):
                 'border-radius': '4px', 'font-size': '13px'
             })
 
+            approach_label = {
+                'direct': 'Direct C/C++',
+                'tflite_micro': 'TFLite Micro',
+                'onnx_runtime': 'ONNX Runtime'
+            }.get(deployment_approach, deployment_approach)
+
+            # Count binary files saved
+            binary_files = {k: v for k, v in generated_code_files.items()
+                           if isinstance(v, bytes)}
+
             status = html.Div([
                 html.H5("✅ Code Generated Successfully!",
                         style={'color': '#28a745'}),
                 html.P(
-                    f"Model Type: {model_type.upper()} | Platform: {platform} | Optimization: {optimization.upper()}"),
+                    f"Model Type: {model_type.upper()} | Platform: {platform} | "
+                    f"Approach: {approach_label} | Optimization: {optimization.upper()}"),
                 validation_div,
                 html.Div([
                     html.Strong("📁 Generated Files: "),
