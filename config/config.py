@@ -1,8 +1,14 @@
 import os
+import sys
 import json
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve(strict=True).parent.parent
+# Support both normal Python execution and PyInstaller frozen bundle
+if getattr(sys, 'frozen', False):
+    # Running as PyInstaller bundle — use the directory containing the .exe
+    ROOT_DIR = Path(sys.executable).resolve().parent
+else:
+    ROOT_DIR = Path(__file__).resolve(strict=True).parent.parent
 CONF_PATH = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------------------------------------------------------

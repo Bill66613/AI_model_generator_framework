@@ -172,4 +172,15 @@ def update_workflow_progress(_n, base_dir):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    import sys
+    import webbrowser
+    import threading
+
+    is_frozen = getattr(sys, 'frozen', False)
+    port = 8050
+
+    if is_frozen:
+        # When running as packaged .exe, open browser automatically
+        threading.Timer(1.5, lambda: webbrowser.open(f'http://127.0.0.1:{port}')).start()
+
+    app.run(debug=not is_frozen, port=port)

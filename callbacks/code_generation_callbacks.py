@@ -649,7 +649,7 @@ def register_callbacks(app):
     @app.callback(
         [Output('serial-port-selector-deploy', 'options'),
          Output('port-info-display', 'children')],
-        [Input('refresh-ports-btn', 'n_clicks'),
+        [Input('refresh-ports-btn-deploy', 'n_clicks'),
          Input('tabs', 'value')]
     )
     def refresh_serial_ports(n_clicks, tab):
@@ -972,14 +972,14 @@ def register_callbacks(app):
                 platformio_ini = generate_platformio_config(
                     target_board, model_filename, board_name)
 
-            # Store all generated files
+            # Store only text files (binary files like .tflite/.onnx are already saved to disk)
             code_data = {
                 'code': preview_code,  # Main code for compilation
                 'filename': preview_filename,
                 'board': target_board,
                 'framework': framework,
                 'platformio_ini': platformio_ini,
-                'all_files': generated_code_files  # Store all generated files
+                'all_files': text_code_files
             }
 
             return preview_code, status, {'display': 'block'}, code_data, False, False, compile_btn_style, flash_btn_style

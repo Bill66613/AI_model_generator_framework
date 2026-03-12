@@ -392,7 +392,7 @@ layout = html.Div([
                         ),
                         html.Button(
                             "🔄 Refresh",
-                            id='refresh-ports-btn',
+                            id='refresh-ports-btn-deploy',
                             n_clicks=0,
                             style={
                                 'background-color': '#6c757d',

@@ -641,6 +641,22 @@ int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASS
 
     def _generate_utility_functions(self) -> str:
         """Generate Neural Network utility functions (platform-portable)."""
+        if self.quantization and self.quantization != 'none':
+            c_type = {'int8': 'int8_t', 'int16': 'int16_t', 'float16': 'float'}.get(self.quantization, 'float')
+            return f"""void print_network_outputs(float features[]) {{
+    HAR_LOG("Neural Network Layer Outputs:");
+
+    // Show first few hidden layer outputs
+    float hidden_outputs[HIDDEN_LAYER_SIZE];
+    for (int h = 0; h < 5 && h < HIDDEN_LAYER_SIZE; h++) {{
+        float sum = hidden_biases[h];
+        for (int i = 0; i < INPUT_SIZE; i++) {{
+            sum += features[i] * (({c_type})input_weights[i * HIDDEN_LAYER_SIZE + h]) * input_weights_scale;
+        }}
+        hidden_outputs[h] = relu(sum);
+        HAR_LOG_FLOAT("Hidden", hidden_outputs[h]);
+    }}
+}}"""
         return """void print_network_outputs(float features[]) {
     HAR_LOG("Neural Network Layer Outputs:");
 

@@ -30,13 +30,13 @@ pyserial>=3.5
 
 # Optional: ONNX Runtime deployment approach
 # Uncomment to enable ONNX model export & ONNX Runtime code generation
-# onnx>=1.14.0
-# skl2onnx>=1.15.0
-# onnxruntime>=1.16.0
+onnx>=1.14.0
+skl2onnx>=1.15.0
+onnxruntime>=1.16.0
 
 # Optional: TFLite Micro deployment approach
 # Uncomment to enable TFLite model conversion & TFLite Micro code generation
-# tensorflow>=2.13.0
+tensorflow>=2.13.0
 
 # Development & Testing
 pytest>=7.4.0

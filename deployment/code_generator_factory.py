@@ -429,7 +429,8 @@ def extract_svm_parameters(svm_model) -> Dict[str, Any]:
 
 
 def create_organized_filename(model_type: str, platform: str, file_type: str,
-                              model_data: Dict[str, Any] = None, optimization: str = 'balanced') -> str:
+                              model_data: Dict[str, Any] = None, optimization: str = 'balanced',
+                              quantization: str = 'none') -> str:
     """
     Create organized filename with descriptive naming including optimization level.
 
@@ -439,6 +440,7 @@ def create_organized_filename(model_type: str, platform: str, file_type: str,
         file_type: Type of file (header, source, sketch)
         model_data: Optional model data for additional info
         optimization: Optimization level (accuracy, speed, power, balanced)
+        quantization: Weight quantization mode ('none', 'int8', 'int16', 'float16')
 
     Returns:
         Descriptive filename with optimization level
@@ -461,6 +463,10 @@ def create_organized_filename(model_type: str, platform: str, file_type: str,
 
     # Add optimization level
     base_name += f"_{optimization}"
+
+    # Add quantization if not default
+    if quantization and quantization != 'none':
+        base_name += f"_{quantization}"
 
     # Add file extension based on type and platform
     if file_type == 'header':
@@ -488,10 +494,13 @@ def create_organized_filename(model_type: str, platform: str, file_type: str,
 
 def create_output_folder_structure(base_output_dir: str, model_type: str,
                                    platform: str, model_data: Dict[str, Any] = None,
-                                   optimization: str = 'balanced') -> str:
+                                   optimization: str = 'balanced',
+                                   deployment_approach: str = 'direct',
+                                   quantization: str = 'none') -> str:
     """
     Create organized folder structure for generated code.
     For Arduino-based platforms, creates folder matching the .ino filename.
+    Each deployment approach gets its own subfolder to avoid .ino conflicts.
 
     Args:
         base_output_dir: Base directory for all generated code
@@ -499,26 +508,33 @@ def create_output_folder_structure(base_output_dir: str, model_type: str,
         platform: Target platform
         model_data: Model data containing features and classes info
         optimization: Optimization strategy
+        deployment_approach: 'direct', 'tflite_micro', or 'onnx_runtime'
 
     Returns:
         Full path to the specific model/platform folder
     """
+    # Map deployment approach to folder prefix
+    approach_prefix = {
+        'direct': '',
+        'tflite_micro': 'tflite_',
+        'onnx_runtime': 'onnx_',
+    }.get(deployment_approach, '')
+
     # For Arduino-based platforms, folder must match .ino filename
     if platform in ['arduino', 'seeed_xiao', 'esp32', 'teensy']:
-        # Create the same base name as the .ino file (without _example.ino)
         num_features = len(model_data.get(
             'feature_names', [])) if model_data else 0
         num_classes = len(model_data.get('classes', [])) if model_data else 0
 
-        folder_name = f"har_{model_type}_{platform}_f{num_features}_c{num_classes}_{optimization}"
+        folder_name = f"har_{approach_prefix}{model_type}_{platform}_f{num_features}_c{num_classes}_{optimization}"
+        if quantization and quantization != 'none':
+            folder_name += f"_{quantization}"
         folder_path = os.path.join(
             base_output_dir, f"{model_type}_models", folder_name)
     elif platform in ('generic_c', 'generic_cpp', 'esp_idf', 'micropython', 'zephyr'):
-        # For generic / non-Arduino platforms, use platform-named folder
         folder_path = os.path.join(
             base_output_dir, f"{model_type}_models", platform)
     else:
-        # For non-Arduino platforms, use generic platform folder
         folder_path = os.path.join(
             base_output_dir, f"{model_type}_models", platform)
 
@@ -687,13 +703,13 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         # Create organized filenames
         # For alternative deployment approaches, generate files differently
         if deployment_approach == 'tflite_micro':
-            return _generate_tflite_files(generator, model_type, platform, model_data, optimization)
+            return _generate_tflite_files(generator, model_type, platform, model_data, optimization, quantization)
         elif deployment_approach == 'onnx_runtime':
-            return _generate_onnx_files(generator, model_type, platform, model_data, optimization)
+            return _generate_onnx_files(generator, model_type, platform, model_data, optimization, quantization)
 
         if platform == 'arm_cortex_m':
             cortex_filename = create_organized_filename(
-                model_type, platform, 'cortex_source', model_data, optimization)
+                model_type, platform, 'cortex_source', model_data, optimization, quantization)
             return {
                 cortex_filename: generator.generate_implementation(
                     cortex_filename)
@@ -701,9 +717,9 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         elif platform == 'micropython':
             # MicroPython: module (.py) + example (.py)
             source_filename = create_organized_filename(
-                model_type, platform, 'source', model_data, optimization)
+                model_type, platform, 'source', model_data, optimization, quantization)
             sketch_filename = create_organized_filename(
-                model_type, platform, 'sketch', model_data, optimization)
+                model_type, platform, 'sketch', model_data, optimization, quantization)
             return {
                 source_filename: generator.generate_implementation(source_filename),
                 sketch_filename: generator.generate_example_sketch(source_filename),
@@ -711,11 +727,11 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         else:
             # All other platforms: header + source + example (extensions vary by platform)
             header_filename = create_organized_filename(
-                model_type, platform, 'header', model_data, optimization)
+                model_type, platform, 'header', model_data, optimization, quantization)
             source_filename = create_organized_filename(
-                model_type, platform, 'source', model_data, optimization)
+                model_type, platform, 'source', model_data, optimization, quantization)
             sketch_filename = create_organized_filename(
-                model_type, platform, 'sketch', model_data, optimization)
+                model_type, platform, 'sketch', model_data, optimization, quantization)
 
             return {
                 header_filename: generator.generate_header(),
@@ -735,10 +751,21 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
 
 def _generate_tflite_files(generator, model_type: str, platform: str,
                            model_data: Dict[str, Any],
-                           optimization: str) -> Dict[str, str]:
+                           optimization: str,
+                           quantization: str = 'none') -> Dict[str, str]:
     """Generate file set for TFLite Micro deployment."""
-    # Naming: har_tflite_model.h, har_tflite_model.cpp, har_tflite.ino
-    base_name = f"har_tflite_{model_type}"
+    # Build descriptive base name matching direct approach convention
+    num_features = len(model_data.get('feature_names', [])) if model_data else 0
+    num_classes = len(model_data.get('classes', [])) if model_data else 0
+
+    base_name = f"har_tflite_{model_type}_{platform}"
+    if num_features > 0:
+        base_name += f"_f{num_features}"
+    if num_classes > 0:
+        base_name += f"_c{num_classes}"
+    base_name += f"_{optimization}"
+    if quantization and quantization != 'none':
+        base_name += f"_{quantization}"
 
     header_filename = f"{base_name}.h"
     source_filename = f"{base_name}.cpp"
@@ -765,9 +792,21 @@ def _generate_tflite_files(generator, model_type: str, platform: str,
 
 def _generate_onnx_files(generator, model_type: str, platform: str,
                          model_data: Dict[str, Any],
-                         optimization: str) -> Dict[str, str]:
+                         optimization: str,
+                         quantization: str = 'none') -> Dict[str, str]:
     """Generate file set for ONNX Runtime deployment."""
-    base_name = f"har_onnx_{model_type}"
+    # Build descriptive base name matching direct approach convention
+    num_features = len(model_data.get('feature_names', [])) if model_data else 0
+    num_classes = len(model_data.get('classes', [])) if model_data else 0
+
+    base_name = f"har_onnx_{model_type}_{platform}"
+    if num_features > 0:
+        base_name += f"_f{num_features}"
+    if num_classes > 0:
+        base_name += f"_c{num_classes}"
+    base_name += f"_{optimization}"
+    if quantization and quantization != 'none':
+        base_name += f"_{quantization}"
 
     header_filename = f"{base_name}.h"
     source_filename = f"{base_name}.cpp"
@@ -849,7 +888,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
 
     # Create organized folder structure
     folder_path = create_output_folder_structure(
-        output_dir, model_type, platform, model_data, optimization)
+        output_dir, model_type, platform, model_data, optimization,
+        deployment_approach, quantization)
 
     # Generate code with organized naming and optimization
     generated_code = generate_deployment_code(
