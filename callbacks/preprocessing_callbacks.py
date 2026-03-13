@@ -1543,6 +1543,12 @@ def register_callbacks(app):
             sample_files = []
             all_selected_data = []
 
+            # Use working directory for window storage
+            if not base_dir:
+                base_dir = PERSISTENT_DIR
+            windows_dir = os.path.join(base_dir, 'windows')
+            os.makedirs(windows_dir, exist_ok=True)
+
             # Save each generated window
             for idx, window_info in enumerate(good_windows):
                 window_df = pd.DataFrame(window_info['data'])
@@ -1552,7 +1558,8 @@ def register_callbacks(app):
 
                 # Generate unique filename
                 window_id = f"sliding_{idx}"
-                sample_file_path = get_window_path(window_id, dataset_name)
+                sample_file_path = os.path.join(
+                    windows_dir, f"dragged_window_{window_id}_{dataset_name}")
 
                 # Save window data
                 window_df[sensor_cols].to_csv(
@@ -1562,8 +1569,6 @@ def register_callbacks(app):
                 all_selected_data.append(window_df)
 
             # Update metadata
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
