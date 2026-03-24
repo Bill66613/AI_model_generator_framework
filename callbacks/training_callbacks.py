@@ -61,6 +61,23 @@ def _get_fe_train_files(training_dir):
     return glob.glob(os.path.join(training_dir, '*_train.csv'))
 
 
+def clean_label(x):
+    """Clean dataset-derived label: strip .csv extension and trailing _N suffix.
+
+    Examples:
+        'laying_1.csv' -> 'laying'
+        'walking_downstairs_2.csv' -> 'walking_downstairs'
+        'sitting' -> 'sitting'
+    """
+    if pd.notna(x):
+        label = str(x).replace('.csv', '')
+        parts = label.rsplit('_', 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            return parts[0]
+        return label
+    return x
+
+
 def register_callbacks(app):
     """Register all callbacks with the app."""
     @app.callback(
@@ -213,15 +230,6 @@ def register_callbacks(app):
                 )
 
             # Clean labels
-            def clean_label(x):
-                if pd.notna(x):
-                    label = str(x).replace('.csv', '')
-                    parts = label.rsplit('_', 1)
-                    if len(parts) == 2 and parts[1].isdigit():
-                        return parts[0]
-                    return label
-                return x
-
             train_df['label'] = train_df['label'].apply(clean_label)
             test_df['label'] = test_df['label'].apply(clean_label)
             if val_df is not None:
@@ -803,16 +811,6 @@ def register_callbacks(app):
 
                     # Clean labels: remove .csv extension and trailing numeric suffix only
                     # "laying_1.csv" -> "laying", "walking_downstairs_2.csv" -> "walking_downstairs"
-                    def clean_label(x):
-                        if pd.notna(x):
-                            label = str(x).replace('.csv', '')
-                            # Only remove suffix if it's a number (like _1, _2, _3)
-                            parts = label.rsplit('_', 1)
-                            if len(parts) == 2 and parts[1].isdigit():
-                                return parts[0]
-                            return label
-                        return x
-
                     train_df['label'] = train_df['label'].apply(clean_label)
                     test_df['label'] = test_df['label'].apply(clean_label)
 

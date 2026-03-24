@@ -345,9 +345,9 @@ def create_feature_vector(
         DataFrame with extracted features
 
     Feature Counts:
-        - Magnitude only (robust): ~33 features (no FFT) or ~49 features (with FFT)
-        - Per-axis only: ~90 features (no FFT) or ~138 features (with FFT)
-        - Both: ~123 features (no FFT) or ~187 features (with FFT)
+        - Magnitude only (robust): 33 features (no FFT) or 47 features (with FFT)
+        - Per-axis only: 90 features (no FFT) or 138 features (with FFT)
+        - Both: ~123 features (no FFT) or ~185 features (with FFT)
     """
     if sensor_cols is None:
         sensor_cols = list(SENSOR_COLUMNS)

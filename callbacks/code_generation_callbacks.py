@@ -1091,18 +1091,25 @@ def register_callbacks(app):
             error_output = f"❌ Error during compilation:\n\n{str(e)}\n\n{traceback.format_exc()}"
             return error_output, {'display': 'block'}, ""
 
-    @app.callback(
+    app.clientside_callback(
+        """
+        function(n_clicks, code) {
+            if (n_clicks > 0 && code) {
+                navigator.clipboard.writeText(code).then(function() {
+                    // brief visual feedback via button text is not easy with
+                    // clientside callbacks, so we just rely on the browser API
+                }, function(err) {
+                    console.error('Clipboard write failed:', err);
+                });
+            }
+            return code;
+        }
+        """,
         Output('code-preview', 'value', allow_duplicate=True),
         Input('copy-code-btn', 'n_clicks'),
         State('code-preview', 'value'),
         prevent_initial_call=True
     )
-    def copy_to_clipboard(n_clicks, code):
-        """
-        Copy code to clipboard (handled by browser).
-        """
-        # Note: Actual clipboard copying requires clientside callback or JS
-        return code
 
     @app.callback(
         Output('resource-analysis-output', 'children'),

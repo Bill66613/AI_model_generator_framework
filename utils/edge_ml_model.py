@@ -9,6 +9,7 @@ PyTorch models (MLP, 1D-CNN).
 
 import numpy as np
 import pandas as pd
+import copy
 from typing import Tuple, Dict, Any, Optional, List
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
@@ -176,7 +177,7 @@ class EdgeMLModel:
             val_accuracies = []
             train_accuracies = []
             best_val_accuracy = 0
-            best_model_params = None
+            best_model_state = None
             patience_counter = 0
             patience = 10
 
@@ -197,7 +198,7 @@ class EdgeMLModel:
 
                 if val_acc > best_val_accuracy:
                     best_val_accuracy = val_acc
-                    best_model_params = self.model.get_params()
+                    best_model_state = copy.deepcopy(self.model)
                     patience_counter = 0
                     logger.info(
                         f"Epoch {epoch+1}: Val Acc={val_acc:.4f} (improved) - Train Acc={train_acc:.4f}")
@@ -207,6 +208,11 @@ class EdgeMLModel:
                         logger.info(
                             f"Early stopping at epoch {epoch+1}: No improvement for {patience} epochs")
                         break
+
+            # Restore best model weights (not just hyperparams)
+            if best_model_state is not None:
+                self.model = best_model_state
+                logger.info(f"Restored best model from epoch with val_acc={best_val_accuracy:.4f}")
 
             self.performance_metrics['val_accuracies'] = val_accuracies
             self.performance_metrics['train_accuracies'] = train_accuracies
