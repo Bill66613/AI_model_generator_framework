@@ -6,6 +6,7 @@ Handles model training, evaluation, and deployment workflows
 import os
 import json
 import glob
+import logging
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -23,6 +24,8 @@ import traceback
 from datetime import datetime, timedelta
 import zipfile
 import tempfile
+
+logger = logging.getLogger(__name__)
 
 from config.config import (
     PERSISTENT_DIR, METADATA_FILE, MODELS_DIR,
@@ -763,7 +766,7 @@ def register_callbacks(app):
             feature_opts['include_per_axis'] = has_per_axis
             feature_opts['include_frequency'] = has_frequency
 
-            print(f"DEBUG: Auto-detected feature_opts: {feature_opts}")
+            logger.debug(f"DEBUG: Auto-detected feature_opts: {feature_opts}")
 
             # Load FE metadata (window_size_ms, sampling_rate, etc.) if available
             fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
@@ -771,7 +774,7 @@ def register_callbacks(app):
                 try:
                     with open(fe_meta_files[0], 'r') as f:
                         fe_config = json.load(f)
-                    print(f"DEBUG: Loaded FE metadata: window={fe_config.get('window_size_ms')}ms, "
+                    logger.debug(f"Loaded FE metadata: window={fe_config.get('window_size_ms')}ms, "
                           f"rate={fe_config.get('sampling_rate')}Hz, "
                           f"method={fe_config.get('feature_method')}")
                     # Also override feature_opts from FE metadata if present
@@ -851,8 +854,8 @@ def register_callbacks(app):
             test_df = pd.concat(all_test_dfs, ignore_index=True)
 
             # Debug: Check what's in the data
-            print(f"DEBUG: Combined {len(all_train_dfs)} training files")
-            print(f"DEBUG: Train shape: {train_df.shape}")
+            logger.debug(f"DEBUG: Combined {len(all_train_dfs)} training files")
+            logger.debug(f"DEBUG: Train shape: {train_df.shape}")
             print(
                 f"DEBUG: Unique labels in train: {train_df['label'].unique()}")
             print(
@@ -894,8 +897,8 @@ def register_callbacks(app):
             X_test = test_df.drop('label', axis=1)
             y_test = test_df['label'].values
 
-            print(f"DEBUG: y_train unique: {np.unique(y_train)}")
-            print(f"DEBUG: y_test unique: {np.unique(y_test)}")
+            logger.debug(f"DEBUG: y_train unique: {np.unique(y_train)}")
+            logger.debug(f"DEBUG: y_test unique: {np.unique(y_test)}")
             print(
                 f"DEBUG: X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
 
@@ -919,7 +922,7 @@ def register_callbacks(app):
 
                 X_val = val_df.drop('label', axis=1)
                 y_val = val_df['label'].values
-                print(f"DEBUG: y_val unique: {np.unique(y_val)}")
+                logger.debug(f"DEBUG: y_val unique: {np.unique(y_val)}")
 
             # Create model
             model = EdgeMLModel(model_type)
@@ -1674,8 +1677,8 @@ def register_callbacks(app):
                         models_metadata = json.load(f)
                         model_info = models_metadata.get(model_filename, {})
 
-                print(f"DEBUG: Creating evaluation for {model_filename}")
-                print(f"DEBUG: model_info keys: {list(model_info.keys())}")
+                logger.debug(f"DEBUG: Creating evaluation for {model_filename}")
+                logger.debug(f"DEBUG: model_info keys: {list(model_info.keys())}")
                 print(
                     f"DEBUG: Has performance_metrics: {'performance_metrics' in model_info}")
 
@@ -1686,7 +1689,7 @@ def register_callbacks(app):
 
                 print(
                     f"DEBUG: detailed_results type: {type(detailed_results)}")
-                print(f"DEBUG: Returning graph and detailed results")
+                logger.debug(f"DEBUG: Returning graph and detailed results")
 
                 return graph, detailed_results
 
@@ -1874,12 +1877,12 @@ def register_callbacks(app):
 
         print(
             f"DEBUG: create_detailed_evaluation_display called for {model_filename}")
-        print(f"DEBUG: model_info is None: {model_info is None}")
+        logger.debug(f"DEBUG: model_info is None: {model_info is None}")
         print(
             f"DEBUG: model_info keys: {list(model_info.keys()) if model_info else 'None'}")
 
         if not model_info or 'performance_metrics' not in model_info:
-            print("DEBUG: No performance_metrics found, returning info message")
+            logger.debug("DEBUG: No performance_metrics found, returning info message")
             return html.Div([
                 html.H4("ℹ️ No detailed evaluation data available", style={
                     'color': '#6c757d', 'text-align': 'center', 'padding': '20px'
@@ -2179,7 +2182,7 @@ def register_callbacks(app):
             model_path = get_model_path(model_filename, base_dir)
             if os.path.exists(model_path):
                 os.remove(model_path)
-                print(f"DEBUG: Removed model file: {model_path}")
+                logger.debug(f"DEBUG: Removed model file: {model_path}")
 
             # Update metadata
             model_metadata_file = get_models_metadata_path(base_dir)
@@ -2216,9 +2219,9 @@ def register_callbacks(app):
                 if os.path.exists(full_path):
                     import shutil
                     shutil.rmtree(full_path)
-                    print(f"DEBUG: Removed generated code folder: {full_path}")
+                    logger.debug(f"DEBUG: Removed generated code folder: {full_path}")
             except Exception as e:
-                print(f"DEBUG: Error removing generated code: {e}")
+                logger.debug(f"DEBUG: Error removing generated code: {e}")
 
             # Update dropdown options
             updated_options = []
@@ -2324,14 +2327,14 @@ def register_callbacks(app):
             f"DEBUG: Model: {model_filename}, Platform: {platform}, Optimization: {optimization}")
 
         if not ctx.triggered:
-            print("DEBUG: No context triggered")
+            logger.debug("DEBUG: No context triggered")
             return no_update
 
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        print(f"DEBUG: Button clicked: {button_id}")
+        logger.debug(f"DEBUG: Button clicked: {button_id}")
 
         if not model_filename:
-            print("DEBUG: No model selected")
+            logger.debug("DEBUG: No model selected")
             error_msg = html.Div([
                 html.H4("⚠ Please select a trained model first.",
                         style={'color': 'orange'})
@@ -2348,7 +2351,7 @@ def register_callbacks(app):
             # Load model and metadata
             model_path = get_model_path(model_filename, base_dir)
             if not os.path.exists(model_path):
-                print(f"DEBUG: Model path not found: {model_path}")
+                logger.debug(f"DEBUG: Model path not found: {model_path}")
                 error_msg = html.Div([
                     html.H4("❌ Model file not found.", style={'color': 'red'}),
                     html.P(f"Looking for: {model_path}", style={
@@ -2356,7 +2359,7 @@ def register_callbacks(app):
                 ])
                 return error_msg
 
-            print(f"DEBUG: Loading model from: {model_path}")
+            logger.debug(f"DEBUG: Loading model from: {model_path}")
             model = EdgeMLModel.load_model(model_path)
 
             # Get model metadata
@@ -2370,7 +2373,7 @@ def register_callbacks(app):
             # Get feature names - try from model first, then from training metadata
             feature_names = model.feature_names
             if not feature_names:
-                print("DEBUG: Feature names not in model, checking training metadata...")
+                logger.debug("DEBUG: Feature names not in model, checking training metadata...")
                 # Try to get from any training metadata file
                 training_dir = os.path.join(PERSISTENT_DIR, 'training')
                 metadata_files = glob.glob(
@@ -2384,7 +2387,7 @@ def register_callbacks(app):
                             f"DEBUG: Found {len(feature_names)} feature names from training metadata")
 
             if not feature_names:
-                print("DEBUG: Still no feature names, loading from training file...")
+                logger.debug("DEBUG: Still no feature names, loading from training file...")
                 # Last resort: load from FE-matched training CSV file
                 train_files = _get_fe_train_files(training_dir)
                 if train_files:
@@ -2412,7 +2415,7 @@ def register_callbacks(app):
             return no_update
 
         except Exception as e:
-            print(f"DEBUG: Exception in deployment callback: {str(e)}")
+            logger.debug(f"DEBUG: Exception in deployment callback: {str(e)}")
             traceback.print_exc()
             error_msg = html.Div([
                 html.H4("❌ Deployment failed", style={'color': 'red'}),
@@ -2422,9 +2425,9 @@ def register_callbacks(app):
 
     def generate_deployment_code_display(model_data, platform, optimization, model_filename):
         """Generate and display deployment code."""
-        print(f"DEBUG: Starting code generation for {model_filename}")
-        print(f"DEBUG: Platform: {platform}, Optimization: {optimization}")
-        print(f"DEBUG: Model data keys: {list(model_data.keys())}")
+        logger.debug(f"DEBUG: Starting code generation for {model_filename}")
+        logger.debug(f"DEBUG: Platform: {platform}, Optimization: {optimization}")
+        logger.debug(f"DEBUG: Model data keys: {list(model_data.keys())}")
 
         try:
             # Generate code for the selected platform and save to organized folders
@@ -2434,7 +2437,7 @@ def register_callbacks(app):
 
             print(
                 f"DEBUG: Successfully generated and saved {len(saved_files)} code files")
-            print(f"DEBUG: Saved files: {list(saved_files.keys())}")
+            logger.debug(f"DEBUG: Saved files: {list(saved_files.keys())}")
 
             # Also generate in-memory for display purposes
             generated_code = generate_deployment_code(
@@ -2498,11 +2501,11 @@ def register_callbacks(app):
                 ])
             ])
 
-            print("DEBUG: Created deployment summary with organized folder structure")
+            logger.debug("DEBUG: Created deployment summary with organized folder structure")
             return deployment_summary
 
         except Exception as e:
-            print(f"DEBUG: Error in code generation: {str(e)}")
+            logger.debug(f"DEBUG: Error in code generation: {str(e)}")
             traceback.print_exc()
             error_msg = html.Div([
                 html.H4("❌ Code generation failed", style={'color': 'red'}),
@@ -2551,7 +2554,7 @@ def register_callbacks(app):
             return analysis_summary
 
         except Exception as e:
-            print(f"DEBUG: Error in resource analysis: {str(e)}")
+            logger.debug(f"DEBUG: Error in resource analysis: {str(e)}")
             error_msg = html.Div([
                 html.H4("❌ Resource analysis failed", style={'color': 'red'}),
                 html.P(f"Error: {str(e)}")

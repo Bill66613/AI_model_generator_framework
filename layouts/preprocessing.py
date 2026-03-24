@@ -212,50 +212,6 @@ layout = html.Div([
         'border': '1px solid #e9ecef'
     }),
 
-    # Interactive Window Selection Section
-    html.Div([
-        html.H3("🎮 Interactive Window Selection", style={
-                'color': '#2E86AB', 'margin-bottom': '20px'}),
-        html.P("Drag windows to optimal positions and extract segments for model training",
-               style={'color': '#666', 'margin-bottom': '20px'}),
-
-        # Interactive graph with enhanced user experience
-        dcc.Graph(
-            id='interactive-sample-graph',
-            style={
-                'height': '800px',  # Increased height for better visibility
-                'width': '100%',    # Full width utilization
-                'border': '2px solid #e9ecef',
-                'border-radius': '8px',
-                'background-color': '#fafafa'
-            },
-            config={
-                'editable': True,
-                'displayModeBar': True,
-                'displaylogo': False,
-                'modeBarButtonsToAdd': [
-                    'drawrect',
-                    'eraseshape',
-                    'pan2d',
-                    'zoom2d',
-                    'zoomIn2d',
-                    'zoomOut2d',
-                    'autoScale2d',
-                    'resetScale2d'
-                ],
-                'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-                'doubleClick': 'reset+autosize',
-                'scrollZoom': True,
-                'toImageButtonOptions': {
-                    'format': 'png',
-                    'filename': 'interactive_time_windows',
-                    'height': 800,
-                    'width': 1400,
-                    'scale': 2
-                }
-            }
-        ),
-
         # Enhanced window control section with better usability
         html.Div([
             # Help text for better user guidance
@@ -394,6 +350,50 @@ layout = html.Div([
                 )
             ], style={'width': '35%', 'display': 'inline-block', 'margin-left': '5%', 'vertical-align': 'top'})
         ], style={'margin': '20px 0'}),
+
+    # Interactive Window Selection Section
+    html.Div([
+        html.H3("🎮 Interactive Window Selection", style={
+                'color': '#2E86AB', 'margin-bottom': '20px'}),
+        html.P("Drag windows to optimal positions and extract segments for model training",
+               style={'color': '#666', 'margin-bottom': '20px'}),
+
+        # Interactive graph with enhanced user experience
+        dcc.Graph(
+            id='interactive-sample-graph',
+            style={
+                'height': '800px',  # Increased height for better visibility
+                'width': '100%',    # Full width utilization
+                'border': '2px solid #e9ecef',
+                'border-radius': '8px',
+                'background-color': '#fafafa'
+            },
+            config={
+                'editable': True,
+                'displayModeBar': True,
+                'displaylogo': False,
+                'modeBarButtonsToAdd': [
+                    'drawrect',
+                    'eraseshape',
+                    'pan2d',
+                    'zoom2d',
+                    'zoomIn2d',
+                    'zoomOut2d',
+                    'autoScale2d',
+                    'resetScale2d'
+                ],
+                'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+                'doubleClick': 'reset+autosize',
+                'scrollZoom': True,
+                'toImageButtonOptions': {
+                    'format': 'png',
+                    'filename': 'interactive_time_windows',
+                    'height': 800,
+                    'width': 1400,
+                    'scale': 2
+                }
+            }
+        ),
 
         # Sliding Window Generation Section
         html.Div([

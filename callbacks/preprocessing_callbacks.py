@@ -559,7 +559,7 @@ def register_callbacks(app):
             file_path = metadata[dataset_name]["path"]
 
         if not os.path.exists(file_path):
-            return {}
+            return {}, []
 
         df = pd.read_csv(file_path)
         sampling_rate = metadata.get(dataset_name, {}).get('sampling_rate', 100)
@@ -580,7 +580,7 @@ def register_callbacks(app):
                 col for col in numerical_cols if col != 'Time_seconds'][:6]
 
         if not available_cols:
-            return {}
+            return {}, []
 
         # Create the master combined plot
         fig = go.Figure()

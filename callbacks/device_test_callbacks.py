@@ -1,7 +1,6 @@
 from dash import Input, Output, State, html, callback_context
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import pickle
 import os
 import json
 import glob

@@ -7,8 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from dash import dcc, html, Input, Output, State, dash_table, ctx, no_update
 
-from config.config import *
-from config.config import get_window_pattern
+from config.config import PERSISTENT_DIR, METADATA_FILE, SENSOR_COLUMNS, get_window_pattern
 
 
 def parse_contents(contents, filename):
@@ -209,18 +208,23 @@ def register_callbacks(app):
     @app.callback(
         Output('upload-output', 'children', True),
         Input('clear-data-btn', 'n_clicks'),
+        State('working-directory-store', 'data'),
         prevent_initial_call=True
     )
-    def clear_data(n_clicks):
+    def clear_data(n_clicks, base_dir):
         """Clear all stored data and metadata."""
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+
         # Remove all files in the persistent directory
-        for file in os.listdir(PERSISTENT_DIR):
-            file_path = os.path.join(PERSISTENT_DIR, file)
+        for file in os.listdir(base_dir):
+            file_path = os.path.join(base_dir, file)
             if os.path.isfile(file_path):
                 os.remove(file_path)
 
         # Reset metadata
-        with open(METADATA_FILE, 'w') as f:
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        with open(metadata_file, 'w') as f:
             json.dump({}, f)
 
         return "✅ All data and metadata have been cleared."
@@ -255,9 +259,9 @@ def register_callbacks(app):
                 df['Time_seconds'] = pd.Series(
                     range(df.shape[0])) / sampling_rate
 
-                # Get sensor columns (exclude Time_seconds)
+                # Get numeric sensor columns (exclude Time_seconds and non-numeric like labels)
                 sensor_cols = [
-                    col for col in df.columns if col != 'Time_seconds']
+                    col for col in df.select_dtypes(include='number').columns if col != 'Time_seconds']
 
                 # Limit to first 6 columns for better visualization
                 sensor_cols = sensor_cols[:6]
@@ -294,57 +298,10 @@ def register_callbacks(app):
                 return metadata.get(dataset_name, {}).get("label", "")
         return ""
 
-    @app.callback(
-        Output('data-preview', 'figure'),
-        Input('dataset-selector', 'value'),
-        State('working-directory-store', 'data')
-    )
-    def display_dataset(dataset_name, base_dir):
-        """Displays selected dataset as a chart."""
-        if dataset_name:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
-            metadata_file = os.path.join(base_dir, 'metadata.json')
-
-            if os.path.exists(metadata_file):
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
-            else:
-                return {}
-
-            sampling_rate = metadata.get(
-                dataset_name, {}).get("sampling_rate", 100)
-
-            file_path = metadata[dataset_name].get("path")
-            if not file_path:
-                file_path = os.path.join(base_dir, 'datasets', dataset_name)
-            if os.path.exists(file_path):
-                df = pd.read_csv(file_path)
-                # Add a time axis based on the sampling rate
-                df['Time_seconds'] = pd.Series(
-                    range(df.shape[0])) / sampling_rate
-
-                # Get sensor columns (exclude Time_seconds)
-                sensor_cols = [
-                    col for col in df.columns if col != 'Time_seconds']
-
-                # Limit to first 6 columns for better visualization
-                sensor_cols = sensor_cols[:6]
-
-                if sensor_cols:
-                    # Generate a line chart with no template to avoid compatibility issues
-                    fig = px.line(df, x='Time_seconds', y=sensor_cols,
-                                  title=f"Preview of {dataset_name}",
-                                  template=None)
-                    fig.update_layout(
-                        xaxis_title="Time (seconds)",
-                        yaxis_title="Sensor Values",
-                        height=400,
-                        showlegend=True
-                    )
-                    return fig
-        # Return an empty figure if no dataset is selected
-        return {}
+    # NOTE: display_dataset was removed — filter_and_display_data (above)
+    # already targets Output('data-preview', 'figure') with allow_duplicate=True
+    # on the same Input('dataset-selector', 'value').  Having two callbacks for
+    # the same output/input pair caused Dash duplicate-callback warnings.
 
     @app.callback(
         Output('upload-output', 'children', allow_duplicate=True),

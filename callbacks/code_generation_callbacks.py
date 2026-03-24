@@ -1057,7 +1057,7 @@ def register_callbacks(app):
                 # Cleanup temp directory
                 try:
                     shutil.rmtree(temp_dir)
-                except:
+                except OSError:
                     pass
 
             if not success:

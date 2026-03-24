@@ -21,9 +21,6 @@ from utils.model_training import extract_time_domain_features, extract_frequency
 from utils.data_augmentation import augment_windows, AUGMENTATION_METHODS
 
 
-# Placeholder callbacks - to be implemented
-
-
 def register_callbacks(app):
     """Register all callbacks with the app."""
     @app.callback(
