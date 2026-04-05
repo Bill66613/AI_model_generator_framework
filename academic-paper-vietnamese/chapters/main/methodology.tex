@@ -202,14 +202,14 @@ Bộ phân loại phân biệt tìm các siêu phẳng tối ưu qua các phươ
 \paragraph{Neural Network (NN)}
 Perceptron đa lớp với lan truyền ngược. Cấu hình:
 \begin{itemize}
-    \item Kiến trúc: 90 đầu vào $\rightarrow$ 100 ẩn $\rightarrow$ 50 ẩn $\rightarrow$ num\_classes đầu ra
-    \item Kích hoạt: ReLU (các lớp ẩn), Softmax (lớp đầu ra)
+    \item Kiến trúc: 90 đầu vào $\rightarrow$ 100 ẩn $\rightarrow$ num\_classes đầu ra
+    \item Kích hoạt: ReLU (lớp ẩn), Softmax (lớp đầu ra)
     \item Trình tối ưu: Adam với tốc độ học 0,001, $\beta_1=0,9$, $\beta_2=0,999$
     \item Chính quy hóa: Phạt L2 $\alpha=0,0001$
     \item Huấn luyện: Dừng sớm với patience=10, tối đa 500 epochs
     \item Kích thước Batch: Batch đầy đủ (toàn bộ tập huấn luyện)
 \end{itemize}
-Kiến trúc hai lớp ẩn cung cấp khả năng đầy đủ để học các mẫu hoạt động phi tuyến trong khi vẫn đủ nhỏ để triển khai C++ hiệu quả (ma trận trọng số cố định, không phân bổ bộ nhớ động).
+Kiến trúc một lớp ẩn cung cấp khả năng đầy đủ để học các mẫu hoạt động phi tuyến trong khi vẫn đủ nhỏ để triển khai C++ hiệu quả (ma trận trọng số cố định, không phân bổ bộ nhớ động).
 
 \subsection{Giao thức Huấn luyện và Đánh giá}
 
@@ -374,6 +374,8 @@ Các phiên bản tương lai của framework nên tích hợp đường dẫn T
     \item \textbf{Tệp Triển khai (.cpp)}: Triển khai trích xuất đặc trưng, logic dự đoán (đặc thù cho thuật toán) và các hàm tiện ích
     \item \textbf{Arduino Sketch (.ino)}: Cung cấp khởi tạo cảm biến, quản lý bộ đệm cửa sổ trượt, vòng lặp suy luận thời gian thực và đầu ra serial của các dự đoán
 \end{enumerate}
+
+\textbf{Xác minh Công thức Thống kê}: Mã C++ đã tạo cho trích xuất đặc trưng sử dụng các công thức thống kê được xác minh khớp chính xác với triển khai Python (pandas/NumPy). Cụ thể, các đặc trưng kurtosis và skewness sử dụng \textit{độ lệch chuẩn tổng thể} (population standard deviation, chia $n$) cho chuẩn hóa z-scores, thay vì độ lệch chuẩn mẫu (chia $n-1$). Sự khác biệt này, mặc dù nhỏ ($\sim$1,3\% cho $n=150$), là hệ thống và tích lũy qua nhiều đặc trưng, có thể ảnh hưởng đến độ chính xác triển khai nếu không được xử lý.
 
 Hình \ref{fig:ui_code_generation} cho thấy giao diện tạo mã với bản xem trước mã Arduino C++ đã tạo, các tùy chọn cấu hình triển khai và các tệp đầu ra có thể tải xuống.
 

@@ -51,6 +51,8 @@
 | 2025-02-27 | Restructure v2.0 | Added Quick Context, Session Log, structured for cross-session AI use |
 | 2026-03-01 | Findings 6-8 | Added double standardization, feature order mismatch, double extraction to findings list |
 | 2026-03-05 | Finding 9 | Added CNN validation false positives — validator now architecture-aware |
+| 2026-03-25 | Consistency fixes | Fixed: 5/6 class count, 90/138 feature count, 75/150 window size, NN arch 90→100→5, added 6th objective to intro, removed duplicate BibTeX, added kurtosis verification to code gen, added power estimate disclaimer |
+| 2026-03-26 | Round 2 consistency | Fixed: per-class Support 1078→30 (match test set), NN "two hidden layers"→"one", SensiML pricing unified \$99-500/month across all chapters |
 
 *Add a row here each time this file is updated.*
 
@@ -222,8 +224,8 @@
 - [x] Giải thích tại sao loại bỏ FFT features (đã có) + tại sao padding quan trọng
 - [x] Thêm mục mới: "Tăng cường Dữ liệu Nhận biết Lớp" (data augmentation with class-aware protection)
 - [x] Thêm mục mới: "Ngưỡng Tin cậy cho Từ chối Hoạt động Không xác định" (confidence threshold)
-- [ ] Cập nhật mục Code Generation: đề cập verified kurtosis/skewness formula
-- [ ] Sửa: "75 mẫu (0.75s)" → "150 mẫu (1.5s)" nếu chưa nhất quán
+- [x] Cập nhật mục Code Generation: đề cập verified kurtosis/skewness formula
+- [x] Sửa: kiến trúc NN 90 đầu vào (khớp với 15×6 features), bảng bộ nhớ 90-100-5
 
 #### Chương 4 — Kết quả:
 - [ ] Thay placeholder numbers bằng kết quả thực tế

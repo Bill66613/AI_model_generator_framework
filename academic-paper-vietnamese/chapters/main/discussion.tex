@@ -4,9 +4,9 @@
 \section{Diễn Giải Các Phát Hiện Chính}
 
 \subsection{Hiệu Suất Mô Hình và Lựa Chọn Thuật Toán}
-Các kết quả thực nghiệm chứng minh rằng cả ba thuật toán đã triển khai đạt độ chính xác cao (93.8-96.2\%) trên nhiệm vụ HAR sáu lớp, với Neural Networks vượt trội một chút so với Random Forest và SVM. Phát hiện này phù hợp với tài liệu gần đây cho thấy rằng các mô hình ML cổ điển được điều chỉnh đúng cách vẫn cạnh tranh với học sâu cho các nhiệm vụ phân loại chuỗi thời gian trên các tập dữ liệu có kích thước vừa phải (hàng nghìn đến hàng chục nghìn mẫu) \cite{anguita2013har, banos2014wisdm}.
+Các kết quả thực nghiệm chứng minh rằng cả ba thuật toán đã triển khai đạt độ chính xác cao (93.8-96.2\%) trên nhiệm vụ HAR năm lớp, với Neural Networks vượt trội một chút so với Random Forest và SVM. Phát hiện này phù hợp với tài liệu gần đây cho thấy rằng các mô hình ML cổ điển được điều chỉnh đúng cách vẫn cạnh tranh với học sâu cho các nhiệm vụ phân loại chuỗi thời gian trên các tập dữ liệu có kích thước vừa phải (hàng nghìn đến hàng chục nghìn mẫu) \cite{anguita2013har, banos2014wisdm}.
 
-Sự vượt trội của Neural Network (96.2\% vs 94.5\% RF) có thể được quy cho khả năng học các kết hợp phi tuyến của không gian đặc trưng 138 chiều thông qua các biến đổi lớp ẩn. Tuy nhiên, biên độ là khiêm tốn (+1.7\%), và huấn luyện nhanh hơn của Random Forest (12.3s vs 45.7s) và tốc độ suy luận so sánh được (15ms vs 12ms) làm cho nó hấp dẫn cho tạo mẫu nhanh và các quy trình phát triển lặp lại phổ biến trong các bối cảnh nghiên cứu.
+Sự vượt trội của Neural Network (96.2\% vs 94.5\% RF) có thể được quy cho khả năng học các kết hợp phi tuyến của không gian đặc trưng 90 chiều thông qua các biến đổi lớp ẩn. Tuy nhiên, biên độ là khiêm tốn (+1.7\%), và huấn luyện nhanh hơn của Random Forest (12.3s vs 45.7s) và tốc độ suy luận so sánh được (15ms vs 12ms) làm cho nó hấp dẫn cho tạo mẫu nhanh và các quy trình phát triển lặp lại phổ biến trong các bối cảnh nghiên cứu.
 
 Thật thú vị, SVM—vốn chiếm ưu thế trong nghiên cứu HAR đầu tiên \cite{cortes1995svm}—đạt độ chính xác thấp hơn một chút (93.8\%). Điều này có thể phản ánh lựa chọn tham số kernel không tối ưu mặc dù có tìm kiếm lưới, hoặc các hạn chế vốn có của kernel RBF trong việc nắm bắt các phụ thuộc thời gian phức tạp hiện diện trong dữ liệu chuyển động. Công việc tương lai có thể khám phá các kernel thay thế (polynomial, sigmoid) hoặc các phương pháp ensemble kết hợp nhiều hàm kernel.
 
@@ -18,7 +18,7 @@ Cân bằng lớp đã cải thiện recall thiểu số lên 0.93-0.95 (+42-47\
 Framework của chúng tôi giải quyết điều này bằng cách làm cho cân bằng lớp là một cài đặt mặc định, không phải tùy chọn. Lựa chọn thiết kế này phản ánh một triết lý ưu tiên triển khai thực tế mạnh mẽ hơn các số liệu hiệu suất benchmark có thể che giấu những điểm yếu quan trọng.
 
 \subsection{Tính Khả Thi Triển Khai Biên}
-Các kết quả thời gian suy luận (9-18ms mỗi cửa sổ trên vi điều khiển 64MHz) xác thực tính khả thi thực tế của HAR trên thiết bị. Với các cửa sổ 0.75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms—các mô hình của chúng tôi đạt được điều này với biên độ 40-80×, để lại khoảng trống cho:
+Các kết quả thời gian suy luận (9-18ms mỗi cửa sổ trên vi điều khiển 64MHz) xác thực tính khả thi thực tế của HAR trên thiết bị. Với cửa sổ 1,5 giây và bước trượt 0,75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms—các mô hình của chúng tôi đạt được điều này với biên độ 40-80×, để lại khoảng trống cho:
 \begin{itemize}
     \item Ensemble đa mô hình (kết hợp dự đoán RF + NN)
     \item Các phương thức cảm biến bổ sung (nhịp tim, GPS)
@@ -74,7 +74,7 @@ Xác thực của chúng tôi sử dụng dữ liệu từ một đối tượng
 Công việc tương lai nên xác thực framework sử dụng các tập dữ liệu HAR có sẵn công khai (ví dụ: UCI HAR, WISDM, PAMAP2) bao gồm các đối tượng đa dạng và phân loại hoạt động mở rộng.
 
 \subsection{Lựa Chọn Kích Thước Cửa Sổ}
-Cửa sổ 0.75 giây (75 mẫu @ 100Hz) là một lựa chọn heuristic cân bằng bối cảnh thời gian và khả năng phản hồi. Nghiên cứu trước đây cho thấy kích thước cửa sổ ảnh hưởng đáng kể đến độ chính xác \cite{banos2014wisdm}: các cửa sổ ngắn hơn (<0.5s) có thể bỏ lỡ các chu kỳ chuyển động đầy đủ, trong khi các cửa sổ dài hơn (>2s) giảm độ phân giải thời gian. Framework của chúng tôi hiện tại sử dụng kích thước cửa sổ cố định; các chiến lược cửa sổ thích ứng (thay đổi kích thước dựa trên cường độ hoạt động được phát hiện) có thể cải thiện hiệu suất nhưng thêm độ phức tạp.
+Cửa sổ 1,5 giây (150 mẫu @ 100Hz) với bước trượt 0,75 giây là một lựa chọn cân bằng bối cảnh thời gian và khả năng phản hồi. Nghiên cứu trước đây cho thấy kích thước cửa sổ ảnh hưởng đáng kể đến độ chính xác \cite{banos2014wisdm}: các cửa sổ ngắn hơn (<0.5s) có thể bỏ lỡ các chu kỳ chuyển động đầy đủ, trong khi các cửa sổ dài hơn (>2s) giảm độ phân giải thời gian. Framework của chúng tôi hiện tại sử dụng kích thước cửa sổ cố định; các chiến lược cửa sổ thích ứng (thay đổi kích thước dựa trên cường độ hoạt động được phát hiện) có thể cải thiện hiệu suất nhưng thêm độ phức tạp.
 
 \subsection{Vị Trí và Hướng Cảm Biến}
 Các thử nghiệm giả định IMU được đeo ở cổ tay trong một hướng nhất quán. Triển khai thực tế gặp phải sự biến đổi:
@@ -105,7 +105,7 @@ Chúng tôi cố ý chọn học máy cổ điển (Random Forest, SVM, Neural N
 Tuy nhiên, học sâu xuất sắc trên các tập dữ liệu lớn (>100K mẫu) và đầu vào tín hiệu thô (bỏ qua kỹ thuật đặc trưng thủ công). Các phiên bản framework tương lai nên tích hợp hỗ trợ TensorFlow Lite cho người dùng có tài nguyên tính toán và các tập dữ liệu được chú thích lớn.
 
 \subsection{Đặc Trưng Thủ Công vs Đặc Trưng Học}
-Bộ 138 đặc trưng của chúng tôi sử dụng các thống kê miền thời gian/tần số thủ công. Điều này yêu cầu kiến thức miền (biết đặc trưng nào phân biệt các hoạt động) nhưng đảm bảo khả năng diễn giải và biểu diễn gọn nhẹ. Học sâu từ đầu đến cuối có thể học các đặc trưng tự động, nhưng với chi phí các mô hình lớn hơn và tính minh bạch giảm.
+Bộ 90 đặc trưng miền thời gian của chúng tôi sử dụng các thống kê thủ công (15 thống kê × 6 trục). Điều này yêu cầu kiến thức miền (biết đặc trưng nào phân biệt các hoạt động) nhưng đảm bảo khả năng diễn giải, biểu diễn gọn nhẹ, và tương đồng bit-exact giữa Python và C++. Học sâu từ đầu đến cuối có thể học các đặc trưng tự động, nhưng với chi phí các mô hình lớn hơn và tính minh bạch giảm.
 
 Một phương pháp trung gian—sử dụng các bộ mã hóa tự động convolutional cho trích xuất đặc trưng học theo sau bởi ML cổ điển cho phân loại—có thể kết hợp lợi ích. Điều này vẫn là công việc tương lai.
 

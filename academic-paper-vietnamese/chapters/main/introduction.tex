@@ -38,7 +38,7 @@ Bất chấp những tiến bộ trong công nghệ theo dõi chuyển động, 
 
 \item \textbf{Thách thức Tiền xử lý}: Dữ liệu cảm biến chuyển động vốn dĩ nhiễu và đòi hỏi tiền xử lý cẩn thận. Các công cụ hiện có hoặc cung cấp kiểm soát hạn chế đối với tiền xử lý (các cách tiếp cận hộp đen tự động) hoặc đòi hỏi lập trình mở rộng để triển khai các quy trình tiền xử lý tùy chỉnh.
 
-\item \textbf{Tính linh hoạt Hạn chế}: Nhiều framework có sẵn có đường cong học tập dốc hoặc cung cấp chức năng hạn chế để tùy chỉnh mô hình theo các yêu cầu theo dõi chuyển động cụ thể. Các nền tảng thương mại như Edge Impulse và SensiML cung cấp quy trình làm việc đơn giản hóa nhưng với chi phí đáng kể (\$20-100/tháng) và với các tùy chọn tùy chỉnh bị hạn chế.
+\item \textbf{Tính linh hoạt Hạn chế}: Nhiều framework có sẵn có đường cong học tập dốc hoặc cung cấp chức năng hạn chế để tùy chỉnh mô hình theo các yêu cầu theo dõi chuyển động cụ thể. Các nền tảng thương mại như Edge Impulse và SensiML cung cấp quy trình làm việc đơn giản hóa nhưng với chi phí đáng kể (\$20-500/tháng) và với các tùy chọn tùy chỉnh bị hạn chế.
 
 \item \textbf{Độ phức tạp Triển khai}: Dịch các mô hình đã huấn luyện thành mã tối ưu hóa cho các nền tảng biên cụ thể đòi hỏi hiểu biết sâu về kiến trúc phần cứng đích, ràng buộc bộ nhớ và kỹ thuật tối ưu hóa.
 
@@ -61,7 +61,7 @@ Do đó, có một nhu cầu cấp thiết về một framework linh hoạt, tr�
 \toprule
 \textbf{Tính năng} & \textbf{Edge Impulse} & \textbf{SensiML} & \textbf{TensorFlow Lite} & \textbf{Framework của chúng tôi} \\
 \midrule
-\textbf{Chi phí} & \$20-99/tháng & \$49-199/tháng & Miễn phí & Miễn phí (Mã nguồn mở) \\
+\textbf{Chi phí} & \$20-99/tháng & \$99-500/tháng & Miễn phí & Miễn phí (Mã nguồn mở) \\
 \midrule
 \textbf{Tiền xử lý Tương tác} & Hạn chế (web UI) & Có (analytics studio) & Không (chỉ mã) & Có (cửa sổ kéo thả) \\
 \midrule
@@ -127,6 +127,8 @@ Mục tiêu chính của nghiên cứu này là thiết kế, triển khai và �
 \item \textbf{Xác thực Hiệu quả Framework}: Tiến hành các thử nghiệm toàn diện sử dụng dữ liệu Nhận dạng Hoạt động Con người thực tế để đánh giá hiệu suất mô hình, hiệu quả triển khai và khả năng sử dụng so với các giải pháp thương mại hiện có.
 
 \item \textbf{Đảm bảo Khả năng tiếp cận}: Thiết kế hệ thống với giao diện thân thiện với người dùng có thể tiếp cận cho cả chuyên gia và người không chuyên, thúc đẩy dân chủ hóa phát triển edge AI.
+
+\item \textbf{Đảm bảo Độ Tin Cậy Triển Khai}: Xây dựng quy trình xác minh tương đồng huấn luyện-triển khai, tích hợp ngưỡng tin cậy cho từ chối hoạt động không xác định, và thiết kế tăng cường dữ liệu nhận biết lớp để đảm bảo mô hình hoạt động đáng tin cậy trên phần cứng thực.
 
 \end{enumerate}
 

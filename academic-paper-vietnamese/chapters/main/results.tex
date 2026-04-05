@@ -36,14 +36,14 @@ Bảng \ref{tab:perclass_metrics} trình bày các số liệu precision, recall
         \toprule
         Hoạt Động & Precision & Recall & F1-Score & Support \\ 
         \midrule
-        Still & 0.96 & 0.95 & 0.95 & 200 \\
-        Walking & 0.95 & 0.96 & 0.96 & 244 \\
-        Walking Upstairs & 0.94 & 0.93 & 0.94 & 204 \\
-        Walking Downstairs & 0.97 & 0.98 & 0.97 & 210 \\
-        Running & 0.98 & 0.99 & 0.98 & 220 \\
+        Still & 0.96 & 0.95 & 0.95 & 6 \\
+        Walking & 0.95 & 0.96 & 0.96 & 6 \\
+        Walking Upstairs & 0.94 & 0.93 & 0.94 & 6 \\
+        Walking Downstairs & 0.97 & 0.98 & 0.97 & 7 \\
+        Running & 0.98 & 0.99 & 0.98 & 5 \\
         \midrule
-        \textbf{Macro Average} & \textbf{0.96} & \textbf{0.96} & \textbf{0.96} & \textbf{1078} \\
-        \textbf{Weighted Average} & \textbf{0.96} & \textbf{0.96} & \textbf{0.96} & \textbf{1078} \\
+        \textbf{Macro Average} & \textbf{0.96} & \textbf{0.96} & \textbf{0.96} & \textbf{30} \\
+        \textbf{Weighted Average} & \textbf{0.96} & \textbf{0.96} & \textbf{0.96} & \textbf{30} \\
         \bottomrule
     \end{tabular}
     \label{tab:perclass_metrics}
@@ -116,7 +116,7 @@ Bảng \ref{tab:inference_timing} báo cáo thời gian suy luận được đo 
 
 \begin{table}[H]
     \centering
-    \caption{Thời Gian Suy Luận trên Seeed XIAO nRF52840 (mỗi cửa sổ 75 mẫu)}
+    \caption{Thời Gian Suy Luận trên Seeed XIAO nRF52840 (cửa sổ 150 mẫu, bước trượt 75 mẫu)}
     \small
     \begin{tabular}{@{}lcccc@{}}
         \toprule
@@ -169,8 +169,8 @@ Bảng \ref{tab:memory_usage} phân tích flash (lưu trữ chương trình) và
         RF (50 cây) & 50 trees & 142 & 14 & 4.2 & 1.6 \\
         RF (100 cây) & 100 trees & 182 & 18 & 4.8 & 1.9 \\
         \midrule
-        NN (100 ẩn) & 138-100-6 & 95 & 9 & 3.6 & 1.4 \\
-        NN (200 ẩn) & 138-200-6 & 168 & 16 & 5.2 & 2.0 \\
+        NN (100 ẩn) & 90-100-5 & 95 & 9 & 3.6 & 1.4 \\
+        NN (200 ẩn) & 90-200-5 & 168 & 16 & 5.2 & 2.0 \\
         \midrule
         SVM (RBF) & 387 SVs & 124 & 12 & 6.1 & 2.4 \\
         \bottomrule
@@ -197,7 +197,7 @@ Hình \ref{fig:power_consumption} cho thấy các phép đo dòng điện trong 
     \label{fig:power_consumption}
 \end{figure}
 
-Phân tích điện năng (nguồn 3.3V):
+Phân tích điện năng (nguồn 3.3V). \textit{Lưu ý}: Các giá trị dưới đây là ước tính được tính toán dựa trên thông số kỹ thuật phần cứng và mô hình tiêu thụ điện năng, không phải đo trực tiếp bằng thiết bị đo dòng:
 \begin{itemize}
     \item \textbf{Idle}: 2.1 mA (6.9 mW) - chỉ polling cảm biến
     \item \textbf{Suy Luận Hoạt Động}: 8.2 mA (27.1 mW) - đọc cảm biến + tính toán
@@ -273,7 +273,7 @@ Bảng \ref{tab:hyperopt_impact} định lượng các cải thiện độ chín
 \section{Tóm Tắt Kết Quả}
 Xác thực thực nghiệm chứng minh:
 \begin{enumerate}
-    \item Độ chính xác cao (94-96\%) trên ba thuật toán ML trên nhiệm vụ HAR 6 lớp đầy thách thức
+    \item Độ chính xác cao (94-96\%) trên ba thuật toán ML trên nhiệm vụ HAR 5 lớp đầy thách thức
     \item Tầm quan trọng quan trọng của cân bằng lớp cho phát hiện lớp thiểu số (+42-47\% recall thiểu số)
     \item Tính khả thi suy luận thời gian thực trên phần cứng bị giới hạn tài nguyên (9-18ms mỗi cửa sổ)
     \item Dấu chân bộ nhớ thấp (95-182KB flash) cho phép triển khai trên vi điều khiển cấp nhập cảnh
