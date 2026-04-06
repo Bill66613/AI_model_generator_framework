@@ -5,7 +5,7 @@ argument-hint: "Optional: test file path or -k pattern to filter"
 ---
 Run tests for the HAR Edge Deployment Framework.
 
-1. Activate the virtual environment if needed: `.\venv\Scripts\Activate.ps1`
+1. Activate the virtual environment if needed: `.\.venv\Scripts\Activate.ps1`
 2. Run pytest:
    - All tests: `python -m pytest tests/ -v`
    - Specific file: `python -m pytest tests/test_main.py -v`

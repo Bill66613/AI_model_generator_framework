@@ -13,12 +13,15 @@
 ## Feature Engineering Tab (NEW)
 
 ### Why This Tab Exists
+
 **Problem**: Processing each activity label separately risked inconsistent settings:
+
 - Different normalization methods
 - Different feature selections
 - Different train/val/test ratios
 
 **Solution**: Process ALL labels together with unified settings:
+
 - ✅ Same features extracted for all
 - ✅ Same normalization for all
 - ✅ Same split ratios for all
@@ -58,6 +61,7 @@
 ## Key Component IDs
 
 ### Feature Engineering Tab
+
 ```python
 'activity-labels-selector'          # Multi-select dropdown
 'select-all-labels-btn'             # Select all button
@@ -95,6 +99,7 @@
 ### Critical Callback: execute_feature_engineering()
 
 **Inputs**:
+
 - `n_clicks`: Execute button
 - `selected_labels`: List of activity labels
 - `feature_method`: all/time_domain/frequency_domain/raw
@@ -104,11 +109,13 @@
 - `random_state`: Int
 
 **Outputs**:
+
 - `feature-engineering-results`: HTML message
 - `engineered-dataset-stats`: Statistics table
 - `engineered-dataset-store`: Engineered dataset dict
 
 **Implementation Steps**:
+
 ```python
 1. Load all windows from all selected labels
    - For each label: read persistent_data/<label>/*.csv
@@ -172,6 +179,7 @@ GUI_app/
 ## Workflow
 
 ### Complete Pipeline
+
 1. **Data Management** → Upload CSV, assign activity labels
 2. **Signal Preprocessing** → Clean data, create time windows
 3. **Feature Engineering** → Extract features with consistent settings
@@ -179,6 +187,7 @@ GUI_app/
 5. **Device Testing** → Test on real device (future)
 
 ### Feature Engineering Workflow
+
 ```
 Select Labels (all at once)
     ↓
@@ -194,12 +203,15 @@ Results (consistent dataset ready)
 ## Common Issues & Solutions
 
 ### Issue: "No labels available"
+
 **Solution**: Go to Tab 2, create windows, split them first
 
 ### Issue: "Different features per label"
+
 **Solution**: This is now impossible - global settings ensure consistency
 
 ### Issue: "Training tab not loading data"
+
 **Solution**: Update training_callbacks.py to load from engineered-dataset-store
 
 ## Testing Commands

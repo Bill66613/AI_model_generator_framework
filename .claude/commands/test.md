@@ -11,7 +11,7 @@ Run tests for the HAR Edge Deployment Framework with appropriate scope.
 
 1. Activate the virtual environment (if not already):
 ```bash
-.\venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 ```
 
 2. Run tests:
