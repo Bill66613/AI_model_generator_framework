@@ -88,7 +88,7 @@ def resolve_platform(framework: str, board: str) -> str:
             'arduino:avr:nano': 'arduino',
             'esp32:esp32:esp32': 'esp32',
             'esp32:esp32:esp32s3': 'esp32',
-            'm5stack:esp32:m5stick_c': 'esp32',
+            'm5stack:esp32:m5stick_c': 'm5stack',
             'seeed:nrf52:xiaonRF52840Sense': 'seeed_xiao',
             'STM32:stm32:GenF4': 'arm_cortex_m',
         }

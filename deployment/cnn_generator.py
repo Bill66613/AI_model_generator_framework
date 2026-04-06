@@ -816,6 +816,40 @@ LSM6DS3 myIMU(I2C_MODE, 0x6A);  //I2C device address 0x6A""",
         float gZ = myIMU.readFloatGyroZ();"""
             }
 
+        elif self.platform == 'm5stack':
+            # M5StickC Plus2 with built-in IMU via M5Unified
+            return {
+                'includes': """#include "M5StickCPlus2.h" """,
+                'defines': """#define CONVERT_G_TO_MS2 9.80665f""",
+                'imu_init': """    // Initialize M5StickC Plus2
+    auto cfg = M5.config();
+    StickCP2.begin(cfg);
+
+    Serial.println("M5StickC Plus2 initialized!");
+    StickCP2.Display.setRotation(1);
+    StickCP2.Display.setTextColor(GREEN);
+    StickCP2.Display.setTextDatum(middle_center);
+    StickCP2.Display.setFont(&fonts::FreeSansBold9pt7b);
+    StickCP2.Display.setTextSize(1);
+    StickCP2.Display.setCursor(0, 40);
+    StickCP2.Display.printf("HAR CNN Model Ready\\r\\n");""",
+                'sensor_read': """        // Read sensor data from M5StickC Plus2 IMU
+        float aX = 0, aY = 0, aZ = 0, gX = 0, gY = 0, gZ = 0;
+        if (StickCP2.Imu.update()) {
+            auto imu_data = StickCP2.Imu.getImuData();
+
+            // Convert accelerometer from G to m/s²
+            aX = imu_data.accel.x * CONVERT_G_TO_MS2;
+            aY = imu_data.accel.y * CONVERT_G_TO_MS2;
+            aZ = imu_data.accel.z * CONVERT_G_TO_MS2;
+
+            // Gyroscope in degrees/sec
+            gX = imu_data.gyro.x;
+            gY = imu_data.gyro.y;
+            gZ = imu_data.gyro.z;
+        }"""
+            }
+
         elif self.platform == 'esp32':
             return {
                 'includes': """#include <Wire.h>
