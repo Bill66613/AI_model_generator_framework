@@ -21,7 +21,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/har-edge-framework.git
+git clone https://github.com/Bill66613/AI_model_generator_framework.git
 cd har-edge-framework
 
 # Create virtual environment (recommended)
@@ -30,6 +30,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+or
+pip install -e .
 
 # Launch application
 python app.py
@@ -51,6 +53,7 @@ For detailed installation instructions, see [INSTALL.md](INSTALL.md).
 ### Data Format
 
 Your CSV files should contain the following columns:
+
 - `Timestamp`: Time information (optional)
 - `aX`, `aY`, `aZ`: Accelerometer readings (m/s²)
 - `gX`, `gY`, `gZ`: Gyroscope readings (rad/s)
@@ -59,6 +62,7 @@ Your CSV files should contain the following columns:
 ### Interactive Preprocessing
 
 The framework's unique draggable time window feature allows you to:
+
 - Select precise activity boundaries by dragging rectangles
 - Adjust window sizes in real-time
 - Validate selections with live statistical feedback
@@ -69,6 +73,7 @@ The framework's unique draggable time window feature allows you to:
 ### Core Classes
 
 #### `EdgeMLModel`
+
 Main class for machine learning operations.
 
 ```python
@@ -99,6 +104,7 @@ filtered_df = low_pass_filter(df, cutoff=5, fs=100)
 ### Callback Functions
 
 The framework uses Dash callbacks for interactivity:
+
 - `data_callbacks.py`: File upload and data management
 - `preprocessing_callbacks.py`: Signal processing and windowing
 - `training_callbacks.py`: Model training and evaluation
@@ -150,6 +156,7 @@ To add custom preprocessing steps:
 ### Edge Optimization
 
 The framework provides several optimization strategies:
+
 - **Model Quantization**: INT8/INT16 conversion
 - **Feature Selection**: Reduce computational load
 - **Memory Optimization**: Minimize RAM usage

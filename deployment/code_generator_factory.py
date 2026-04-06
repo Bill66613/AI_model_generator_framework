@@ -521,7 +521,7 @@ def create_output_folder_structure(base_output_dir: str, model_type: str,
     }.get(deployment_approach, '')
 
     # For Arduino-based platforms, folder must match .ino filename
-    if platform in ['arduino', 'seeed_xiao', 'esp32', 'teensy']:
+    if platform in ['arduino', 'seeed_xiao', 'esp32', 'm5stack', 'teensy']:
         num_features = len(model_data.get(
             'feature_names', [])) if model_data else 0
         num_classes = len(model_data.get('classes', [])) if model_data else 0
@@ -647,7 +647,7 @@ class CodeGeneratorFactory:
     @classmethod
     def get_supported_platforms(cls) -> list:
         """Get list of supported platforms."""
-        return ['arduino', 'arm_cortex_m', 'esp32', 'teensy', 'seeed_xiao',
+        return ['arduino', 'arm_cortex_m', 'esp32', 'm5stack', 'teensy', 'seeed_xiao',
                 'generic_c', 'generic_cpp', 'esp_idf', 'micropython', 'zephyr']
 
     @classmethod
@@ -770,7 +770,7 @@ def _generate_tflite_files(generator, model_type: str, platform: str,
     header_filename = f"{base_name}.h"
     source_filename = f"{base_name}.cpp"
 
-    if platform in ('arduino', 'seeed_xiao', 'esp32', 'teensy'):
+    if platform in ('arduino', 'seeed_xiao', 'esp32', 'm5stack', 'teensy'):
         sketch_filename = f"{base_name}.ino"
     elif platform == 'generic_c':
         sketch_filename = f"{base_name}_main.c"
@@ -811,7 +811,7 @@ def _generate_onnx_files(generator, model_type: str, platform: str,
     header_filename = f"{base_name}.h"
     source_filename = f"{base_name}.cpp"
 
-    if platform in ('arduino', 'seeed_xiao', 'esp32', 'teensy'):
+    if platform in ('arduino', 'seeed_xiao', 'esp32', 'm5stack', 'teensy'):
         sketch_filename = f"{base_name}.ino"
     elif platform in ('generic_c', 'esp_idf', 'zephyr'):
         sketch_filename = f"{base_name}_main.c"

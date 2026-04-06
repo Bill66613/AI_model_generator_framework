@@ -339,7 +339,7 @@ uv (recommended) or pip 20.0+
 1. **Clone the repository**:
 
    ```bash
-   git clone https://github.com/yourusername/har-edge-framework.git
+   git clone https://github.com/Bill66613/AI_model_generator_framework.git
    cd har-edge-framework
    ```
 

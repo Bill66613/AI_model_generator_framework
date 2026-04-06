@@ -1317,7 +1317,7 @@ const float buffer_index_shift = WINDOW_SIZE * (1 - OVERLAP);""",
         elif self.platform == 'm5stack':
             # M5StickC Plus2 with built-in IMU via M5Unified
             return {
-                'includes': """#include "M5StickCPlus2.h"""",
+                'includes': '#include "M5StickCPlus2.h"',
                 'defines': """#define CONVERT_G_TO_MS2 9.80665f""",
                 'overlap_defines': f"""#define OVERLAP {self.overlap:.2f}  // {int(self.overlap * 100)}% overlap
 const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
@@ -1611,7 +1611,7 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
             raise ValidationError("platform must be a string")
 
         valid_platforms = ['arduino', 'arm_cortex_m',
-                           'esp32', 'teensy', 'seeed_xiao',
+                           'esp32', 'm5stack', 'teensy', 'seeed_xiao',
                            'generic_c', 'generic_cpp', 'esp_idf',
                            'micropython', 'zephyr']
         if platform not in valid_platforms:

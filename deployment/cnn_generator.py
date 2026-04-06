@@ -819,7 +819,7 @@ LSM6DS3 myIMU(I2C_MODE, 0x6A);  //I2C device address 0x6A""",
         elif self.platform == 'm5stack':
             # M5StickC Plus2 with built-in IMU via M5Unified
             return {
-                'includes': """#include "M5StickCPlus2.h" """,
+                'includes': '#include "M5StickCPlus2.h"',
                 'defines': """#define CONVERT_G_TO_MS2 9.80665f""",
                 'imu_init': """    // Initialize M5StickC Plus2
     auto cfg = M5.config();

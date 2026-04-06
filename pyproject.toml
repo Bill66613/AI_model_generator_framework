@@ -55,7 +55,7 @@ docs = [
 ]
 
 [project.urls]
-Repository = "https://github.com/yourusername/har-edge-framework"
+Repository = "https://github.com/Bill66613/AI_model_generator_framework"
 
 [build-system]
 requires = ["hatchling"]
