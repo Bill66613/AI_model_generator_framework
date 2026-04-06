@@ -104,13 +104,14 @@ BaseCodeGenerator (ABC)  ← base_generator.py (~1580 lines, feature extraction 
 
 ```bash
 # Run the app
-python app.py                    # Serves at http://127.0.0.1:8050
+uv run python app.py             # Or: .venv\Scripts\Activate.ps1 && python app.py
 
 # Run tests
-pytest tests/test_main.py -v     # pytest, single test file
+uv run pytest tests/test_main.py -v
 
-# Venv activation (Windows)
-.\venv\Scripts\Activate.ps1
+# Install dependencies
+uv sync                          # core
+uv sync --extra dev              # + pytest, black, flake8
 
 # Compile thesis (from academic-paper-vietnamese/)
 pdflatex main.tex && bibtex main && pdflatex main.tex && pdflatex main.tex

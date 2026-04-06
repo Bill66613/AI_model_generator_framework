@@ -23,6 +23,7 @@ This repository contains the implementation of a comprehensive framework for dev
 The framework leverages 6-axis IMU data (accelerometer and gyroscope) to classify human activities through machine learning models optimized for microcontroller deployment, specifically targeting the Seeed XIAO nRF52840 Sense platform.
 
 **✨ Key Features**:
+
 - 🎨 **Interactive Web Interface** - No coding required for basic operations
 - 📊 **Draggable Time Windowing** - Unique interactive data segmentation (not found in competitors!)
 - 🤖 **Multiple ML Algorithms** - Random Forest, SVM, Neural Networks
@@ -31,6 +32,7 @@ The framework leverages 6-axis IMU data (accelerometer and gyroscope) to classif
 - 🔓 **Fully Transparent** - Complete access to all algorithms and models
 
 **🆚 Why This Framework?**
+
 - ✅ **vs Edge Impulse**: Free, open-source, interactive windowing, academic focus
 - ✅ **vs SensiML**: No enterprise licensing, modern web UI, cross-platform
 - ✅ **vs TFLite Micro**: Complete end-to-end pipeline, user-friendly GUI
@@ -45,10 +47,15 @@ The framework leverages 6-axis IMU data (accelerometer and gyroscope) to classif
 git clone <repository-url>
 cd GUI_app
 
-# Install dependencies
-pip install -r requirements.txt
+# Option 1: uv (recommended — fast, reproducible)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  # one-time
+uv sync                          # creates .venv/ and installs everything
+uv run python app.py             # run the app
 
-# Run application
+# Option 2: plain pip
+python -m venv .venv
+.venv\Scripts\Activate.ps1       # Windows
+pip install -e .
 python app.py
 ```
 
@@ -88,6 +95,7 @@ Tab 6: Connect device and test real-time predictions
 | 6 | 📡 Device Testing | Real-time serial monitoring & live predictions | ✅ Complete |
 
 **🎯 Unique Features**:
+
 - **Interactive Windowing** (Tab 2): Drag-and-drop time window selection - **Not found in any competitor!**
 - **Unified Feature Engineering** (Tab 3): Process all activities with identical settings - prevents inconsistencies
 - **Real-Time Debug Console** (Tab 6): Live troubleshooting with device communication logs
@@ -99,12 +107,14 @@ Tab 6: Connect device and test real-time predictions
 ### ✅ Current Capabilities (v1.0)
 
 **Data Management**:
+
 - ✅ CSV upload with 6-axis IMU data (aX, aY, aZ, gX, gY, gZ)
 - ✅ Activity labeling and organization
 - ✅ Interactive visualization of sensor data
 - ✅ Automatic dataset storage and management
 
 **Signal Processing**:
+
 - ✅ Low-pass filtering (Butterworth)
 - ✅ Outlier removal (3-sigma method)
 - ✅ Data smoothing (moving average)
@@ -113,6 +123,7 @@ Tab 6: Connect device and test real-time predictions
 - ✅ Configurable window size and overlap
 
 **Feature Extraction**:
+
 - ✅ 138 total features (90 time-domain + 48 frequency-domain)
 - ✅ Per-axis statistics (mean, std, min, max, variance, etc.)
 - ✅ FFT-based frequency features
@@ -120,6 +131,7 @@ Tab 6: Connect device and test real-time predictions
 - ✅ Unified processing for all activity classes
 
 **Machine Learning**:
+
 - ✅ Random Forest (optimized for edge devices)
 - ✅ Support Vector Machine (RBF kernel)
 - ✅ Neural Networks (TensorFlow/Keras)
@@ -128,6 +140,7 @@ Tab 6: Connect device and test real-time predictions
 - ✅ Confusion matrix visualization
 
 **Code Generation**:
+
 - ✅ Arduino-compatible C/C++ code
 - ✅ Platform-specific sensor drivers (LSM6DS3, MPU6050)
 - ✅ Embedded model inference
@@ -135,6 +148,7 @@ Tab 6: Connect device and test real-time predictions
 - ✅ Ready-to-upload .ino files
 
 **Device Testing**:
+
 - ✅ Real-time serial communication (UART)
 - ✅ Live 6-axis sensor visualization
 - ✅ Live activity predictions with confidence
@@ -144,21 +158,25 @@ Tab 6: Connect device and test real-time predictions
 ### ⚠️ Known Limitations
 
 **Data**:
+
 - ❌ No multi-label support (one activity per dataset)
 - ❌ No automatic sampling rate detection
 - ❌ Fixed 6-axis IMU (no magnetometer, barometer)
 
 **Preprocessing**:
+
 - ❌ No data augmentation (rotation, scaling, jitter)
 - ❌ No automatic quality assessment
 
 **Training**:
+
 - ❌ No hyperparameter tuning UI
 - ❌ No cross-validation (only single split)
 - ❌ No model comparison (can't train multiple models simultaneously)
 - ❌ No learning curve visualization
 
 **Deployment**:
+
 - ❌ Neural Networks require TFLite Micro (more complex)
 - ❌ No automatic memory estimation
 - ❌ No over-the-air (OTA) updates
@@ -261,7 +279,7 @@ The framework consists of four main modules:
 
 ### Core Technologies
 
-- **Backend**: Python 3.8+ with Dash framework for interactive web-based GUI
+- **Backend**: Python 3.10+ with Dash framework for interactive web-based GUI
 - **Data Processing**: Pandas, NumPy, SciPy for numerical computations
 - **Visualization**: Plotly for interactive data visualization with advanced user interaction
 - **Machine Learning**: Scikit-learn, TensorFlow Lite for model training and optimization
@@ -312,8 +330,8 @@ Timestamp, aX, aY, aZ, gX, gY, gZ, [Label]
 ### Prerequisites
 
 ```bash
-Python 3.8+
-pip 20.0+
+Python 3.10+
+uv (recommended) or pip 20.0+
 ```
 
 ### Installation
@@ -325,19 +343,47 @@ pip 20.0+
    cd har-edge-framework
    ```
 
-2. **Install dependencies**:
+2. **Install [uv](https://docs.astral.sh/uv/getting-started/installation/)** (one-time):
 
    ```bash
-   pip install -r requirements.txt
+   # Windows
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   # macOS / Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
-3. **Launch the application**:
+3. **Install dependencies** (creates `.venv/` automatically):
 
    ```bash
-   python app.py
+   uv sync                    # core dependencies
+   uv sync --extra dev        # + pytest, black, flake8
+   uv sync --extra onnx       # + ONNX model export
+   uv sync --extra tflite     # + TFLite Micro deployment
+   uv sync --extra docs       # + Sphinx documentation
    ```
 
-4. **Access the GUI**: Navigate to `http://localhost:8050` in your web browser
+4. **Launch the application**:
+
+   ```bash
+   uv run python app.py
+   # or activate the venv and run directly:
+   # .venv\Scripts\Activate.ps1 && python app.py
+   ```
+
+5. **Access the GUI**: Navigate to `http://localhost:8050` in your web browser
+
+<details>
+<summary>Alternative: plain pip (without uv)</summary>
+
+```bash
+python -m venv .venv
+.venv\Scripts\Activate.ps1   # Windows
+pip install -e .             # reads pyproject.toml
+pip install -e ".[dev]"      # with dev tools
+python app.py
+```
+
+</details>
 
 ### Quick Start Workflow
 
@@ -506,7 +552,9 @@ The edge AI/HAR market currently suffers from fragmentation and accessibility ba
 
 ```tree
 ├── app.py                      # Main application entry point
-├── requirements.txt            # Python dependencies
+├── pyproject.toml              # Python dependencies & project metadata (PEP 621)
+├── uv.lock                     # Locked dependency versions (reproducible installs)
+├── requirements.txt            # Legacy fallback (pip install -r)
 ├── config/                     # Configuration management
 │   └── config.py              # Path and system configuration
 ├── layouts/                    # GUI layout components
@@ -567,7 +615,7 @@ If you use this framework in your research, please cite:
 
 **Author**: Nguyen Truong Minh Hoang
 **Institution**: Ho Chi Minh city University of Technology
-**Email**: ntmhoang.sdh222@edu.hcmut.com
+**Email**: <ntmhoang.sdh222@edu.hcmut.com>
 **LinkedIn**: [Your LinkedIn Profile]
 
 ## 📜 License

@@ -3,6 +3,7 @@
 ## Project Identity
 
 Master's thesis project: **Human Activity Recognition Edge Deployment Framework**
+
 - Student: Nguyen Truong Minh Hoang (MSSV: 2270757)
 - Supervisor: Dr. Le Trong Nhan
 - Thesis report language: Vietnamese (`academic-paper-vietnamese/`)
@@ -36,15 +37,18 @@ academic-paper-vietnamese/ ← Thesis LaTeX source
 ## Documentation Policy
 
 When making any code change, ask: *"Is this a novel finding or differentiating feature vs Edge Impulse/SensiML?"*
+
 - If yes → document in `academic-paper-vietnamese/TECHNICAL_FINDINGS.md`
 - Also note in `academic-paper-vietnamese/THESIS_REPORT_INSTRUCTIONS.md`
 
 ## Key Commands
 
 ```bash
-python app.py                    # Run app at http://127.0.0.1:8050
-pytest tests/test_main.py -v     # Run tests
-.\venv\Scripts\Activate.ps1      # Activate venv (Windows)
+uv run python app.py             # Run app at http://127.0.0.1:8050
+uv run pytest tests/test_main.py -v  # Run tests
+uv sync                          # Install/sync dependencies
+uv sync --extra dev              # + dev tools
+.venv\Scripts\Activate.ps1       # Activate venv (Windows)
 ```
 
 ## Feature Types (6 modes)
@@ -65,6 +69,7 @@ Canonical: `['aX','aY','aZ','gX','gY','gZ']`
 ## Git Worktree Convention
 
 This project uses git worktrees for parallel work:
+
 - `main` — stable, tested code
 - Feature branches get their own worktree in `../GUI_app-{branch-name}/`
 - Each Claude Code session works in its own worktree to avoid conflicts
@@ -73,6 +78,7 @@ This project uses git worktrees for parallel work:
 ## Agent Routing
 
 Use specialized agents via `.claude/commands/`:
+
 - `/thesis` — Thesis writing and LaTeX tasks
 - `/codegen` — Code generator modifications (parity-critical)
 - `/frontend` — Dash layout/callback work
