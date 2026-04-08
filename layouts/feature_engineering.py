@@ -487,7 +487,6 @@ layout = html.Div([
 
         # Hidden stores
         dcc.Store(id='engineered-dataset-store'),
-        dcc.Store(id='selected-labels-store')
 
     ], style={
         'max-width': '1400px',

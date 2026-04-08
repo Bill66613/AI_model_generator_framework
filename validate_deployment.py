@@ -457,18 +457,65 @@ class DeploymentValidator:
 
 
 def main():
-    """Main validation routine."""
+    """Main validation routine.
+
+    Usage:
+        python validate_deployment.py <model_path> <training_csv>
+
+    If no arguments are provided, the script looks for model and training
+    files under persistent_data/ relative to the project root.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Validate deployment: compare Python model vs generated C++ code."
+    )
+    parser.add_argument(
+        "model_path", nargs="?", default=None,
+        help="Path to the .joblib model file. If omitted, searches persistent_data/models/.",
+    )
+    parser.add_argument(
+        "training_csv", nargs="?", default=None,
+        help="Path to the training CSV. If omitted, searches persistent_data/training/.",
+    )
+    args = parser.parse_args()
+
+    # Resolve paths — fall back to auto-discovery in persistent_data/
+    base_dir = Path(__file__).parent / "persistent_data"
+
+    if args.model_path:
+        model_path = Path(args.model_path)
+    else:
+        models_dir = base_dir / "models"
+        if not models_dir.exists():
+            print(f"❌ Models directory not found: {models_dir}")
+            print("   Provide model_path as a CLI argument.")
+            sys.exit(1)
+        joblib_files = sorted(models_dir.glob("*.joblib"))
+        if not joblib_files:
+            print(f"❌ No .joblib files found in {models_dir}")
+            sys.exit(1)
+        model_path = joblib_files[-1]  # most recent
+        print(f"Auto-detected model: {model_path}")
+
+    if args.training_csv:
+        training_csv = Path(args.training_csv)
+    else:
+        training_dir = base_dir / "training"
+        if not training_dir.exists():
+            print(f"❌ Training directory not found: {training_dir}")
+            print("   Provide training_csv as a CLI argument.")
+            sys.exit(1)
+        csv_files = sorted(training_dir.glob("*_train.csv"))
+        if not csv_files:
+            print(f"❌ No *_train.csv files found in {training_dir}")
+            sys.exit(1)
+        training_csv = csv_files[-1]  # most recent
+        print(f"Auto-detected training CSV: {training_csv}")
 
     print("="*80)
     print("DEPLOYMENT CODE VALIDATION")
     print("="*80)
-
-    # Paths
-    base_dir = Path(r"d:\Workspaces\Master\ComputerScience\Thesis\GUI_app")
-    model_path = base_dir / "persistent_data_new" / "models" / \
-        "neural_network_har_model_20260204_232342.joblib"
-    training_csv = base_dir / "persistent_data_new" / \
-        "training" / "running_still_walking_and_2_more_train.csv"
 
     # Create validator
     validator = DeploymentValidator(model_path, training_csv)

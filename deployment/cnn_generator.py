@@ -622,20 +622,12 @@ static void dense(const float *input, float *output,
 
     @staticmethod
     def _wrap_vals(vals: str, width: int = 100) -> str:
-        """Insert newlines every ~`width` characters for readability."""
-        tokens = vals.split(", ")
-        lines: List[str] = []
-        line = ""
-        for t in tokens:
-            candidate = f"{line}, {t}" if line else t
-            if len(candidate) > width and line:
-                lines.append(line)
-                line = t
-            else:
-                line = candidate
-        if line:
-            lines.append(line)
-        return ",\n    ".join(lines) if len(lines) > 1 else (lines[0] if lines else "")
+        """Insert newlines every ~`width` characters for readability.
+
+        Delegates to the shared implementation in quantization module.
+        """
+        from .quantization import _wrap_c_values
+        return _wrap_c_values(vals, width)
 
     # ---- forward-pass code generation ----
 
