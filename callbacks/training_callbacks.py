@@ -15,8 +15,7 @@ import numpy as np
 from dash import Input, Output, State, no_update, dcc, html, ctx
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, classification_report
-import seaborn as sns
-import matplotlib.pyplot as plt
+
 import base64
 import io
 import time

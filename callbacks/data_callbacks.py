@@ -216,18 +216,25 @@ def register_callbacks(app):
         if not base_dir:
             base_dir = PERSISTENT_DIR
 
-        # Remove all files in the persistent directory
-        for file in os.listdir(base_dir):
-            file_path = os.path.join(base_dir, file)
-            if os.path.isfile(file_path):
-                os.remove(file_path)
+        try:
+            # Remove all files in the persistent directory
+            for file in os.listdir(base_dir):
+                file_path = os.path.join(base_dir, file)
+                if os.path.isfile(file_path):
+                    try:
+                        os.remove(file_path)
+                    except OSError as e:
+                        # Log but continue — best effort removal
+                        print(f"Warning: could not remove {file_path}: {e}")
 
-        # Reset metadata
-        metadata_file = os.path.join(base_dir, 'metadata.json')
-        with open(metadata_file, 'w') as f:
-            json.dump({}, f)
+            # Reset metadata
+            metadata_file = os.path.join(base_dir, 'metadata.json')
+            with open(metadata_file, 'w') as f:
+                json.dump({}, f)
 
-        return "✅ All data and metadata have been cleared."
+            return "✅ All data and metadata have been cleared."
+        except Exception as e:
+            return f"❌ Error clearing data: {str(e)}"
 
     @app.callback(
         Output('data-preview', 'figure', True),
@@ -238,46 +245,49 @@ def register_callbacks(app):
     def filter_and_display_data(dataset_name, base_dir):
         """Filters the dataset and displays it as a chart."""
         if dataset_name:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
-            metadata_file = os.path.join(base_dir, 'metadata.json')
+            try:
+                if not base_dir:
+                    base_dir = PERSISTENT_DIR
+                metadata_file = os.path.join(base_dir, 'metadata.json')
 
-            # Load existing metadata
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
+                # Load existing metadata
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
 
-            sampling_rate = metadata.get(
-                dataset_name, {}).get("sampling_rate", 100)
+                sampling_rate = metadata.get(
+                    dataset_name, {}).get("sampling_rate", 100)
 
-            file_path = metadata[dataset_name].get("path")
-            if not file_path:
-                file_path = os.path.join(base_dir, 'datasets', dataset_name)
-            if os.path.exists(file_path):
-                df = pd.read_csv(file_path)
+                file_path = metadata.get(dataset_name, {}).get("path")
+                if not file_path:
+                    file_path = os.path.join(base_dir, 'datasets', dataset_name)
+                if os.path.exists(file_path):
+                    df = pd.read_csv(file_path)
 
-                # Add a time axis based on the sampling rate
-                df['Time_seconds'] = pd.Series(
-                    range(df.shape[0])) / sampling_rate
+                    # Add a time axis based on the sampling rate
+                    df['Time_seconds'] = pd.Series(
+                        range(df.shape[0])) / sampling_rate
 
-                # Get numeric sensor columns (exclude Time_seconds and non-numeric like labels)
-                sensor_cols = [
-                    col for col in df.select_dtypes(include='number').columns if col != 'Time_seconds']
+                    # Get numeric sensor columns (exclude Time_seconds and non-numeric like labels)
+                    sensor_cols = [
+                        col for col in df.select_dtypes(include='number').columns if col != 'Time_seconds']
 
-                # Limit to first 6 columns for better visualization
-                sensor_cols = sensor_cols[:6]
+                    # Limit to first 6 columns for better visualization
+                    sensor_cols = sensor_cols[:6]
 
-                if sensor_cols:
-                    # Generate a line chart with plotly_white template to avoid compatibility issues
-                    fig = px.line(df, x="Time_seconds", y=sensor_cols,
-                                  title=f"Filtered Preview of {dataset_name}",
-                                  template="plotly_white")
-                    fig.update_layout(
-                        xaxis_title="Time (seconds)",
-                        yaxis_title="Sensor Values",
-                        height=400,
-                        showlegend=True
-                    )
-                    return fig
+                    if sensor_cols:
+                        # Generate a line chart with plotly_white template to avoid compatibility issues
+                        fig = px.line(df, x="Time_seconds", y=sensor_cols,
+                                      title=f"Filtered Preview of {dataset_name}",
+                                      template="plotly_white")
+                        fig.update_layout(
+                            xaxis_title="Time (seconds)",
+                            yaxis_title="Sensor Values",
+                            height=400,
+                            showlegend=True
+                        )
+                        return fig
+            except (json.JSONDecodeError, IOError, KeyError) as e:
+                print(f"Error loading dataset '{dataset_name}': {e}")
         return {}
 
     @app.callback(

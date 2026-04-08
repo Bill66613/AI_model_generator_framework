@@ -228,7 +228,10 @@ class TestConfiguration:
         """Test that required directories exist or can be created."""
         # This would be more complex in a real test environment
         # For now, just check that paths are defined
-        assert os.path.isdir(os.path.dirname(METADATA_FILE)) or True  # Directory should exist or be creatable
+        metadata_dir = os.path.dirname(METADATA_FILE)
+        assert os.path.isdir(metadata_dir) or not metadata_dir, (
+            f"METADATA_FILE directory does not exist: {metadata_dir}"
+        )
 
 
 if __name__ == '__main__':

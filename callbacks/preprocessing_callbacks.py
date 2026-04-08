@@ -217,92 +217,32 @@ def register_callbacks(app):
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
+        try:
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
 
-        dataset_info = metadata.get(dataset_name, {})
+            dataset_info = metadata.get(dataset_name, {})
 
-        # Determine processing stages
-        stages = {
-            'raw': True,  # Always true if dataset exists
-            'preprocessed': 'cleaned_data_path' in dataset_info,
-            'split': 'dragged_samples' in dataset_info and len(dataset_info.get('dragged_samples', [])) > 0,
-            'training_ready': False  # Check for training data files
-        }
+            # Determine processing stages
+            stages = {
+                'raw': True,  # Always true if dataset exists
+                'preprocessed': 'cleaned_data_path' in dataset_info,
+                'split': 'dragged_samples' in dataset_info and len(dataset_info.get('dragged_samples', [])) > 0,
+                'training_ready': False  # Check for training data files
+            }
 
-        # Check if training data exists
-        train_file = get_training_data_path(dataset_name, 'train', base_dir)
-        test_file = get_training_data_path(dataset_name, 'test', base_dir)
-        stages['training_ready'] = os.path.exists(
-            train_file) and os.path.exists(test_file)
+            # Check if training data exists
+            train_file = get_training_data_path(dataset_name, 'train', base_dir)
+            test_file = get_training_data_path(dataset_name, 'test', base_dir)
+            stages['training_ready'] = os.path.exists(
+                train_file) and os.path.exists(test_file)
 
-        # Create status display
-        status_badges = []
+            # Create status display
+            status_badges = []
 
-        # Raw Data Status
-        status_badges.append(
-            html.Span("📁 Raw Data", className="badge", style={
-                'background-color': '#6c757d',
-                'color': 'white',
-                'padding': '6px 12px',
-                'border-radius': '12px',
-                'margin-right': '8px',
-                'margin-bottom': '8px',
-                'font-size': '12px',
-                'display': 'inline-block'
-            })
-        )
-
-        # Signal Preprocessed Status
-        if stages['preprocessed']:
+            # Raw Data Status
             status_badges.append(
-                html.Span("🔧 Signal Processed", className="badge", style={
-                    'background-color': '#17a2b8',
-                    'color': 'white',
-                    'padding': '6px 12px',
-                    'border-radius': '12px',
-                    'margin-right': '8px',
-                    'margin-bottom': '8px',
-                    'font-size': '12px',
-                    'display': 'inline-block'
-                })
-            )
-        else:
-            status_badges.append(
-                html.Span("⏳ Signal Processing Pending", className="badge", style={
-                    'background-color': '#ffc107',
-                    'color': '#212529',
-                    'padding': '6px 12px',
-                    'border-radius': '12px',
-                    'margin-right': '8px',
-                    'margin-bottom': '8px',
-                    'font-size': '12px',
-                    'display': 'inline-block'
-                })
-            )
-
-        # Split Status
-        if stages['split']:
-            # Count only files that actually exist on disk
-            dragged_samples = dataset_info.get('dragged_samples', [])
-            actual_split_count = sum(
-                1 for file_path in dragged_samples if os.path.exists(file_path))
-
-            status_badges.append(
-                html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
-                    'background-color': '#fd7e14',
-                    'color': 'white',
-                    'padding': '6px 12px',
-                    'border-radius': '12px',
-                    'margin-right': '8px',
-                    'margin-bottom': '8px',
-                    'font-size': '12px',
-                    'display': 'inline-block'
-                })
-            )
-        else:
-            status_badges.append(
-                html.Span("⏳ Split Pending", className="badge", style={
+                html.Span("📁 Raw Data", className="badge", style={
                     'background-color': '#6c757d',
                     'color': 'white',
                     'padding': '6px 12px',
@@ -314,104 +254,170 @@ def register_callbacks(app):
                 })
             )
 
-        # Training Data Status
-        if stages['training_ready']:
-            status_badges.append(
-                html.Span("🚀 Training Ready", className="badge", style={
-                    'background-color': '#28a745',
-                    'color': 'white',
-                    'padding': '6px 12px',
-                    'border-radius': '12px',
-                    'margin-right': '8px',
-                    'margin-bottom': '8px',
-                    'font-size': '12px',
-                    'display': 'inline-block'
-                })
-            )
-        else:
-            status_badges.append(
-                html.Span("⏳ Training Prep Pending", className="badge", style={
-                    'background-color': '#6c757d',
-                    'color': 'white',
-                    'padding': '6px 12px',
-                    'border-radius': '12px',
-                    'margin-right': '8px',
-                    'margin-bottom': '8px',
-                    'font-size': '12px',
-                    'display': 'inline-block'
-                })
-            )
-
-        # Create comprehensive status display
-        status_display = html.Div([
-            html.H6("📊 Dataset Processing Status", style={
-                'margin-bottom': '10px',
-                'color': '#495057',
-                'font-weight': 'bold'
-            }),
-            html.Div(status_badges, style={'line-height': '2.5'}),
-            html.Hr(style={'margin': '15px 0'}),
-            html.Div([
-                html.Small(f"📁 Dataset: {dataset_name}", style={
-                    'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
-                html.Small(f"📡 Sampling Rate: {dataset_info.get('sampling_rate', 'Unknown')} Hz", style={
-                    'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
-                html.Small(f"🏷️ Activity: {dataset_info.get('label', 'Unknown')}", style={
-                    'display': 'block', 'color': '#6c757d'})
-            ])
-        ], style={
-            'background-color': '#f8f9fa',
-            'padding': '15px',
-            'border-radius': '8px',
-            'border': '1px solid #dee2e6'
-        })
-
-        # Load and display the graph
-        if stages['preprocessed']:
-            file_path = dataset_info["cleaned_data_path"]
-        else:
-            file_path = dataset_info["path"]
-
-        if os.path.exists(file_path):
-            df = pd.read_csv(file_path)
-
-            # Create time axis for proper labeling
-            sampling_rate = dataset_info.get('sampling_rate', 100)
-            df['Time_seconds'] = df.index / sampling_rate
-
-            # Get sensor columns for plotting
-            sensor_cols = [
-                col for col in df.columns if col not in ['Time_seconds']]
-
-            # Create figure with proper time axis
-            fig = go.Figure()
-            colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
-                      '#d62728', '#9467bd', '#8c564b']
-
-            # Limit to 6 sensors for clarity
-            for i, col in enumerate(sensor_cols[:6]):
-                fig.add_trace(
-                    go.Scatter(
-                        x=df['Time_seconds'],
-                        y=df[col],
-                        name=col,
-                        line=dict(color=colors[i % len(colors)], width=2),
-                        hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
-                    )
+            # Signal Preprocessed Status
+            if stages['preprocessed']:
+                status_badges.append(
+                    html.Span("🔧 Signal Processed", className="badge", style={
+                        'background-color': '#17a2b8',
+                        'color': 'white',
+                        'padding': '6px 12px',
+                        'border-radius': '12px',
+                        'margin-right': '8px',
+                        'margin-bottom': '8px',
+                        'font-size': '12px',
+                        'display': 'inline-block'
+                    })
+                )
+            else:
+                status_badges.append(
+                    html.Span("⏳ Signal Processing Pending", className="badge", style={
+                        'background-color': '#ffc107',
+                        'color': '#212529',
+                        'padding': '6px 12px',
+                        'border-radius': '12px',
+                        'margin-right': '8px',
+                        'margin-bottom': '8px',
+                        'font-size': '12px',
+                        'display': 'inline-block'
+                    })
                 )
 
-            fig.update_layout(
-                title=f"Preview of {dataset_name} ({'Signal Processed' if stages['preprocessed'] else 'Raw Data'})",
-                xaxis_title="Time (seconds)",
-                yaxis_title="Sensor Values",
-                height=400,
-                showlegend=True,
-                hovermode='x unified'
-            )
+            # Split Status
+            if stages['split']:
+                # Count only files that actually exist on disk
+                dragged_samples = dataset_info.get('dragged_samples', [])
+                actual_split_count = sum(
+                    1 for file_path in dragged_samples if os.path.exists(file_path))
 
-            return fig, status_display
+                status_badges.append(
+                    html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
+                        'background-color': '#fd7e14',
+                        'color': 'white',
+                        'padding': '6px 12px',
+                        'border-radius': '12px',
+                        'margin-right': '8px',
+                        'margin-bottom': '8px',
+                        'font-size': '12px',
+                        'display': 'inline-block'
+                    })
+                )
+            else:
+                status_badges.append(
+                    html.Span("⏳ Split Pending", className="badge", style={
+                        'background-color': '#6c757d',
+                        'color': 'white',
+                        'padding': '6px 12px',
+                        'border-radius': '12px',
+                        'margin-right': '8px',
+                        'margin-bottom': '8px',
+                        'font-size': '12px',
+                        'display': 'inline-block'
+                    })
+                )
 
-        return {}, status_display
+            # Training Data Status
+            if stages['training_ready']:
+                status_badges.append(
+                    html.Span("🚀 Training Ready", className="badge", style={
+                        'background-color': '#28a745',
+                        'color': 'white',
+                        'padding': '6px 12px',
+                        'border-radius': '12px',
+                        'margin-right': '8px',
+                        'margin-bottom': '8px',
+                        'font-size': '12px',
+                        'display': 'inline-block'
+                    })
+                )
+            else:
+                status_badges.append(
+                    html.Span("⏳ Training Prep Pending", className="badge", style={
+                        'background-color': '#6c757d',
+                        'color': 'white',
+                        'padding': '6px 12px',
+                        'border-radius': '12px',
+                        'margin-right': '8px',
+                        'margin-bottom': '8px',
+                        'font-size': '12px',
+                        'display': 'inline-block'
+                    })
+                )
+
+            # Create comprehensive status display
+            status_display = html.Div([
+                html.H6("📊 Dataset Processing Status", style={
+                    'margin-bottom': '10px',
+                    'color': '#495057',
+                    'font-weight': 'bold'
+                }),
+                html.Div(status_badges, style={'line-height': '2.5'}),
+                html.Hr(style={'margin': '15px 0'}),
+                html.Div([
+                    html.Small(f"📁 Dataset: {dataset_name}", style={
+                        'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
+                    html.Small(f"📡 Sampling Rate: {dataset_info.get('sampling_rate', 'Unknown')} Hz", style={
+                        'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
+                    html.Small(f"🏷️ Activity: {dataset_info.get('label', 'Unknown')}", style={
+                        'display': 'block', 'color': '#6c757d'})
+                ])
+            ], style={
+                'background-color': '#f8f9fa',
+                'padding': '15px',
+                'border-radius': '8px',
+                'border': '1px solid #dee2e6'
+            })
+
+            # Load and display the graph
+            if stages['preprocessed']:
+                file_path = dataset_info["cleaned_data_path"]
+            else:
+                file_path = dataset_info["path"]
+
+            if os.path.exists(file_path):
+                df = pd.read_csv(file_path)
+
+                # Create time axis for proper labeling
+                sampling_rate = dataset_info.get('sampling_rate', 100)
+                df['Time_seconds'] = df.index / sampling_rate
+
+                # Get sensor columns for plotting
+                sensor_cols = [
+                    col for col in df.columns if col not in ['Time_seconds']]
+
+                # Create figure with proper time axis
+                fig = go.Figure()
+                colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
+                          '#d62728', '#9467bd', '#8c564b']
+
+                # Limit to 6 sensors for clarity
+                for i, col in enumerate(sensor_cols[:6]):
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df['Time_seconds'],
+                            y=df[col],
+                            name=col,
+                            line=dict(color=colors[i % len(colors)], width=2),
+                            hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
+                        )
+                    )
+
+                fig.update_layout(
+                    title=f"Preview of {dataset_name} ({'Signal Processed' if stages['preprocessed'] else 'Raw Data'})",
+                    xaxis_title="Time (seconds)",
+                    yaxis_title="Sensor Values",
+                    height=400,
+                    showlegend=True,
+                    hovermode='x unified'
+                )
+
+                return fig, status_display
+
+            return {}, status_display
+
+        except (json.JSONDecodeError, IOError, KeyError) as e:
+            error_msg = html.Div(f"❌ Error loading dataset: {str(e)}",
+                                 style={'color': '#dc3545', 'font-style': 'italic'})
+            return {}, error_msg
 
 
     @app.callback(
@@ -435,60 +441,65 @@ def register_callbacks(app):
         if not os.path.exists(file_path):
             return no_update, no_update
 
-        # Load metadata to get the actual sampling rate for this dataset
-        metadata_file = os.path.join(base_dir, 'metadata.json')
-        sampling_rate = DEFAULT_SAMPLING_RATE
-        if os.path.exists(metadata_file):
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-            sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
+        try:
+            # Load metadata to get the actual sampling rate for this dataset
+            metadata_file = os.path.join(base_dir, 'metadata.json')
+            sampling_rate = DEFAULT_SAMPLING_RATE
+            if os.path.exists(metadata_file):
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
 
-        df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path)
 
-        # Clean the data
-        df = clean_data(df, method='remove_missing')
-        df = clean_data(df, method='filter_outliers')
+            # Clean the data
+            df = clean_data(df, method='remove_missing')
+            df = clean_data(df, method='filter_outliers')
 
-        # Apply low-pass filter (use actual sampling rate, not hardcoded fs=50)
-        df = low_pass_filter(df, cutoff=5, fs=sampling_rate, order=2)
+            # Apply low-pass filter (use actual sampling rate, not hardcoded fs=50)
+            df = low_pass_filter(df, cutoff=5, fs=sampling_rate, order=2)
 
-        # Apply Savitzky-Golay filter
-        for col in df.select_dtypes(include=['float64', 'int64']).columns:
-            df[col] = savgol_filter(df[col], window_length=5, polyorder=2)
+            # Apply Savitzky-Golay filter
+            for col in df.select_dtypes(include=['float64', 'int64']).columns:
+                df[col] = savgol_filter(df[col], window_length=5, polyorder=2)
 
-        # Create time axis for proper labeling
-        df['Time_seconds'] = df.index / sampling_rate
+            # Create time axis for proper labeling
+            df['Time_seconds'] = df.index / sampling_rate
 
-        # Get sensor columns for plotting
-        sensor_cols = [col for col in df.columns if col not in ['Time_seconds']]
+            # Get sensor columns for plotting
+            sensor_cols = [col for col in df.columns if col not in ['Time_seconds']]
 
-        # Create figure with proper time axis
-        fig = go.Figure()
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+            # Create figure with proper time axis
+            fig = go.Figure()
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
 
-        for i, col in enumerate(sensor_cols[:6]):  # Limit to 6 sensors for clarity
-            fig.add_trace(
-                go.Scatter(
-                    x=df['Time_seconds'],
-                    y=df[col],
-                    name=col,
-                    line=dict(color=colors[i % len(colors)], width=2),
-                    hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
+            for i, col in enumerate(sensor_cols[:6]):  # Limit to 6 sensors for clarity
+                fig.add_trace(
+                    go.Scatter(
+                        x=df['Time_seconds'],
+                        y=df[col],
+                        name=col,
+                        line=dict(color=colors[i % len(colors)], width=2),
+                        hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
+                    )
                 )
+
+            fig.update_layout(
+                title=f"Cleaned & Smoothed Data: {dataset_name}",
+                xaxis_title="Time (seconds)",
+                yaxis_title="Sensor Values",
+                height=400,
+                showlegend=True,
+                hovermode='x unified'
             )
 
-        fig.update_layout(
-            title=f"Cleaned & Smoothed Data: {dataset_name}",
-            xaxis_title="Time (seconds)",
-            yaxis_title="Sensor Values",
-            height=400,
-            showlegend=True,
-            hovermode='x unified'
-        )
+            stored_datasets = df.to_dict(orient='records')
 
-        stored_datasets = df.to_dict(orient='records')
+            return fig, stored_datasets
 
-        return fig, stored_datasets
+        except Exception as e:
+            logger.error(f"Error cleaning/smoothing dataset '{dataset_name}': {e}")
+            return no_update, no_update
 
 
     @app.callback(
