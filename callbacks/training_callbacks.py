@@ -77,6 +77,214 @@ def clean_label(x):
     return x
 
 
+# ---- Utility functions (module-level for testability and reuse) ----
+
+def save_model_metadata(model_filename, model_info, base_dir=None):
+    """Save model metadata to the models database."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+
+    models_dir = os.path.join(base_dir, 'models')
+    # Ensure models directory exists
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir)
+
+    model_metadata_file = os.path.join(models_dir, 'trained_models.json')
+
+    if os.path.exists(model_metadata_file):
+        with open(model_metadata_file, 'r') as f:
+            models_metadata = json.load(f)
+    else:
+        models_metadata = {}
+
+    models_metadata[model_filename] = model_info
+
+    with open(model_metadata_file, 'w') as f:
+        json.dump(models_metadata, f, indent=2)
+
+
+def load_trained_model_options(base_dir=None):
+    """Load available trained model options for dropdown."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+
+    model_options = []
+    try:
+        models_dir = os.path.join(base_dir, 'models')
+        model_metadata_file = os.path.join(
+            models_dir, 'trained_models.json')
+
+        if os.path.exists(model_metadata_file):
+            with open(model_metadata_file, 'r') as f:
+                models_metadata = json.load(f)
+
+            for model_filename, model_info in models_metadata.items():
+                model_options.append({
+                    'label': f"📊 {model_info['model_type'].replace('_', ' ').title()} - {model_info['timestamp']} (Acc: {model_info['test_accuracy']:.3f})",
+                    'value': model_filename
+                })
+    except Exception as e:
+        print(f"Error loading trained models: {e}")
+    return model_options
+
+
+def load_training_data_summary(base_dir=None):
+    """Load and display summary of available training data."""
+    if not base_dir:
+        base_dir = PERSISTENT_DIR
+
+    try:
+        training_dir = os.path.join(base_dir, 'training')
+        if not os.path.exists(training_dir):
+            return html.Div([
+                html.P("⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
+                       style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic'}),
+                html.P(f"Looking in: {training_dir}",
+                       style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
+            ])
+
+        # Find available datasets (prefer FE-produced files over stale splits)
+        train_files = _get_fe_train_files(training_dir)
+        if not train_files:
+            return html.Div([
+                html.P("⚠️ No training data found. Please complete Feature Engineering first.",
+                       style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic'}),
+                html.P(f"Looking in: {training_dir}",
+                       style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
+            ])
+
+        # Collect data statistics
+        all_train_dfs = []
+        all_test_dfs = []
+        all_val_dfs = []
+        all_feature_cols = set()
+
+        # Load all datasets to get statistics
+        for train_file in train_files:
+            dataset_name = os.path.basename(
+                train_file).replace('_train.csv', '')
+            test_file = get_training_data_path(
+                dataset_name, 'test', base_dir)
+            val_file = get_training_data_path(
+                dataset_name, 'val', base_dir)
+
+            if os.path.exists(train_file) and os.path.exists(test_file):
+                train_df = pd.read_csv(train_file)
+                test_df = pd.read_csv(test_file)
+
+                # Get feature columns
+                feature_cols = [
+                    col for col in train_df.columns if col != 'label']
+                all_feature_cols.update(feature_cols)
+
+                all_train_dfs.append(train_df)
+                all_test_dfs.append(test_df)
+
+                if os.path.exists(val_file):
+                    val_df = pd.read_csv(val_file)
+                    all_val_dfs.append(val_df)
+
+        # Combine datasets
+        train_df = pd.concat(
+            all_train_dfs, ignore_index=True) if all_train_dfs else None
+        test_df = pd.concat(
+            all_test_dfs, ignore_index=True) if all_test_dfs else None
+        val_df = pd.concat(
+            all_val_dfs, ignore_index=True) if all_val_dfs else None
+
+        if train_df is None:
+            return html.P(
+                "⚠️ Error loading training data.",
+                style={'text-align': 'center',
+                       'color': '#721c24', 'margin': '0'}
+            )
+
+        # Clean labels
+        train_df['label'] = train_df['label'].apply(clean_label)
+        test_df['label'] = test_df['label'].apply(clean_label)
+        if val_df is not None:
+            val_df['label'] = val_df['label'].apply(clean_label)
+
+        # Get unique labels
+        unique_labels = sorted(train_df['label'].unique())
+        label_counts = train_df['label'].value_counts()
+
+        # Build summary display
+        return html.Div([
+            html.Div([
+                html.Div([
+                    html.H5("📊 Dataset Overview", style={
+                            'color': '#2E86AB', 'margin-bottom': '15px'}),
+                    html.Div([
+                        html.Div([
+                            html.Strong("Training Samples: "),
+                            html.Span(f"{len(train_df):,}", style={
+                                      'color': '#28a745', 'font-size': '18px', 'font-weight': 'bold'})
+                        ], style={'margin-bottom': '8px'}),
+                        html.Div([
+                            html.Strong("Validation Samples: "),
+                            html.Span(f"{len(val_df):,}" if val_df is not None else "0",
+                                      style={'color': '#17a2b8', 'font-size': '18px', 'font-weight': 'bold'})
+                        ], style={'margin-bottom': '8px'}),
+                        html.Div([
+                            html.Strong("Test Samples: "),
+                            html.Span(f"{len(test_df):,}", style={
+                                      'color': '#ffc107', 'font-size': '18px', 'font-weight': 'bold'})
+                        ], style={'margin-bottom': '8px'}),
+                        html.Div([
+                            html.Strong("Features: "),
+                            html.Span(f"{len(all_feature_cols)}", style={
+                                      'color': '#6610f2', 'font-size': '18px', 'font-weight': 'bold'})
+                        ])
+                    ])
+                ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-right': '2%'}),
+
+                html.Div([
+                    html.H5("🏷️ Activity Classes", style={
+                            'color': '#2E86AB', 'margin-bottom': '15px'}),
+                    html.Div([
+                        html.Div([
+                            html.Strong("Total Classes: "),
+                            html.Span(f"{len(unique_labels)}", style={
+                                      'color': '#dc3545', 'font-size': '18px', 'font-weight': 'bold'})
+                        ], style={'margin-bottom': '10px'}),
+                        html.Div([
+                            html.Ul([
+                                html.Li([
+                                    html.Span(f"{label}", style={
+                                              'font-weight': 'bold'}),
+                                    html.Span(f" ({label_counts[label]} samples)", style={
+                                              'color': '#6c757d', 'font-size': '14px'})
+                                ]) for label in unique_labels
+                            ], style={'margin': '0', 'padding-left': '20px'})
+                        ])
+                    ])
+                ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-left': '2%'})
+            ]),
+
+            html.Hr(style={'margin': '20px 0', 'border-color': '#dee2e6'}),
+
+            html.Div([
+                html.P([
+                    html.Strong("📁 Datasets Loaded: "),
+                    html.Span(f"{len(train_files)} activity dataset(s)", style={
+                              'color': '#28a745'})
+                ], style={'margin': '0', 'text-align': 'center', 'color': '#495057'})
+            ])
+        ])
+
+    except Exception as e:
+        print(f"Error loading training data summary: {e}")
+        import traceback
+        traceback.print_exc()
+        return html.P(
+            f"⚠️ Error loading training data: {str(e)}",
+            style={'text-align': 'center',
+                   'color': '#721c24', 'margin': '0'}
+        )
+
+
+
 def register_callbacks(app):
     """Register all callbacks with the app."""
     @app.callback(
@@ -104,213 +312,6 @@ def register_callbacks(app):
         if tab == 'tab-4':  # Model Training tab
             return False, False, False, False, model_options, data_summary
         return True, True, True, True, model_options, data_summary
-
-    # Note: Feature configuration is handled in Feature Engineering tab
-    # Features are pre-computed and stored in CSV files, not configured during training
-
-    # Utility functions
-
-    def save_model_metadata(model_filename, model_info, base_dir=None):
-        """Save model metadata to the models database."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
-
-        models_dir = os.path.join(base_dir, 'models')
-        # Ensure models directory exists
-        if not os.path.exists(models_dir):
-            os.makedirs(models_dir)
-
-        model_metadata_file = os.path.join(models_dir, 'trained_models.json')
-
-        if os.path.exists(model_metadata_file):
-            with open(model_metadata_file, 'r') as f:
-                models_metadata = json.load(f)
-        else:
-            models_metadata = {}
-
-        models_metadata[model_filename] = model_info
-
-        with open(model_metadata_file, 'w') as f:
-            json.dump(models_metadata, f, indent=2)
-
-    def load_trained_model_options(base_dir=None):
-        """Load available trained model options for dropdown."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
-
-        model_options = []
-        try:
-            models_dir = os.path.join(base_dir, 'models')
-            model_metadata_file = os.path.join(
-                models_dir, 'trained_models.json')
-
-            if os.path.exists(model_metadata_file):
-                with open(model_metadata_file, 'r') as f:
-                    models_metadata = json.load(f)
-
-                for model_filename, model_info in models_metadata.items():
-                    model_options.append({
-                        'label': f"📊 {model_info['model_type'].replace('_', ' ').title()} - {model_info['timestamp']} (Acc: {model_info['test_accuracy']:.3f})",
-                        'value': model_filename
-                    })
-        except Exception as e:
-            print(f"Error loading trained models: {e}")
-        return model_options
-
-    def load_training_data_summary(base_dir=None):
-        """Load and display summary of available training data."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
-
-        try:
-            training_dir = os.path.join(base_dir, 'training')
-            if not os.path.exists(training_dir):
-                return html.Div([
-                    html.P("⚠️ No training data found. Please complete the train-validation-test split in the Preprocessing tab.",
-                           style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic'}),
-                    html.P(f"Looking in: {training_dir}",
-                           style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
-                ])
-
-            # Find available datasets (prefer FE-produced files over stale splits)
-            train_files = _get_fe_train_files(training_dir)
-            if not train_files:
-                return html.Div([
-                    html.P("⚠️ No training data found. Please complete Feature Engineering first.",
-                           style={'text-align': 'center', 'color': '#856404', 'font-style': 'italic'}),
-                    html.P(f"Looking in: {training_dir}",
-                           style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
-                ])
-
-            # Collect data statistics
-            all_train_dfs = []
-            all_test_dfs = []
-            all_val_dfs = []
-            all_feature_cols = set()
-
-            # Load all datasets to get statistics
-            for train_file in train_files:
-                dataset_name = os.path.basename(
-                    train_file).replace('_train.csv', '')
-                test_file = get_training_data_path(
-                    dataset_name, 'test', base_dir)
-                val_file = get_training_data_path(
-                    dataset_name, 'val', base_dir)
-
-                if os.path.exists(train_file) and os.path.exists(test_file):
-                    train_df = pd.read_csv(train_file)
-                    test_df = pd.read_csv(test_file)
-
-                    # Get feature columns
-                    feature_cols = [
-                        col for col in train_df.columns if col != 'label']
-                    all_feature_cols.update(feature_cols)
-
-                    all_train_dfs.append(train_df)
-                    all_test_dfs.append(test_df)
-
-                    if os.path.exists(val_file):
-                        val_df = pd.read_csv(val_file)
-                        all_val_dfs.append(val_df)
-
-            # Combine datasets
-            train_df = pd.concat(
-                all_train_dfs, ignore_index=True) if all_train_dfs else None
-            test_df = pd.concat(
-                all_test_dfs, ignore_index=True) if all_test_dfs else None
-            val_df = pd.concat(
-                all_val_dfs, ignore_index=True) if all_val_dfs else None
-
-            if train_df is None:
-                return html.P(
-                    "⚠️ Error loading training data.",
-                    style={'text-align': 'center',
-                           'color': '#721c24', 'margin': '0'}
-                )
-
-            # Clean labels
-            train_df['label'] = train_df['label'].apply(clean_label)
-            test_df['label'] = test_df['label'].apply(clean_label)
-            if val_df is not None:
-                val_df['label'] = val_df['label'].apply(clean_label)
-
-            # Get unique labels
-            unique_labels = sorted(train_df['label'].unique())
-            label_counts = train_df['label'].value_counts()
-
-            # Build summary display
-            return html.Div([
-                html.Div([
-                    html.Div([
-                        html.H5("📊 Dataset Overview", style={
-                                'color': '#2E86AB', 'margin-bottom': '15px'}),
-                        html.Div([
-                            html.Div([
-                                html.Strong("Training Samples: "),
-                                html.Span(f"{len(train_df):,}", style={
-                                          'color': '#28a745', 'font-size': '18px', 'font-weight': 'bold'})
-                            ], style={'margin-bottom': '8px'}),
-                            html.Div([
-                                html.Strong("Validation Samples: "),
-                                html.Span(f"{len(val_df):,}" if val_df is not None else "0",
-                                          style={'color': '#17a2b8', 'font-size': '18px', 'font-weight': 'bold'})
-                            ], style={'margin-bottom': '8px'}),
-                            html.Div([
-                                html.Strong("Test Samples: "),
-                                html.Span(f"{len(test_df):,}", style={
-                                          'color': '#ffc107', 'font-size': '18px', 'font-weight': 'bold'})
-                            ], style={'margin-bottom': '8px'}),
-                            html.Div([
-                                html.Strong("Features: "),
-                                html.Span(f"{len(all_feature_cols)}", style={
-                                          'color': '#6610f2', 'font-size': '18px', 'font-weight': 'bold'})
-                            ])
-                        ])
-                    ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-right': '2%'}),
-
-                    html.Div([
-                        html.H5("🏷️ Activity Classes", style={
-                                'color': '#2E86AB', 'margin-bottom': '15px'}),
-                        html.Div([
-                            html.Div([
-                                html.Strong("Total Classes: "),
-                                html.Span(f"{len(unique_labels)}", style={
-                                          'color': '#dc3545', 'font-size': '18px', 'font-weight': 'bold'})
-                            ], style={'margin-bottom': '10px'}),
-                            html.Div([
-                                html.Ul([
-                                    html.Li([
-                                        html.Span(f"{label}", style={
-                                                  'font-weight': 'bold'}),
-                                        html.Span(f" ({label_counts[label]} samples)", style={
-                                                  'color': '#6c757d', 'font-size': '14px'})
-                                    ]) for label in unique_labels
-                                ], style={'margin': '0', 'padding-left': '20px'})
-                            ])
-                        ])
-                    ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top', 'padding-left': '2%'})
-                ]),
-
-                html.Hr(style={'margin': '20px 0', 'border-color': '#dee2e6'}),
-
-                html.Div([
-                    html.P([
-                        html.Strong("📁 Datasets Loaded: "),
-                        html.Span(f"{len(train_files)} activity dataset(s)", style={
-                                  'color': '#28a745'})
-                    ], style={'margin': '0', 'text-align': 'center', 'color': '#495057'})
-                ])
-            ])
-
-        except Exception as e:
-            print(f"Error loading training data summary: {e}")
-            import traceback
-            traceback.print_exc()
-            return html.P(
-                f"⚠️ Error loading training data: {str(e)}",
-                style={'text-align': 'center',
-                       'color': '#721c24', 'margin': '0'}
-            )
 
     def create_training_results_display(model_info, evaluation_results, y_test, model_type, training_time):
         """Create comprehensive training results display with detailed metrics."""

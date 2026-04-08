@@ -1,1 +1,3 @@
-# Empty __init__.py file for config package
+"""Configuration module for the HAR Edge Deployment Framework."""
+
+__all__ = ['config']

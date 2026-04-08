@@ -202,17 +202,22 @@ class TestTimeDomainParity:
     # due to population-vs-sample std in z-score denominator
     HIGHER_TOL_FEATURES = ['skewness', 'kurtosis']
 
-    def test_acc_mag_stats_parity(self, synthetic_window):
-        """acc_mag time-domain features: Python vs C++ formulas."""
+    @pytest.mark.parametrize("mag_name,accel_cols,gyro_cols", [
+        ("acc_mag", ['aX', 'aY', 'aZ'], None),
+        ("gyro_mag", None, ['gX', 'gY', 'gZ']),
+    ])
+    def test_magnitude_stats_parity(self, synthetic_window, mag_name, accel_cols, gyro_cols):
+        """Magnitude time-domain features: Python vs C++ formulas."""
         df = synthetic_window
         py_feats = extract_orientation_invariant_features(df)
 
-        # Compute acc_mag the same way Python does
-        acc_mag = np.sqrt(df['aX'].values**2 + df['aY'].values**2 + df['aZ'].values**2)
-        cpp_stats = _cpp_magnitude_stats(acc_mag)
+        # Compute magnitude the same way Python does
+        cols = accel_cols if accel_cols else gyro_cols
+        mag = np.sqrt(sum(df[c].values**2 for c in cols))
+        cpp_stats = _cpp_magnitude_stats(mag)
 
         for stat_name, cpp_val in cpp_stats.items():
-            py_col = f'acc_mag_{stat_name}'
+            py_col = f'{mag_name}_{stat_name}'
             assert py_col in py_feats.columns, f"Missing Python feature: {py_col}"
             py_val = py_feats[py_col].iloc[0]
 
@@ -230,27 +235,6 @@ class TestTimeDomainParity:
                 # Standard tolerance: 0.1% relative or 1e-6 absolute
                 assert abs(cpp_val - py_val) < max(1e-6, 0.001 * abs(py_val)), (
                     f"{py_col}: C++={cpp_val:.8f}, Python={py_val:.8f}")
-
-    def test_gyro_mag_stats_parity(self, synthetic_window):
-        """gyro_mag time-domain features: Python vs C++ formulas."""
-        df = synthetic_window
-        py_feats = extract_orientation_invariant_features(df)
-
-        gyro_mag = np.sqrt(df['gX'].values**2 + df['gY'].values**2 + df['gZ'].values**2)
-        cpp_stats = _cpp_magnitude_stats(gyro_mag)
-
-        for stat_name, cpp_val in cpp_stats.items():
-            py_col = f'gyro_mag_{stat_name}'
-            py_val = py_feats[py_col].iloc[0]
-
-            if stat_name in self.EXACT_FEATURES:
-                assert cpp_val == py_val
-            elif stat_name in self.QUARTILE_FEATURES:
-                assert abs(cpp_val - py_val) < 0.1 * (abs(py_val) + 1e-6)
-            elif stat_name in self.HIGHER_TOL_FEATURES:
-                assert abs(cpp_val - py_val) < 0.05 * (abs(py_val) + 1.0)
-            else:
-                assert abs(cpp_val - py_val) < max(1e-6, 0.001 * abs(py_val))
 
     def test_jerk_features_parity(self, synthetic_window):
         """Jerk features: Python vs C++ (simple diff-based)."""
@@ -307,19 +291,16 @@ class TestFrequencyDomainParity:
             assert abs(cpp_val - py_val) < tol, (
                 f"{py_col}: C++_DFT={cpp_val:.4f}, Python_FFT={py_val:.4f}")
 
-    def test_acc_mag_dft_parity(self, synthetic_window):
-        """acc_mag DFT features: Python FFT vs C++ DFT loop."""
+    @pytest.mark.parametrize("mag_name,cols", [
+        ("acc_mag", ['aX', 'aY', 'aZ']),
+        ("gyro_mag", ['gX', 'gY', 'gZ']),
+    ])
+    def test_mag_dft_parity(self, synthetic_window, mag_name, cols):
+        """Magnitude DFT features: Python FFT vs C++ DFT loop."""
         df = synthetic_window
         py_feats = extract_frequency_magnitude_features(df, sampling_rate=100)
-        acc_mag = np.sqrt(df['aX'].values**2 + df['aY'].values**2 + df['aZ'].values**2)
-        self._check_dft_features(py_feats, 'acc_mag', acc_mag)
-
-    def test_gyro_mag_dft_parity(self, synthetic_window):
-        """gyro_mag DFT features: Python FFT vs C++ DFT loop."""
-        df = synthetic_window
-        py_feats = extract_frequency_magnitude_features(df, sampling_rate=100)
-        gyro_mag = np.sqrt(df['gX'].values**2 + df['gY'].values**2 + df['gZ'].values**2)
-        self._check_dft_features(py_feats, 'gyro_mag', gyro_mag)
+        mag = np.sqrt(sum(df[c].values**2 for c in cols))
+        self._check_dft_features(py_feats, mag_name, mag)
 
 
 # ---------------------------------------------------------------------------
