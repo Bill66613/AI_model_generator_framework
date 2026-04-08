@@ -10,6 +10,7 @@ to the Python model by testing:
 """
 
 from utils.model_training import create_feature_vector
+import argparse
 import os
 import sys
 import joblib
@@ -465,8 +466,6 @@ def main():
     If no arguments are provided, the script looks for model and training
     files under persistent_data/ relative to the project root.
     """
-    import argparse
-
     parser = argparse.ArgumentParser(
         description="Validate deployment: compare Python model vs generated C++ code."
     )

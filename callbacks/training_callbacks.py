@@ -80,7 +80,13 @@ def clean_label(x):
 # ---- Utility functions (module-level for testability and reuse) ----
 
 def save_model_metadata(model_filename, model_info, base_dir=None):
-    """Save model metadata to the models database."""
+    """Save model metadata to the models database.
+
+    Args:
+        model_filename: Name of the model file (used as key in the JSON database).
+        model_info: Dict with model info (model_type, timestamp, test_accuracy, etc.).
+        base_dir: Base persistent-data directory. Defaults to PERSISTENT_DIR.
+    """
     if not base_dir:
         base_dir = PERSISTENT_DIR
 
@@ -104,7 +110,15 @@ def save_model_metadata(model_filename, model_info, base_dir=None):
 
 
 def load_trained_model_options(base_dir=None):
-    """Load available trained model options for dropdown."""
+    """Load available trained model options for dropdown.
+
+    Args:
+        base_dir: Base persistent-data directory. Defaults to PERSISTENT_DIR.
+
+    Returns:
+        list[dict]: List of dicts with 'label' and 'value' keys suitable for
+        Dash dropdown ``options`` property.
+    """
     if not base_dir:
         base_dir = PERSISTENT_DIR
 
@@ -129,7 +143,15 @@ def load_trained_model_options(base_dir=None):
 
 
 def load_training_data_summary(base_dir=None):
-    """Load and display summary of available training data."""
+    """Load and display summary of available training data.
+
+    Args:
+        base_dir: Base persistent-data directory. Defaults to PERSISTENT_DIR.
+
+    Returns:
+        dash.html.Div: A Dash HTML component showing dataset overview and
+        activity class distribution, or a warning message if no data is found.
+    """
     if not base_dir:
         base_dir = PERSISTENT_DIR
 

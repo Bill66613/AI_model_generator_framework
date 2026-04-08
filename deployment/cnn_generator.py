@@ -10,6 +10,7 @@ in C with statically embedded weights.
 import numpy as np
 from typing import Dict, Any, List
 from .base_generator import BaseCodeGenerator
+from .quantization import _wrap_c_values
 
 
 class CNNCodeGenerator(BaseCodeGenerator):
@@ -626,7 +627,6 @@ static void dense(const float *input, float *output,
 
         Delegates to the shared implementation in quantization module.
         """
-        from .quantization import _wrap_c_values
         return _wrap_c_values(vals, width)
 
     # ---- forward-pass code generation ----
