@@ -1,7 +1,7 @@
 # HƯỚNG DẪN HOÀN THIỆN BÁO CÁO LUẬN VĂN
 
-**Last updated:** 2026-03-08  
-**Version:** 5.0 (added findings 10-11, updated Ch.3/5/6 with augmentation, confidence, parity)  
+**Last updated:** 2026-04-08  
+**Version:** 5.1 (redirected thesis narrative to multi-device deployment; XIAO now framed as reference platform)  
 **Sinh viên:** Nguyễn Trường Minh Hoàng (MSSV: 2270757)  
 **Đề tài:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người  
 **GVHD:** TS. Lê Trọng Nhân  
@@ -15,22 +15,24 @@
 
 **Current blocking action:** Retrain models with fixed pipeline (zero-padding → edge-replication), then collect before/after accuracy numbers to fill placeholder values in Ch.4.
 
+**Narrative direction:** Thesis now emphasizes **multi-device deployment capability**. Seeed XIAO nRF52840 is the **reference benchmark platform**, not the sole target device.
+
 ### Report Completion Status
 
 | Chapter | File | Status | Blocking Issue |
 |---------|------|--------|---------------|
-| Ch.1 Giới thiệu | `chapters/main/introduction.tex` | ✅ Written in Vietnamese | — |
+| Ch.1 Giới thiệu | `chapters/main/introduction.tex` | ✅ Reframed for multi-device deployment | Collect more cross-device benchmark evidence if available |
 | Ch.2 Công trình liên quan | `chapters/main/relatedwork.tex` | ✅ Written in Vietnamese | — |
-| Ch.3 Phương pháp luận | `chapters/main/methodology.tex` | ✅ Updated | Added: padding strategy, data augmentation (class-aware), confidence threshold |
-| Ch.4 Kết quả | `chapters/main/results.tex` | ⚠️ Placeholder numbers | Needs real data after retrain |
-| Ch.5 Thảo luận | `chapters/main/discussion.tex` | ✅ Updated | Added: training-deployment parity, augmentation design, confidence analysis |
-| Ch.6 Kết luận | `chapters/main/conclusion.tex` | ✅ Updated | Added 3 new contributions (#5-7), updated validation + future work |
+| Ch.3 Phương pháp luận | `chapters/main/methodology.tex` | ✅ Reframed | Added multi-device generator matrix + reference-platform wording |
+| Ch.4 Kết quả | `chapters/main/results.tex` | ⚠️ Reframed + placeholder numbers | Needs real data after retrain and, ideally, at least one extra target build/benchmark |
+| Ch.5 Thảo luận | `chapters/main/discussion.tex` | ✅ Reframed | Separated architectural multi-device support from single-platform benchmark evidence |
+| Ch.6 Kết luận | `chapters/main/conclusion.tex` | ✅ Reframed | Multi-device contribution now explicit; XIAO framed as representative case |
 | References | `references.bib` | ✅ Updated | Added 11 new refs (augmentation, confidence, parity, calibration) |
 | Figures | `figures/` | ❌ Missing | Need confusion matrix, architecture, UI screenshots |
 
 ### Key Technical Findings (detail in TECHNICAL_FINDINGS.md)
 
-9 findings differentiate this thesis from commercial platforms:
+12 findings differentiate this thesis from commercial platforms:
 1. **Zero-padding artifact** → FIXED → edge-value replication (CRITICAL for defense)
 2. **Kurtosis formula mismatch** → FIXED → population std in all generators
 3. **NN bias default prediction** → DOCUMENTED → explains "always predicts walking_downstairs"
@@ -40,6 +42,9 @@
 7. **Feature order mismatch** → FIXED → reorder remapping at code-gen time
 8. **Double extraction** → FIXED → `extract_real_model_parameters()` called once, not twice
 9. **CNN validation false positives** → FIXED → Validator now architecture-aware (CNN vs feature-based)
+10. **Confidence threshold for unknown activity rejection** → IMPLEMENTED → safer real-world deployment
+11. **Class-aware data augmentation** → IMPLEMENTED → protects static activities from class confusion
+12. **Multi-device deployment matrix already implemented in codebase** → DOCUMENTED → thesis should frame XIAO as reference platform, not sole target
 
 ---
 
@@ -53,6 +58,7 @@
 | 2026-03-05 | Finding 9 | Added CNN validation false positives — validator now architecture-aware |
 | 2026-03-25 | Consistency fixes | Fixed: 5/6 class count, 90/138 feature count, 75/150 window size, NN arch 90→100→5, added 6th objective to intro, removed duplicate BibTeX, added kurtosis verification to code gen, added power estimate disclaimer |
 | 2026-03-26 | Round 2 consistency | Fixed: per-class Support 1078→30 (match test set), NN "two hidden layers"→"one", SensiML pricing unified \$99-500/month across all chapters |
+| 2026-04-08 | Multi-device redirect | Reframed Ch.1/3/4/5/6 so thesis emphasizes multi-device deployment capability; XIAO now treated as reference benchmark platform |
 
 *Add a row here each time this file is updated.*
 
@@ -135,8 +141,7 @@
 | **Kiểm tra phân phối đặc trưng** | Không | Không | ✅ Phát hiện vấn đề thông qua debug |
 | **Minh bạch code generation** | Hộp đen | Hộp đen | ✅ Mã nguồn mở, xem trực tiếp |
 | **Chi phí** | $20-99/tháng | $49-199/tháng | Miễn phí |
-| **Kiểm soát tiền xử lý** | Hạn chế | Trung bình | ✅ Kéo thả tương tác |
-| **Padding strategy** | Không rõ | Không rõ | ✅ Edge replication (tránh artifact) |
+| **Bao phủ đích triển khai** | Hỗ trợ rộng nhưng pipeline đóng | MCUs đã chọn | ✅ Kiến trúc generator đa đích, tái sử dụng cùng model artifact |
 | **Kurtosis/skewness formula** | Không kiểm chứng | Không kiểm chứng | ✅ Verified vs pandas |
 
 ### Các điểm mạnh chính cần nhấn mạnh trong bảo vệ:
@@ -160,10 +165,10 @@
    - Ví dụ thực tế: phát hiện `acc_mag_min = 0.0` → truy ra zero-padding
 
 5. **Đa nền tảng code generation**
-   - C++ (Arduino, ARM Cortex-M, Zephyr)
-   - MicroPython
+   - C/C++ cho Arduino-compatible, ARM Cortex-M, generic C/C++, ESP-IDF, Zephyr
+   - MicroPython và các backend thay thế như TFLite Micro, ONNX Runtime
    - 4 chế độ tối ưu hóa (accuracy/speed/power/balanced)
-   - Tất cả đều đã được sửa bug kurtosis/padding
+   - XIAO là nền tảng benchmark tham chiếu, không phải đích duy nhất
 
 ---
 
@@ -180,69 +185,65 @@
 | Windowing | Tạo cửa sổ / phân đoạn cửa sổ |
 | Sliding window | Cửa sổ trượt |
 | Standard deviation | Độ lệch chuẩn |
-| Population std | Độ lệch chuẩn tổng thể |
-| Sample std | Độ lệch chuẩn mẫu |
-| Kurtosis | Độ nhọn |
-| Skewness | Độ lệch |
-| Bias (NN) | Độ lệch / thiên kiến |
 | Distribution mismatch | Không khớp phân phối |
 | Edge deployment | Triển khai biên |
 | Code generation | Tạo mã |
 | Inference | Suy luận |
-| Confusion matrix | Ma trận nhầm lẫn |
-| Ablation study | Nghiên cứu loại bỏ |
+| Confidence threshold | Ngưỡng tin cậy |
+| Multi-device deployment | Triển khai đa thiết bị |
+| Reference benchmark platform | Nền tảng benchmark tham chiếu |
 | Overfitting | Quá khớp |
 | Underfitting | Dưới khớp |
-| Magnitude | Độ lớn |
-| IMU | Đơn vị đo lường quán tính |
-| Accelerometer | Cảm biến gia tốc |
-| Gyroscope | Con quay hồi chuyển |
 
 ### Nguyên tắc viết:
 - Giữ nguyên thuật ngữ tiếng Anh trong ngoặc khi lần đầu xuất hiện: "Trích xuất đặc trưng (Feature Extraction)"
 - Tên thuật toán giữ nguyên: Random Forest, SVM, Neural Network
-- Tên framework/nền tảng giữ nguyên: Edge Impulse, SensiML, TensorFlow Lite
+- Tên framework/nền tảng giữ nguyên: Edge Impulse, SensiML, TensorFlow Lite, Zephyr, MicroPython
+- Phân biệt rõ giữa "hỗ trợ đa thiết bị ở mức kiến trúc/sinh mã" và "benchmark định lượng trên nền tảng tham chiếu"
+- Xem Seeed XIAO nRF52840 là nền tảng benchmark tham chiếu, không phải đích duy nhất
 - Công thức toán học dùng ký hiệu LaTeX chuẩn
 - Hình ảnh có caption song ngữ nếu cần
-
----
 
 ## 📋 DANH SÁCH VIỆC CẦN LÀM (TODO) CHO BÁO CÁO
 
 ### Ưu tiên 1: Retrain và Thu thập Kết quả Mới
 - [ ] Chạy lại Feature Engineering (đã sửa edge-value replication)
 - [ ] Huấn luyện lại mô hình (tất cả: RF, SVM, NN/PyTorch)
-- [ ] Tạo lại code triển khai (Seeed XIAO)
+- [ ] Tạo lại code triển khai cho ít nhất 2-3 đích đại diện (ví dụ: Seeed XIAO, ESP32/ESP-IDF, MicroPython hoặc Zephyr)
 - [ ] Flash lên thiết bị và kiểm tra
 - [ ] Ghi lại kết quả trước/sau sửa lỗi → dùng cho bảng so sánh
 
 ### Ưu tiên 2: Cập nhật Nội dung Báo cáo
 
+#### Chương 1 — Giới thiệu:
+- [x] Chuyển narrative từ single-device sang multi-device deployment capability
+- [x] Xác định Seeed XIAO là nền tảng benchmark tham chiếu, không phải đích duy nhất
+
 #### Chương 3 — Phương pháp luận:
 - [x] Cập nhật mục Feature Extraction: giải thích edge-value replication padding
-- [x] Thêm mục mới: "Đảm bảo tương đồng huấn luyện-triển khai" 
+- [x] Thêm mục mới: "Đảm bảo tương đồng huấn luyện-triển khai"
 - [x] Giải thích tại sao loại bỏ FFT features (đã có) + tại sao padding quan trọng
 - [x] Thêm mục mới: "Tăng cường Dữ liệu Nhận biết Lớp" (data augmentation with class-aware protection)
 - [x] Thêm mục mới: "Ngưỡng Tin cậy cho Từ chối Hoạt động Không xác định" (confidence threshold)
 - [x] Cập nhật mục Code Generation: đề cập verified kurtosis/skewness formula
 - [x] Sửa: kiến trúc NN 90 đầu vào (khớp với 15×6 features), bảng bộ nhớ 90-100-5
+- [x] Thêm bảng ma trận đích triển khai và mô tả kiến trúc model-platform-backend
 
 #### Chương 4 — Kết quả:
 - [ ] Thay placeholder numbers bằng kết quả thực tế
 - [ ] Thêm bảng: "Tác động của Chiến lược Padding" (trước/sau)
 - [ ] Thêm bảng: "So sánh Suy luận Thiết bị Thực" (hardware test results)
+- [x] Thêm bảng: "Ma trận hỗ trợ triển khai đa thiết bị"
 - [ ] Tạo confusion matrix thực tế
 - [ ] Chụp screenshots UI
 
 #### Chương 5 — Thảo luận:
 - [x] Thêm mục: "Vấn đề Tương đồng Huấn luyện-Triển khai trong Edge ML"
-  - Zero-padding artifact
-  - Numerical formula mismatch  
-  - Tầm quan trọng của full-stack transparency
 - [x] Thêm mục: "Tăng cường Dữ liệu và Thiết kế Nhận biết Lớp"
 - [x] Thêm mục: "Từ chối Hoạt động Dựa trên Ngưỡng Tin cậy"
 - [x] Cập nhật so sánh Edge Impulse: bổ sung điểm vượt trội mới
 - [x] Thêm phân tích: tại sao hộp đen platforms không thể phát hiện lỗi này
+- [x] Phân tách rõ "hỗ trợ đa thiết bị ở mức kiến trúc" và "benchmark trên nền tảng tham chiếu"
 
 #### Chương 6 — Kết luận:
 - [x] Bổ sung đóng góp kỹ thuật mới: training-deployment parity verification
@@ -250,6 +251,7 @@
 - [x] Bổ sung đóng góp: confidence threshold for unknown activity rejection
 - [x] Nhấn mạnh: transparency giúp phát hiện và sửa lỗi mà hộp đen không thể
 - [x] Cập nhật mục tiêu nghiên cứu: thêm "Độ Tin Cậy Triển Khai"
+- [x] Nhấn mạnh đóng góp đa thiết bị; XIAO chỉ là case tham chiếu đầu tiên
 
 ### Ưu tiên 3: Hình ảnh và Tài liệu trực quan
 - [ ] `figures/confusion_matrix_nn.png` — Từ mô hình NN sau retrain
@@ -272,10 +274,11 @@
 - [ ] Slide trình bày (15-20 phút)
 - [ ] Slide demo thực tế (video hoặc live demo)
 - [ ] Chuẩn bị câu trả lời cho câu hỏi phản biện:
-  - "Tại sao không dùng deep learning?"
-  - "Dataset chỉ 1 người, tổng quát hóa thế nào?"
-  - "So sánh chi tiết với Edge Impulse?"
-  - "Padding ảnh hưởng bao nhiêu %?"
+   - "Tại sao không dùng deep learning?"
+   - "Dataset chỉ 1 người, tổng quát hóa thế nào?"
+   - "Nếu chỉ benchmark trên XIAO thì vì sao vẫn gọi là đa thiết bị?"
+   - "So sánh chi tiết với Edge Impulse?"
+   - "Padding ảnh hưởng bao nhiêu %?"
 
 ---
 

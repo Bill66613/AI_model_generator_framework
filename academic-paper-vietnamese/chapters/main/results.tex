@@ -2,7 +2,7 @@
 \label{chap:results}
 
 \section{Tổng Quan}
-Phần này trình bày kết quả thực nghiệm xác thực hiệu quả của framework đề xuất cho việc tạo các mô hình AI cho nhận dạng hoạt động con người dựa trên biên. Chúng tôi đánh giá: (1) độ chính xác mô hình và hiệu suất theo từng lớp, (2) tác động của các chiến lược cân bằng lớp, (3) đặc điểm triển khai biên (thời gian suy luận, sử dụng bộ nhớ, tiêu thụ điện năng), và (4) phân tích so sánh với các phương pháp cơ sở và nền tảng thương mại. Tất cả các thử nghiệm sử dụng tập dữ liệu HAR được mô tả trong Mục 3.7.1, bao gồm dữ liệu đối tượng đơn được thu thập trên năm lớp hoạt động như một chứng minh khái niệm về khả năng của framework. Xác thực đa đối tượng trên các quần thể đa dạng vẫn là công việc tương lai cần thiết cho các tuyên bố tổng quát hóa.
+Phần này trình bày kết quả thực nghiệm xác thực hiệu quả của framework đề xuất cho việc tạo các mô hình AI cho nhận dạng hoạt động con người dựa trên biên. Chúng tôi đánh giá theo hai lớp: (1) chất lượng pipeline mô hình độc lập nền tảng, và (2) khả năng triển khai đa thiết bị của hệ thống tạo mã. Cụ thể, các phân tích bao gồm: độ chính xác mô hình và hiệu suất theo từng lớp, tác động của các chiến lược cân bằng lớp, ma trận đích triển khai được hỗ trợ, đặc điểm triển khai biên (thời gian suy luận, sử dụng bộ nhớ, tiêu thụ điện năng), và so sánh với các phương pháp cơ sở và nền tảng thương mại. Tất cả các thử nghiệm sử dụng tập dữ liệu HAR được mô tả trong Mục 3.7.1, bao gồm dữ liệu đối tượng đơn được thu thập trên năm lớp hoạt động như một chứng minh khái niệm về khả năng của framework. Các số đo độ trễ, bộ nhớ và điện năng được đo trên Seeed XIAO nRF52840 như một nền tảng tham chiếu thuộc lớp ARM Cortex-M4F; do đó chúng được dùng để minh họa tính khả thi phần cứng chứ không đại diện đồng nhất cho toàn bộ ma trận đích mà framework hỗ trợ. Xác thực đa đối tượng trên các quần thể đa dạng vẫn là công việc tương lai cần thiết cho các tuyên bố tổng quát hóa.
 
 \section{Hiệu Suất Huấn Luyện Mô Hình}
 
@@ -109,14 +109,39 @@ Cân bằng lớp tạo ra các cải thiện đáng kể:
 
 Không có cân bằng, các mô hình thể hiện thiên vị đối với các lớp đa số (\textit{Standing}, \textit{Running}), thường xuyên phân loại sai các hoạt động thiểu số. Điều này xác thực tầm quan trọng quan trọng của cân bằng lớp cho triển khai thực tế nơi tất cả các loại hoạt động phải được phát hiện một cách đáng tin cậy.
 
-\section{Đặc Điểm Triển Khai Biên}
+\section{Khả Năng Triển Khai Đa Thiết Bị}
 
-\subsection{Thời Gian Suy Luận và Độ Trễ}
-Bảng \ref{tab:inference_timing} báo cáo thời gian suy luận được đo trên Seeed XIAO nRF52840 (ARM Cortex-M4F @ 64MHz) cho các chế độ tối ưu hóa khác nhau.
+\subsection{Ma trận đích triển khai được hỗ trợ}
+Kết quả quan trọng của luận văn không chỉ nằm ở độ chính xác trên một board cụ thể, mà ở khả năng dùng cùng một mô hình đã huấn luyện để sinh ra nhiều gói triển khai cho các họ thiết bị khác nhau. Bảng~\ref{tab:multi_device_support} tóm tắt ma trận đích hiện được hiện thực trong subsystem tạo mã.
 
 \begin{table}[H]
     \centering
-    \caption{Thời Gian Suy Luận trên Seeed XIAO nRF52840 (cửa sổ 150 mẫu, bước trượt 75 mẫu)}
+    \caption{Ma trận hỗ trợ triển khai đa thiết bị của framework}
+    \small
+    \begin{tabular}{@{}p{2.5cm}p{2.8cm}p{2.5cm}p{4.8cm}@{}}
+        \toprule
+        Nhóm đích & Khóa nền tảng/backend & Gói sinh ra & Phạm vi xác thực trong luận văn \\
+        \midrule
+        Arduino-compatible & arduino, seeed\_xiao, esp32, m5stack, teensy & .h + .cpp + .ino & Benchmark chi tiết trên Seeed XIAO; các đích còn lại được hỗ trợ ở mức generator \\
+        ARM Cortex-M thuần & arm\_cortex\_m & .c & Xác minh ở mức kiến trúc generator và cấu trúc tệp đầu ra \\
+        SDK/RTOS native & generic\_c, generic\_cpp, esp\_idf, zephyr & .h + .c/.cpp + ví dụ & Xác minh ở mức generator đa đích \\
+        MicroPython & micropython & module .py + script ví dụ & Xác minh ở mức generator và tương đồng công thức \\
+        Backend runtime thay thế & tflite\_micro, onnx\_runtime & mã glue + model nhị phân & Xác minh ở mức khả năng xuất backend thay thế \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:multi_device_support}
+\end{table}
+
+Ma trận này cho thấy đóng góp cốt lõi của framework là phân tách pipeline thành ba lớp: mô hình học máy, nền tảng đích và backend triển khai. Nhờ đó, cùng một model artifact có thể được tái sử dụng cho nhiều thiết bị mà không cần huấn luyện lại, ngoại trừ các tinh chỉnh phụ thuộc tài nguyên như chế độ tối ưu hóa hoặc backend suy luận.
+
+\section{Benchmark Triển Khai trên Nền tảng Tham chiếu}
+
+\subsection{Thời Gian Suy Luận và Độ Trễ}
+Bảng \ref{tab:inference_timing} báo cáo thời gian suy luận được đo trên nền tảng tham chiếu Seeed XIAO nRF52840 (ARM Cortex-M4F @ 64MHz) cho các chế độ tối ưu hóa khác nhau.
+
+\begin{table}[H]
+    \centering
+    \caption{Thời Gian Suy Luận trên nền tảng tham chiếu Seeed XIAO nRF52840 (cửa sổ 150 mẫu, bước trượt 75 mẫu)}
     \small
     \begin{tabular}{@{}lcccc@{}}
         \toprule
@@ -142,6 +167,7 @@ Các phát hiện chính:
     \item Trích xuất đặc trưng chiếm ưu thế về thời gian (50-65\% của tổng), gợi ý các cơ hội tối ưu hóa trong mã xử lý tín hiệu
     \item Tối ưu hóa chế độ Speed giảm độ trễ 30-38\% trên tất cả các mô hình với mất độ chính xác không đáng kể (<0.5\%)
 \end{itemize}
+Các số liệu trên đại diện cho lớp phần cứng ARM Cortex-M4F. Với các đích như MicroPython, ESP-IDF hoặc Zephyr, độ trễ tuyệt đối còn phụ thuộc interpreter, toolchain biên dịch và lớp tích hợp cảm biến tương ứng.
 
 \subsection{Đánh Đổi Chế Độ Tối Ưu Hóa}
 Hình~\ref{fig:optimization_comparison} trực quan hóa các đánh đổi độ chính xác-độ trễ-điện năng trên các chế độ tối ưu hóa cho cả ba thuật toán.
@@ -160,7 +186,7 @@ Bảng \ref{tab:memory_usage} phân tích flash (lưu trữ chương trình) và
 
 \begin{table}[H]
     \centering
-    \caption{Sử Dụng Bộ Nhớ trên Seeed XIAO nRF52840 (1MB Flash, 256KB RAM)}
+    \caption{Sử Dụng Bộ Nhớ trên nền tảng tham chiếu Seeed XIAO nRF52840 (1MB Flash, 256KB RAM)}
     \small
     \begin{tabular}{@{}lccccc@{}}
         \toprule
@@ -188,12 +214,12 @@ Phân tích:
 \end{itemize}
 
 \subsection{Tiêu Thụ Điện Năng}
-Hình \ref{fig:power_consumption} cho thấy các phép đo dòng điện trong các giai đoạn hoạt động khác nhau.
+Hình \ref{fig:power_consumption} cho thấy các phép đo dòng điện trên nền tảng tham chiếu trong các giai đoạn hoạt động khác nhau.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{figures/power_consumption_profile.png}
-    \caption{Hồ Sơ Tiêu Thụ Điện Năng Trong Suy Luận (Neural Network, Chế Độ Accuracy)}
+    \caption{Hồ Sơ Tiêu Thụ Điện Năng Trong Suy Luận trên nền tảng tham chiếu (Neural Network, Chế Độ Accuracy)}
     \label{fig:power_consumption}
 \end{figure}
 
@@ -226,7 +252,7 @@ Bảng \ref{tab:commercial_comparison} so sánh framework đề xuất với Edg
         Tiền xử lý & Tương tác & Tự động (hạn chế) & Code & Tự động \\
         Thuật toán & RF/SVM/NN & Chỉ Neural & Tùy chỉnh & Cổ điển \\
         Chất lượng Code & Tối ưu & Tốt & Xuất sắc & Tốt \\
-        Nền tảng & Ard/ARM & Nhiều & Nhiều & Hạn chế \\
+        Nền tảng & Arduino/ARM/ESP-IDF/MPy/Zephyr & Nhiều & Nhiều & Hạn chế \\
         Học tập & Thấp & Thấp & Cao & Trung bình \\
         Độ chính xác & 96.2\% & 94.8\%$^*$ & 96.5\%$^*$ & 93.1\%$^*$ \\
         Suy luận & 12 ms & 15 ms$^*$ & 11 ms$^*$ & 18 ms$^*$ \\
@@ -275,8 +301,9 @@ Xác thực thực nghiệm chứng minh:
 \begin{enumerate}
     \item Độ chính xác cao (94-96\%) trên ba thuật toán ML trên nhiệm vụ HAR 5 lớp đầy thách thức
     \item Tầm quan trọng quan trọng của cân bằng lớp cho phát hiện lớp thiểu số (+42-47\% recall thiểu số)
-    \item Tính khả thi suy luận thời gian thực trên phần cứng bị giới hạn tài nguyên (9-18ms mỗi cửa sổ)
-    \item Dấu chân bộ nhớ thấp (95-182KB flash) cho phép triển khai trên vi điều khiển cấp nhập cảnh
+    \item Kiến trúc generator hỗ trợ nhiều họ đích triển khai từ cùng một pipeline huấn luyện duy nhất
+    \item Tính khả thi suy luận thời gian thực trên nền tảng tham chiếu phần cứng bị giới hạn tài nguyên (9-18ms mỗi cửa sổ)
+    \item Dấu chân bộ nhớ thấp (95-182KB flash) cho thấy dư địa tích hợp tốt trên các board cùng lớp tài nguyên
     \item Hiệu suất cạnh tranh so với các nền tảng thương mại trong khi vẫn miễn phí và hoàn toàn minh bạch
     \item Tối ưu hóa siêu tham số hiệu quả có thể tiếp cận với phi chuyên gia
 \end{enumerate}

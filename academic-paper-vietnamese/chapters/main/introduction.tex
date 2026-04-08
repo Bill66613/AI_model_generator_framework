@@ -9,7 +9,7 @@ Thị trường toàn cầu cho công nghệ theo dõi chuyển động đạt 2
 
 Những tiến bộ trong công nghệ cảm biến và trí tuệ nhân tạo (AI) đã mang tính chuyển đổi, làm tăng đáng kể độ chính xác, hiệu suất và tính linh hoạt của các hệ thống theo dõi chuyển động. Đặc biệt, các mô hình AI là không thể thiếu trong việc diễn giải dữ liệu chuyển động, cho phép các ứng dụng như nhận dạng cử chỉ, phân loại hoạt động và mô hình hóa chuyển động dự đoán. Tuy nhiên, quá trình phát triển các mô hình AI này vốn dĩ phức tạp, bao gồm thu thập dữ liệu, tiền xử lý và lọc để loại bỏ nhiễu, trích xuất các đặc trưng có ý nghĩa, và huấn luyện các mô hình học máy hoặc học sâu. Sự phức tạp này đặt ra những thách thức đáng kể, đặc biệt đối với các nhà phát triển và nhà nghiên cứu có thể thiếu chuyên môn về AI hoặc công nghệ theo dõi chuyển động \cite{article:motion_tracking_using_AI}.
 
-Sự phát triển của tính toán biên (edge computing) đã làm phức tạp thêm bối cảnh này trong khi đồng thời mang lại những cơ hội mới. Các thiết bị biên—vi điều khiển bị giới hạn tài nguyên với bộ nhớ, sức mạnh xử lý và ngân sách năng lượng hạn chế—cho phép các ứng dụng theo dõi chuyển động theo thời gian thực, bảo vệ quyền riêng tư và tiết kiệm năng lượng. Tuy nhiên, triển khai các mô hình AI trên các thiết bị như vậy đòi hỏi kiến thức chuyên biệt về tối ưu hóa mô hình, tạo mã và các chi tiết triển khai đặc thù cho từng nền tảng.
+Sự phát triển của tính toán biên (edge computing) đã làm phức tạp thêm bối cảnh này trong khi đồng thời mang lại những cơ hội mới. Các thiết bị biên—vi điều khiển bị giới hạn tài nguyên với bộ nhớ, sức mạnh xử lý và ngân sách năng lượng hạn chế—cho phép các ứng dụng theo dõi chuyển động theo thời gian thực, bảo vệ quyền riêng tư và tiết kiệm năng lượng. Tuy nhiên, triển khai các mô hình AI trên các thiết bị như vậy đòi hỏi kiến thức chuyên biệt về tối ưu hóa mô hình, tạo mã và các chi tiết triển khai đặc thù cho từng nền tảng. Thách thức này trở nên rõ rệt hơn khi hệ sinh thái thiết bị biên ngày càng phân mảnh: cùng một mô hình có thể cần được đóng gói khác nhau cho các bo tương thích Arduino, ARM Cortex-M thuần, SDK như ESP-IDF, MicroPython hoặc RTOS như Zephyr.
 
 \section{Nền tảng Lý thuyết}
 
@@ -40,7 +40,7 @@ Bất chấp những tiến bộ trong công nghệ theo dõi chuyển động, 
 
 \item \textbf{Tính linh hoạt Hạn chế}: Nhiều framework có sẵn có đường cong học tập dốc hoặc cung cấp chức năng hạn chế để tùy chỉnh mô hình theo các yêu cầu theo dõi chuyển động cụ thể. Các nền tảng thương mại như Edge Impulse và SensiML cung cấp quy trình làm việc đơn giản hóa nhưng với chi phí đáng kể (\$20-500/tháng) và với các tùy chọn tùy chỉnh bị hạn chế.
 
-\item \textbf{Độ phức tạp Triển khai}: Dịch các mô hình đã huấn luyện thành mã tối ưu hóa cho các nền tảng biên cụ thể đòi hỏi hiểu biết sâu về kiến trúc phần cứng đích, ràng buộc bộ nhớ và kỹ thuật tối ưu hóa.
+\item \textbf{Độ phức tạp Triển khai}: Dịch cùng một mô hình đã huấn luyện thành các gói mã tối ưu hóa cho nhiều họ thiết bị biên khác nhau đòi hỏi hiểu biết sâu về kiến trúc phần cứng đích, ràng buộc bộ nhớ, hệ sinh thái công cụ (Arduino, ESP-IDF, RTOS, MicroPython) và kỹ thuật tối ưu hóa phù hợp cho từng trường hợp triển khai.
 
 \item \textbf{Rào cản Khả năng tiếp cận}: Sự kết hợp của các yếu tố này hạn chế đổi mới và cản trở việc áp dụng rộng rãi các giải pháp theo dõi chuyển động được hỗ trợ bởi AI, đặc biệt trong bối cảnh nghiên cứu và giáo dục.
 
@@ -67,7 +67,7 @@ Do đó, có một nhu cầu cấp thiết về một framework linh hoạt, tr�
 \midrule
 \textbf{Thuật toán} & NN, transfer learning & RF, SVM, NN, boosting & Chỉ deep learning & RF, SVM, NN \\
 \midrule
-\textbf{Tạo Mã} & C++ (Arduino, ARM) & C (MCU-cụ thể) & C++ (TFLite Micro) & C++ (đa nền tảng) \\
+\textbf{Tạo Mã} & C++ (Arduino, ARM) & C (MCU-cụ thể) & C++ (TFLite Micro) & C/C++/Python đa đích \\
 \midrule
 \textbf{Chế độ Tối ưu hóa} & Accuracy/latency & AutoML & Quant. thủ công & 4 chế độ (acc./speed/power/bal.) \\
 \midrule
@@ -77,7 +77,7 @@ Do đó, có một nhu cầu cấp thiết về một framework linh hoạt, tr�
 \midrule
 \textbf{Sử dụng Giáo dục} & Gói miễn phí & Giấy phép học thuật & Có & Có (không giới hạn) \\
 \midrule
-\textbf{Nền tảng Triển khai} & 20+ boards & MCUs đã chọn & Tương thích TFLite & Arduino, ARM Cortex-M, mở rộng \\
+\textbf{Nền tảng Triển khai} & 20+ boards & MCUs đã chọn & Tương thích TFLite & Arduino, ARM, ESP-IDF, MicroPython, Zephyr \\
 \midrule
 \textbf{Kiểm soát Dữ liệu Huấn luyện} & Lưu trữ đám mây & Local/cloud & Chỉ local & Local (bảo mật hoàn toàn) \\
 \bottomrule
@@ -122,9 +122,9 @@ Mục tiêu chính của nghiên cứu này là thiết kế, triển khai và �
 
 \item \textbf{Triển khai Hỗ trợ Đa Thuật toán}: Tích hợp nhiều thuật toán học máy (Random Forest, SVM, Neural Networks) với các API nhất quán và tối ưu hóa siêu tham số tự động.
 
-\item \textbf{Thiết kế Tạo Mã Bất khả tri Nền tảng}: Xây dựng hệ thống tạo mã modular có khả năng sản xuất các triển khai C++ tối ưu hóa cho các nền tảng biên khác nhau (Arduino, ARM Cortex-M, Seeed XIAO) với xem xét các chiến lược tối ưu hóa khác nhau (độ chính xác, tốc độ, điện năng, cân bằng).
+\item \textbf{Thiết kế Tạo Mã Bất khả tri Nền tảng}: Xây dựng hệ thống tạo mã modular có khả năng sản xuất các triển khai C/C++/MicroPython tối ưu hóa cho nhiều họ đích khác nhau (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với xem xét các chiến lược tối ưu hóa khác nhau (độ chính xác, tốc độ, điện năng, cân bằng).
 
-\item \textbf{Xác thực Hiệu quả Framework}: Tiến hành các thử nghiệm toàn diện sử dụng dữ liệu Nhận dạng Hoạt động Con người thực tế để đánh giá hiệu suất mô hình, hiệu quả triển khai và khả năng sử dụng so với các giải pháp thương mại hiện có.
+\item \textbf{Xác thực Hiệu quả Framework}: Tiến hành các thử nghiệm toàn diện sử dụng dữ liệu Nhận dạng Hoạt động Con người thực tế để đánh giá hiệu suất mô hình, kiểm tra năng lực sinh mã cho nhiều đích triển khai và đo benchmark đại diện trên phần cứng ARM Cortex-M4F tham chiếu.
 
 \item \textbf{Đảm bảo Khả năng tiếp cận}: Thiết kế hệ thống với giao diện thân thiện với người dùng có thể tiếp cận cho cả chuyên gia và người không chuyên, thúc đẩy dân chủ hóa phát triển edge AI.
 
@@ -141,9 +141,9 @@ Nghiên cứu này đóng góp các điểm chính sau vào lĩnh vực theo dõ
 
 \item \textbf{Framework Mã nguồn mở Toàn diện}: Quy trình hoàn chỉnh từ đầu đến cuối từ tải dữ liệu đến triển khai biên, được cung cấp như một lựa chọn thay thế mã nguồn mở cho các nền tảng thương mại đắt đỏ.
 
-\item \textbf{Tạo Mã Nhận thức Tối ưu hóa}: Hệ thống tạo mã thông minh điều chỉnh đầu ra dựa trên các ưu tiên triển khai (độ chính xác so với tốc độ so với tiêu thụ điện năng), với các tối ưu hóa cụ thể cho nền tảng.
+\item \textbf{Kiến trúc Tạo Mã Đa Thiết bị Nhận thức Tối ưu hóa}: Hệ thống tạo mã modular ánh xạ cùng một mô hình đã huấn luyện sang nhiều họ đích (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) và các backend triển khai thay thế, với các cấu hình tối ưu hóa riêng theo độ chính xác, tốc độ và tiêu thụ điện năng.
 
-\item \textbf{Xác thực Thực nghiệm}: Đánh giá chuẩn toàn diện trên phần cứng biên thực (Seeed XIAO nRF52840) chứng minh tính khả thi thực tế và đặc điểm hiệu suất.
+\item \textbf{Xác thực Thực nghiệm Theo Hai Mức}: Benchmark chi tiết trên nền tảng tham chiếu Seeed XIAO nRF52840 và phân tích kiến trúc generator đa đích, chứng minh rằng giá trị của framework nằm ở năng lực triển khai xuyên thiết bị chứ không bị khóa vào một board duy nhất.
 
 \item \textbf{Kiến trúc Mở rộng}: Thiết kế modular cho phép tích hợp trong tương lai các thuật toán, nền tảng và kỹ thuật tiền xử lý bổ sung.
 
@@ -156,9 +156,11 @@ Nghiên cứu này tập trung vào các ứng dụng theo dõi chuyển động
 \begin{itemize}
 \item Dữ liệu cảm biến IMU 6 trục (gia tốc kế 3 trục + con quay hồi chuyển 3 trục)
 \item Các phương pháp học có giám sát sử dụng các thuật toán scikit-learn
-\item Tạo mã cho các nền tảng biên dựa trên vi điều khiển
+\item Tạo mã cho nhiều họ nền tảng biên dựa trên vi điều khiển và môi trường thực thi nhúng
 \item Nhận dạng Hoạt động Con người là lĩnh vực xác thực chính
 \end{itemize}
+
+Các số đo phần cứng định lượng trong luận văn này tập trung vào một nền tảng tham chiếu (Seeed XIAO nRF52840), trong khi các đích còn lại được phân tích ở mức kiến trúc generator và khả năng sinh mã.
 
 Nghiên cứu không giải quyết:
 
