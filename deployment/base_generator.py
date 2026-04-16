@@ -800,7 +800,23 @@ void extract_features(float sensor_data[][N_CHANNELS], int samples, float featur
     float gyro_mag[WINDOW_SIZE];
     float jerk_mag[WINDOW_SIZE];
 
-    // Calculate magnitude vectors
+    // --- Per-window mean centering ---
+    // Removes gravity (accel) and orientation-dependent DC bias (gyro)
+    // so magnitudes capture only dynamic variation.
+    float ax_mean = 0.0f, ay_mean = 0.0f, az_mean = 0.0f;
+    float gx_mean = 0.0f, gy_mean = 0.0f, gz_mean = 0.0f;
+    for (int i = 0; i < samples; i++) {
+        ax_mean += sensor_data[i][0];
+        ay_mean += sensor_data[i][1];
+        az_mean += sensor_data[i][2];
+        gx_mean += sensor_data[i][3];
+        gy_mean += sensor_data[i][4];
+        gz_mean += sensor_data[i][5];
+    }
+    ax_mean /= (float)samples; ay_mean /= (float)samples; az_mean /= (float)samples;
+    gx_mean /= (float)samples; gy_mean /= (float)samples; gz_mean /= (float)samples;
+
+    // Calculate centered magnitude vectors
     float prev_ax = sensor_data[0][0];
     float prev_ay = sensor_data[0][1];
     float prev_az = sensor_data[0][2];
@@ -813,9 +829,13 @@ void extract_features(float sensor_data[][N_CHANNELS], int samples, float featur
         float gy = sensor_data[i][4];
         float gz = sensor_data[i][5];
 
-        acc_mag[i] = sqrtf(ax*ax + ay*ay + az*az);
-        gyro_mag[i] = sqrtf(gx*gx + gy*gy + gz*gz);
+        // Centered magnitudes (gravity/bias removed)
+        float cax = ax - ax_mean, cay = ay - ay_mean, caz = az - az_mean;
+        float cgx = gx - gx_mean, cgy = gy - gy_mean, cgz = gz - gz_mean;
+        acc_mag[i] = sqrtf(cax*cax + cay*cay + caz*caz);
+        gyro_mag[i] = sqrtf(cgx*cgx + cgy*cgy + cgz*cgz);
 
+        // Jerk uses raw (uncentered) differences — centering cancels out in diff
         if (i > 0) {
             float dax = ax - prev_ax;
             float day = ay - prev_ay;

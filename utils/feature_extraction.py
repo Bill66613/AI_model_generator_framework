@@ -17,20 +17,25 @@ from config.config import (
 logger = logging.getLogger(__name__)
 
 
-def _compute_magnitude(df: pd.DataFrame, columns: List[str]) -> np.ndarray:
-    """Compute the Euclidean magnitude across the given columns.
+def _compute_centered_magnitude(df: pd.DataFrame, columns: List[str]) -> np.ndarray:
+    """Compute Euclidean magnitude after per-window mean centering.
+
+    Subtracts the per-window mean from each axis before computing magnitude,
+    removing static offsets (gravity for accel, orientation-dependent bias for
+    gyro) so the result captures only dynamic variation.
 
     Args:
-        df: DataFrame with sensor data
-        columns: Column names whose squared values are summed (e.g. 3-axis accel)
+        df: DataFrame with sensor data (one window)
+        columns: Column names (e.g. ['aX','aY','aZ'])
 
     Returns:
-        1-D numpy array of magnitude values
+        1-D numpy array of centered-magnitude values
     """
     present = [c for c in columns if c in df.columns]
     if not present:
         return np.zeros(len(df))
-    return np.sqrt(sum(df[c].values ** 2 for c in present))
+    centered = {c: df[c].values - df[c].values.mean() for c in present}
+    return np.sqrt(sum(centered[c] ** 2 for c in present))
 
 
 def extract_orientation_invariant_features(
@@ -58,9 +63,11 @@ def extract_orientation_invariant_features(
     accel_cols = [c for c in ACCEL_COLUMNS if c in df.columns]
     gyro_cols = [c for c in GYRO_COLUMNS if c in df.columns]
 
-    # Calculate magnitude vectors (MOST IMPORTANT for orientation invariance)
-    acc_mag = _compute_magnitude(df, accel_cols)
-    gyro_mag = _compute_magnitude(df, gyro_cols)
+    # Calculate centered magnitude vectors — per-window mean subtraction
+    # removes gravity (accel) and orientation-dependent bias (gyro),
+    # so magnitudes capture only dynamic variation.
+    acc_mag = _compute_centered_magnitude(df, accel_cols)
+    gyro_mag = _compute_centered_magnitude(df, gyro_cols)
 
     # Statistical features on acceleration magnitude
     for name, mag_data in [('acc_mag', acc_mag), ('gyro_mag', gyro_mag)]:
@@ -131,9 +138,9 @@ def extract_frequency_magnitude_features(
     accel_cols = [c for c in ACCEL_COLUMNS if c in df.columns]
     gyro_cols = [c for c in GYRO_COLUMNS if c in df.columns]
 
-    # Calculate magnitude vectors
-    acc_mag = _compute_magnitude(df, accel_cols)
-    gyro_mag = _compute_magnitude(df, gyro_cols)
+    # Calculate centered magnitude vectors (consistent with time-domain features)
+    acc_mag = _compute_centered_magnitude(df, accel_cols)
+    gyro_mag = _compute_centered_magnitude(df, gyro_cols)
 
     for name, mag_data in [('acc_mag', acc_mag), ('gyro_mag', gyro_mag)]:
         data = mag_data

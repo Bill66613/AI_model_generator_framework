@@ -23,6 +23,16 @@ from deployment.code_generator_factory import (
 
 
 # ---------------------------------------------------------------------------
+# Helpers: Centered magnitude (mirrors Python & C++ centering)
+# ---------------------------------------------------------------------------
+
+def _centered_magnitude(df: pd.DataFrame, cols: list) -> np.ndarray:
+    """Compute magnitude after per-window mean centering (matches feature extraction)."""
+    centered = {c: df[c].values - df[c].values.mean() for c in cols}
+    return np.sqrt(sum(centered[c] ** 2 for c in cols))
+
+
+# ---------------------------------------------------------------------------
 # Helpers: C++ formulas re-implemented in pure Python (must mirror
 # base_generator.py extract_magnitude_stats and DFT code exactly)
 # ---------------------------------------------------------------------------
@@ -207,8 +217,8 @@ class TestTimeDomainParity:
         df = synthetic_window
         py_feats = extract_orientation_invariant_features(df)
 
-        # Compute acc_mag the same way Python does
-        acc_mag = np.sqrt(df['aX'].values**2 + df['aY'].values**2 + df['aZ'].values**2)
+        # Compute acc_mag the same way Python does (centered)
+        acc_mag = _centered_magnitude(df, ['aX', 'aY', 'aZ'])
         cpp_stats = _cpp_magnitude_stats(acc_mag)
 
         for stat_name, cpp_val in cpp_stats.items():
@@ -236,7 +246,7 @@ class TestTimeDomainParity:
         df = synthetic_window
         py_feats = extract_orientation_invariant_features(df)
 
-        gyro_mag = np.sqrt(df['gX'].values**2 + df['gY'].values**2 + df['gZ'].values**2)
+        gyro_mag = _centered_magnitude(df, ['gX', 'gY', 'gZ'])
         cpp_stats = _cpp_magnitude_stats(gyro_mag)
 
         for stat_name, cpp_val in cpp_stats.items():
@@ -311,14 +321,14 @@ class TestFrequencyDomainParity:
         """acc_mag DFT features: Python FFT vs C++ DFT loop."""
         df = synthetic_window
         py_feats = extract_frequency_magnitude_features(df, sampling_rate=100)
-        acc_mag = np.sqrt(df['aX'].values**2 + df['aY'].values**2 + df['aZ'].values**2)
+        acc_mag = _centered_magnitude(df, ['aX', 'aY', 'aZ'])
         self._check_dft_features(py_feats, 'acc_mag', acc_mag)
 
     def test_gyro_mag_dft_parity(self, synthetic_window):
         """gyro_mag DFT features: Python FFT vs C++ DFT loop."""
         df = synthetic_window
         py_feats = extract_frequency_magnitude_features(df, sampling_rate=100)
-        gyro_mag = np.sqrt(df['gX'].values**2 + df['gY'].values**2 + df['gZ'].values**2)
+        gyro_mag = _centered_magnitude(df, ['gX', 'gY', 'gZ'])
         self._check_dft_features(py_feats, 'gyro_mag', gyro_mag)
 
 
@@ -418,7 +428,7 @@ class TestPopulationStd:
         df = synthetic_window
         feats = extract_orientation_invariant_features(df)
 
-        acc_mag = np.sqrt(df['aX']**2 + df['aY']**2 + df['aZ']**2).values
+        acc_mag = _centered_magnitude(df, ['aX', 'aY', 'aZ'])
         pop_std = np.std(acc_mag, ddof=0)
         sample_std = np.std(acc_mag, ddof=1)
 

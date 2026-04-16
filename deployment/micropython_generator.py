@@ -685,13 +685,29 @@ def extract_features(sensor_data, samples):
     acc_mag = []
     gyro_mag = []
     jerk_mag = []
+
+    # Per-window mean centering — removes gravity (accel) and
+    # orientation-dependent DC bias (gyro).
+    ax_s = ay_s = az_s = gx_s = gy_s = gz_s = 0.0
+    for i in range(samples):
+        r = sensor_data[i]
+        ax_s += r[0]; ay_s += r[1]; az_s += r[2]
+        gx_s += r[3]; gy_s += r[4]; gz_s += r[5]
+    n = float(samples)
+    ax_m, ay_m, az_m = ax_s / n, ay_s / n, az_s / n
+    gx_m, gy_m, gz_m = gx_s / n, gy_s / n, gz_s / n
+
     prev = sensor_data[0][:3]
     for i in range(samples):
         row = sensor_data[i]
-        am = math.sqrt(row[0] ** 2 + row[1] ** 2 + row[2] ** 2)
-        gm = math.sqrt(row[3] ** 2 + row[4] ** 2 + row[5] ** 2)
+        # Centered magnitudes
+        cax, cay, caz = row[0] - ax_m, row[1] - ay_m, row[2] - az_m
+        cgx, cgy, cgz = row[3] - gx_m, row[4] - gy_m, row[5] - gz_m
+        am = math.sqrt(cax ** 2 + cay ** 2 + caz ** 2)
+        gm = math.sqrt(cgx ** 2 + cgy ** 2 + cgz ** 2)
         acc_mag.append(am)
         gyro_mag.append(gm)
+        # Jerk uses raw differences (centering cancels in diff)
         if i > 0:
             d = [row[j] - prev[j] for j in range(3)]
             jerk_mag.append(math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2))

@@ -166,39 +166,50 @@ def register_callbacks(app):
     )
     def update_feature_count(feature_selection):
         """
-        Display the total number of features based on the selection method.
+        Display the total number of features based on the selection method
+        and the actual sensor columns configured.
         """
+        from config.config import ACCEL_COLUMNS, GYRO_COLUMNS
+        n_accel = len(ACCEL_COLUMNS)
+        n_gyro = len(GYRO_COLUMNS)
+        n_axes = n_accel + n_gyro
+        n_mag_groups = (1 if n_accel > 0 else 0) + (1 if n_gyro > 0 else 0)
+        jerk_feats = 3 if n_accel >= 2 else 0
+        freq_per_mag = 7  # DFT features per magnitude group
+
         feature_counts = {
             'orientation_invariant_time_only': (
-                '33 features',
-                'Orientation-robust magnitudes: 15 stats × (acc_mag + gyro_mag) + 3 jerk stats. '
+                f'{15 * n_mag_groups + jerk_feats} features',
+                f'Orientation-robust centered magnitudes: 15 stats x {n_mag_groups} magnitudes'
+                f'{f" + {jerk_feats} jerk stats" if jerk_feats else ""}. '
                 'RECOMMENDED for deployment — fully deployable to all targets (C / C++ / MicroPython).'
             ),
             'orientation_invariant': (
-                '47 features',
-                'Orientation-robust magnitudes (33 time) + DFT on magnitudes (14 freq). '
+                f'{15 * n_mag_groups + jerk_feats + freq_per_mag * n_mag_groups} features',
+                f'Orientation-robust centered magnitudes ({15 * n_mag_groups + jerk_feats} time) '
+                f'+ DFT on magnitudes ({freq_per_mag * n_mag_groups} freq). '
                 'Fully deployable — on-device DFT uses only sin/cos, no FFT library needed.'
             ),
             'time_domain': (
-                '90 features',
-                'Per-axis time-domain: 15 stats × 6 axes (aX, aY, aZ, gX, gY, gZ). '
+                f'{15 * n_axes} features',
+                f'Per-axis time-domain: 15 stats x {n_axes} axes. '
                 'Fully deployable to all targets.'
             ),
             'all': (
-                '138 features',
-                'Per-axis time-domain (90) + per-axis frequency-domain (48). '
-                '⚠️ The 48 per-axis freq features are NOT deployable — only orientation-robust '
-                'DFT is implemented in code generators. Use “Orientation Invariant” for deployable freq features.'
+                f'{15 * n_axes + 8 * n_axes} features',
+                f'Per-axis time-domain ({15 * n_axes}) + per-axis frequency-domain ({8 * n_axes}). '
+                'Per-axis freq features are NOT deployable — only orientation-robust '
+                'DFT is implemented in code generators.'
             ),
             'frequency_domain': (
-                '48 features',
-                'Per-axis frequency-domain only (per-axis FFT). '
-                '⚠️ Per-axis freq features are NOT deployable. '
-                'Use “Orientation Invariant” (47 features) which includes deployable DFT on magnitudes.'
+                f'{8 * n_axes} features',
+                f'Per-axis frequency-domain only ({8 * n_axes} features). '
+                'Per-axis freq features are NOT deployable. '
+                'Use "Orientation Invariant" which includes deployable DFT on magnitudes.'
             ),
             'raw': (
-                '6 features',
-                'Raw sensor axes mean per window (aX, aY, aZ, gX, gY, gZ).'
+                f'{n_axes} features',
+                f'Raw sensor axes mean per window ({n_axes} axes).'
             ),
         }
 
@@ -654,6 +665,7 @@ def register_callbacks(app):
                 'feature_method': feature_method,
                 'normalization_method': normalization_method,
                 'sensor_columns': sensor_cols,
+                'num_channels': len(sensor_cols),
                 'feature_names': feature_names,
                 'num_features': len(feature_names),
                 'selected_labels': selected_labels,

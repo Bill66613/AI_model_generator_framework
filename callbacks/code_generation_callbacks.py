@@ -506,12 +506,18 @@ def register_callbacks(app):
             train_acc = metadata.get('train_accuracy', 0) * 100
             val_acc = metadata.get('val_accuracy', 0) * 100
             test_acc = metadata.get('test_accuracy', 0) * 100
-            features = metadata.get('features', 0)
+            raw_features = metadata.get('features', 0)
             classes = metadata.get('classes', 0)
 
-            # Get training parameters — prefer fe_config (from Feature Engineering)
-            # over model_params (which stores model hyperparameters like n_estimators, C, etc.)
+            # Derive accurate feature count from fe_config or model data
             fe_config = metadata.get('fe_config', {})
+            fe_feature_names = fe_config.get('feature_names', [])
+            num_extracted_features = (
+                metadata.get('num_features_extracted')
+                or len(fe_feature_names)
+                or fe_config.get('num_features')
+                or raw_features
+            )
             model_params = metadata.get('model_params', {})
             sampling_rate = fe_config.get('sampling_rate',
                                           model_params.get('sampling_rate', 100))
@@ -539,7 +545,7 @@ def register_callbacks(app):
                          'margin-bottom': '5px'}),
                 html.Div(f"Accuracy: Train {train_acc:.1f}% | Val {val_acc:.1f}% | Test {test_acc:.1f}%", style={
                          'margin-bottom': '5px'}),
-                html.Div(f"Features: {features}", style={
+                html.Div(f"Features: {num_extracted_features}", style={
                          'margin-bottom': '5px'}),
                 html.Div(f"Classes: {classes} activities",
                          style={'color': '#28a745'})
@@ -566,8 +572,11 @@ def register_callbacks(app):
                 html.Div([
                     html.Span("🎯 Feature Count: ", style={
                               'font-weight': 'bold'}),
-                    html.Span(f"{features} features",
-                              style={'color': '#2E86AB'}),
+                    html.Span(
+                        f"{raw_features} samples x {fe_config.get('num_channels', '?')} ch (raw windows)"
+                        if model_type == 'PYTORCH_CNN'
+                        else f"{num_extracted_features} features",
+                        style={'color': '#2E86AB'}),
                     html.Span(f" ({feature_domain_label})",
                               style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
                 ])
