@@ -417,15 +417,25 @@ def register_callbacks(app):
     @app.callback(
         Output('preprocessed-graph', 'figure', allow_duplicate=True),
         Output('stored-datasets', 'data', allow_duplicate=True),
+        Output('preprocessing-config', 'data'),
         Input('clean-smooth-btn', 'n_clicks'),
         State('dataset-selector_', 'value'),
         State('working-directory-store', 'data'),
+        State('preprocess-outlier-enabled', 'value'),
+        State('preprocess-lpf-enabled', 'value'),
+        State('preprocess-lpf-cutoff', 'value'),
+        State('preprocess-lpf-order', 'value'),
+        State('preprocess-savgol-enabled', 'value'),
+        State('preprocess-savgol-window', 'value'),
+        State('preprocess-savgol-polyorder', 'value'),
         prevent_initial_call=True
     )
-    def clean_and_smooth_data(n_clicks, dataset_name, base_dir):
+    def clean_and_smooth_data(n_clicks, dataset_name, base_dir,
+                              outlier_enabled, lpf_enabled, lpf_cutoff, lpf_order,
+                              savgol_enabled, savgol_window, savgol_polyorder):
         """Clean and smooth the selected dataset and display it in a graph."""
         if not dataset_name:
-            return no_update, no_update
+            return no_update, no_update, no_update
 
         if not base_dir:
             base_dir = PERSISTENT_DIR
@@ -433,7 +443,7 @@ def register_callbacks(app):
 
         file_path = os.path.join(datasets_dir, dataset_name)
         if not os.path.exists(file_path):
-            return no_update, no_update
+            return no_update, no_update, no_update
 
         # Load metadata to get the actual sampling rate for this dataset
         metadata_file = os.path.join(base_dir, 'metadata.json')
@@ -445,16 +455,38 @@ def register_callbacks(app):
 
         df = pd.read_csv(file_path)
 
+        # Build preprocessing config for downstream pipeline parity
+        use_outlier = 'enabled' in (outlier_enabled or [])
+        use_lpf = 'enabled' in (lpf_enabled or [])
+        use_savgol = 'enabled' in (savgol_enabled or [])
+        lpf_cutoff = float(lpf_cutoff or 5)
+        lpf_order = int(lpf_order or 2)
+        savgol_window = int(savgol_window or 5)
+        savgol_polyorder = int(savgol_polyorder or 2)
+
+        preprocess_config = {
+            'outlier_removal': use_outlier,
+            'low_pass_filter': use_lpf,
+            'lpf_cutoff_hz': lpf_cutoff,
+            'lpf_order': lpf_order,
+            'savgol_filter': use_savgol,
+            'savgol_window_length': savgol_window,
+            'savgol_polyorder': savgol_polyorder,
+        }
+
         # Clean the data
         df = clean_data(df, method='remove_missing')
-        df = clean_data(df, method='filter_outliers')
+        if use_outlier:
+            df = clean_data(df, method='filter_outliers')
 
-        # Apply low-pass filter (use actual sampling rate, not hardcoded fs=50)
-        df = low_pass_filter(df, cutoff=5, fs=sampling_rate, order=2)
+        # Apply low-pass filter
+        if use_lpf:
+            df = low_pass_filter(df, cutoff=lpf_cutoff, fs=sampling_rate, order=lpf_order)
 
         # Apply Savitzky-Golay filter
-        for col in df.select_dtypes(include=['float64', 'int64']).columns:
-            df[col] = savgol_filter(df[col], window_length=5, polyorder=2)
+        if use_savgol:
+            for col in df.select_dtypes(include=['float64', 'int64']).columns:
+                df[col] = savgol_filter(df[col], window_length=savgol_window, polyorder=savgol_polyorder)
 
         # Create time axis for proper labeling
         df['Time_seconds'] = df.index / sampling_rate
@@ -488,7 +520,7 @@ def register_callbacks(app):
 
         stored_datasets = df.to_dict(orient='records')
 
-        return fig, stored_datasets
+        return fig, stored_datasets, preprocess_config
 
 
     @app.callback(
@@ -498,9 +530,10 @@ def register_callbacks(app):
         State('stored-datasets', 'data'),
         State('preprocessed-graph', 'figure'),
         State('working-directory-store', 'data'),
+        State('preprocessing-config', 'data'),
         prevent_initial_call=True
     )
-    def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, processed_figure, base_dir):
+    def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, processed_figure, base_dir, preprocess_config):
         """Save the cleaned and smoothed dataset to a new file and update metadata."""
         if not (dataset_name and processed_figure):
             return {}
@@ -524,6 +557,8 @@ def register_callbacks(app):
             metadata = {}
 
         metadata[dataset_name]["cleaned_data_path"] = cleaned_smoothed_file_path
+        if preprocess_config:
+            metadata[dataset_name]["preprocessing"] = preprocess_config
 
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f)

@@ -548,8 +548,19 @@ def _magnitude_stats(mag):
     s_data = sorted(mag)
     mid = n // 2
     median = (s_data[mid - 1] + s_data[mid]) / 2 if n % 2 == 0 else s_data[mid]
-    q25 = s_data[n // 4]
-    q75 = s_data[(3 * n) // 4]
+    # Quartiles using linear interpolation (matches numpy default)
+    q25_pos = 0.25 * (n - 1)
+    q25_lo = int(q25_pos)
+    q25_frac = q25_pos - q25_lo
+    q25_hi = min(q25_lo + 1, n - 1)
+    q25 = s_data[q25_lo] + q25_frac * (s_data[q25_hi] - s_data[q25_lo])
+
+    q75_pos = 0.75 * (n - 1)
+    q75_lo = int(q75_pos)
+    q75_frac = q75_pos - q75_lo
+    q75_hi = min(q75_lo + 1, n - 1)
+    q75 = s_data[q75_lo] + q75_frac * (s_data[q75_hi] - s_data[q75_lo])
+
     iqr = q75 - q25
 
     # Skewness/kurtosis (bias-corrected, using population std to match pandas)
@@ -557,7 +568,7 @@ def _magnitude_stats(mag):
     m3 = 0.0
     m4 = 0.0
     for v in mag:
-        z = (v - mean) / (pop_std + 0.0001)
+        z = (v - mean) / (pop_std + 1e-7)
         z2 = z * z
         m3 += z * z2
         m4 += z2 * z2
@@ -746,8 +757,19 @@ def extract_features(sensor_data, samples):
         s_data = sorted(col)
         mid = samples // 2
         median = (s_data[mid - 1] + s_data[mid]) / 2 if samples % 2 == 0 else s_data[mid]
-        q25 = s_data[samples // 4]
-        q75 = s_data[(3 * samples) // 4]
+        # Quartiles using linear interpolation (matches numpy default)
+        q25_pos = 0.25 * (samples - 1)
+        q25_lo = int(q25_pos)
+        q25_frac = q25_pos - q25_lo
+        q25_hi = min(q25_lo + 1, samples - 1)
+        q25 = s_data[q25_lo] + q25_frac * (s_data[q25_hi] - s_data[q25_lo])
+
+        q75_pos = 0.75 * (samples - 1)
+        q75_lo = int(q75_pos)
+        q75_frac = q75_pos - q75_lo
+        q75_hi = min(q75_lo + 1, samples - 1)
+        q75 = s_data[q75_lo] + q75_frac * (s_data[q75_hi] - s_data[q75_lo])
+
         iqr = q75 - q25
 
         # Skewness / kurtosis (using population std to match pandas)
@@ -755,7 +777,7 @@ def extract_features(sensor_data, samples):
         m3 = 0.0
         m4 = 0.0
         for v in col:
-            z = (v - mean) / (pop_std + 0.001)
+            z = (v - mean) / (pop_std + 1e-7)
             z2 = z * z
             m3 += z * z2
             m4 += z2 * z2

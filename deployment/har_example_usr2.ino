@@ -24,7 +24,7 @@ float sensor_buffer[WINDOW_SIZE][6];  // aX, aY, aZ, gX, gY, gZ
 int buffer_index = 0;
 float features[NUM_FEATURES];
 unsigned long last_reading = 0;
-const unsigned long READING_INTERVAL = 10;  // ms between readings
+const unsigned long READING_INTERVAL = 1000 / SAMPLING_RATE;  // ms between readings
 
 #define OVERLAP 0.75  // 75% overlap
 const float buffer_index_shift = WINDOW_SIZE * (1 - OVERLAP);
@@ -116,15 +116,6 @@ void loop() {
 
     // When buffer is full, extract features and predict
     if (buffer_index >= WINDOW_SIZE) {
-      // Use 50% overlap for smoother predictions
-      // Shift buffer: move second half to first half
-      for (int i = 0; i < WINDOW_SIZE / 2; i++) {
-        for (int axis = 0; axis < 6; axis++) {
-          sensor_buffer[i][axis] = sensor_buffer[i + WINDOW_SIZE / 2][axis];
-        }
-      }
-      buffer_index = (int)buffer_index_shift;
-
       // Calculate motion statistics for debugging
       float acc_mag_sum = 0, gyro_mag_sum = 0;
       for (int i = 0; i < WINDOW_SIZE; i++) {
@@ -140,13 +131,22 @@ void loop() {
       float avg_acc_mag = acc_mag_sum / WINDOW_SIZE;
       float avg_gyro_mag = gyro_mag_sum / WINDOW_SIZE;
 
-      // Extract features
+      // Extract features and predict BEFORE overlap copy
       extract_features(sensor_buffer, WINDOW_SIZE, features);
 
       // Make prediction
       float confidence = 0.0f;
       int predicted_class = har_predict(features, &confidence);
       const char* activity_name = get_activity_name(predicted_class);
+
+      // Shift buffer for overlap: keep the last overlap portion
+      int keep_samples = WINDOW_SIZE - (int)buffer_index_shift;
+      for (int i = 0; i < keep_samples; i++) {
+        for (int axis = 0; axis < 6; axis++) {
+          sensor_buffer[i][axis] = sensor_buffer[i + (int)buffer_index_shift][axis];
+        }
+      }
+      buffer_index = keep_samples;
 
       // Print result with motion statistics
       Serial.print("Motion: acc=");

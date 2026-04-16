@@ -286,14 +286,15 @@ def register_callbacks(app):
          State('augmentation-enable', 'value'),
          State('augmentation-methods', 'value'),
          State('augmentation-factor', 'value'),
-         State('augmentation-static-labels', 'value')],
+         State('augmentation-static-labels', 'value'),
+         State('preprocessing-config', 'data')],
         prevent_initial_call=True
     )
     def execute_feature_engineering(n_clicks, selected_labels, feature_method,
                                     normalization_method, target_window_size, sampling_rate,
                                     train_ratio, val_ratio, random_state, base_dir,
                                     augmentation_enabled, aug_methods, aug_factor,
-                                    aug_static_labels_str):
+                                    aug_static_labels_str, preprocess_config):
         """
         Main feature engineering executor.
         Applies consistent settings across all selected activity labels.
@@ -673,6 +674,7 @@ def register_callbacks(app):
                     'original_windows': original_window_count,
                     'synthetic_windows': (aug_stats or {}).get('generated', 0),
                 } if aug_stats else None,
+                'preprocessing': preprocess_config or {},
             }
             fe_meta_file = os.path.join(
                 training_dir, f"{dataset_name}_fe_metadata.json")

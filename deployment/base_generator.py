@@ -27,7 +27,10 @@ class BaseCodeGenerator(ABC):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
                  optimization: str = 'balanced', overlap: float = 0.5,
-                 quantization: str = 'none'):
+                 quantization: str = 'none',
+                 confidence_threshold: float = 0.6,
+                 smoothing_window: int = 1,
+                 enable_iir_filter: bool = False):
         # Validate inputs before proceeding
         self._validate_model_data(model_data)
         self._validate_optimization(optimization)
@@ -40,6 +43,9 @@ class BaseCodeGenerator(ABC):
         self.platform = platform
         self.optimization = optimization
         self.overlap = max(0.0, min(0.99, overlap))  # Clamp between 0-99%
+        self.confidence_threshold = max(0.0, min(1.0, confidence_threshold))
+        self.smoothing_window = max(1, min(9, smoothing_window))
+        self.enable_iir_filter = enable_iir_filter
 
         # Quantization mode: 'none', 'int8', 'int16', 'float16'
         from .quantization import QUANTIZATION_MODES
@@ -50,6 +56,11 @@ class BaseCodeGenerator(ABC):
             'feature_means', [0.0] * len(self.feature_names))
         self.feature_stds = model_data.get(
             'feature_stds', [1.0] * len(self.feature_names))
+
+        # Extract preprocessing config from fe_config
+        model_info = model_data.get('model_info', {})
+        fe_config = model_info.get('fe_config', {})
+        self.preprocessing = fe_config.get('preprocessing', {})
 
         # Validate parameter consistency
         self._validate_parameter_consistency()
@@ -101,7 +112,7 @@ class BaseCodeGenerator(ABC):
 #define QUANTIZATION_ENABLED {1 if self.quantization != 'none' else 0}
 
 // Confidence threshold — prediction returns -1 when below this
-#define CONFIDENCE_THRESHOLD 0.6f
+#define CONFIDENCE_THRESHOLD {self.confidence_threshold:.2f}f
 
 {self._get_model_specific_declarations()}
 
@@ -117,7 +128,7 @@ class BaseCodeGenerator(ABC):
 
 // Function declarations
 {self._get_function_declarations()}
-
+{self._generate_iir_filter_declarations()}
 #endif // HAR_MODEL_H
 """
         return header.strip()
@@ -154,6 +165,7 @@ const char* activity_names[NUM_CLASSES] = {{
     {', '.join([f'"{cls}"' for cls in self.classes])}
 }};
 
+{self._generate_iir_filter_implementation()}
 {self._generate_feature_scaling_arrays()}
 
 {self._generate_model_specific_implementation()}
@@ -356,6 +368,165 @@ const char* get_activity_name(int class_id) {{
                 'void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]);\n'
                 'const char* get_activity_name(int class_id);'
             )
+
+    @staticmethod
+    def _float_literal(v: float) -> str:
+        """Format a float as a valid C float literal (always includes decimal point)."""
+        s = f"{v:.10g}"
+        if '.' not in s and 'e' not in s and 'E' not in s:
+            s += '.0'
+        return s + 'f'
+
+    def _generate_smoothing_variables(self) -> str:
+        """Generate majority-voting variables for temporal smoothing."""
+        if self.smoothing_window <= 1:
+            return ''
+        return (
+            f'// Temporal smoothing — majority vote over last {self.smoothing_window} predictions\n'
+            f'#define SMOOTHING_WINDOW {self.smoothing_window}\n'
+            f'int prediction_history[SMOOTHING_WINDOW];\n'
+            f'int prediction_head = 0;\n'
+            f'int prediction_count = 0;\n'
+        )
+
+    def _generate_smoothing_prediction_logic(self) -> str:
+        """Generate the prediction logic block — with or without majority voting."""
+        indent = '            '
+        if self.smoothing_window <= 1:
+            # No smoothing — use raw prediction directly
+            return (
+                f'{indent}if (predicted_class >= 0) {{\n'
+                f'{indent}    activity_name = get_activity_name(predicted_class);\n'
+                f'{indent}}} else {{\n'
+                f'{indent}    activity_name = "unknown";\n'
+                f'{indent}}}\n'
+            )
+        # Majority voting
+        return (
+            f'{indent}// Store in history and majority-vote\n'
+            f'{indent}prediction_history[prediction_head] = predicted_class;\n'
+            f'{indent}prediction_head = (prediction_head + 1) % SMOOTHING_WINDOW;\n'
+            f'{indent}if (prediction_count < SMOOTHING_WINDOW) prediction_count++;\n'
+            f'{indent}\n'
+            f'{indent}// Find majority class\n'
+            f'{indent}int vote_counts[NUM_CLASSES] = {{0}};\n'
+            f'{indent}int unknown_votes = 0;\n'
+            f'{indent}for (int v = 0; v < prediction_count; v++) {{\n'
+            f'{indent}    int pc = prediction_history[v];\n'
+            f'{indent}    if (pc >= 0 && pc < NUM_CLASSES) vote_counts[pc]++;\n'
+            f'{indent}    else unknown_votes++;\n'
+            f'{indent}}}\n'
+            f'{indent}int best_class = -1, best_votes = unknown_votes;\n'
+            f'{indent}for (int c = 0; c < NUM_CLASSES; c++) {{\n'
+            f'{indent}    if (vote_counts[c] > best_votes) {{\n'
+            f'{indent}        best_votes = vote_counts[c];\n'
+            f'{indent}        best_class = c;\n'
+            f'{indent}    }}\n'
+            f'{indent}}}\n'
+            f'{indent}if (best_class >= 0) {{\n'
+            f'{indent}    activity_name = get_activity_name(best_class);\n'
+            f'{indent}}} else {{\n'
+            f'{indent}    activity_name = "unknown";\n'
+            f'{indent}}}\n'
+        )
+
+    def _has_device_filter(self) -> bool:
+        """Check if on-device IIR filter should be generated.
+
+        Only enabled when the user explicitly opts in AND
+        low-pass filtering was used during training.
+        NOTE: Training uses filtfilt (zero-phase) while on-device uses
+        lfilter (causal). This creates a subtle parity gap.
+        """
+        return (self.enable_iir_filter
+                and bool(self.preprocessing.get('low_pass_filter')))
+
+    def _compute_iir_coefficients(self):
+        """Compute 2nd-order IIR (Butterworth) coefficients for on-device filtering.
+
+        Returns (b0, b1, b2, a1, a2) normalized so a0=1.
+        Uses scipy to match training pipeline exactly.
+        """
+        try:
+            from scipy.signal import butter
+        except ImportError:
+            return None
+
+        cutoff = self.preprocessing.get('lpf_cutoff_hz', 5)
+        order = self.preprocessing.get('lpf_order', 2)
+        fs = self.sampling_rate
+
+        # Get transfer function coefficients (numerator b, denominator a)
+        b, a = butter(order, cutoff, btype='low', fs=fs)
+        return b, a
+
+    def _generate_iir_filter_declarations(self) -> str:
+        """Generate IIR filter function declaration for the header."""
+        if not self._has_device_filter():
+            return ''
+        return (
+            '\n// On-device IIR low-pass filter (matches training preprocessing)\n'
+            '#define IIR_FILTER_ENABLED 1\n'
+            'void iir_filter_sample(float raw[N_CHANNELS]);\n'
+            'void iir_filter_reset(void);\n'
+        )
+
+    def _generate_iir_filter_implementation(self) -> str:
+        """Generate C++ IIR filter implementation with embedded coefficients."""
+        if not self._has_device_filter():
+            return ''
+
+        result = self._compute_iir_coefficients()
+        if result is None:
+            return '// WARNING: scipy not available — IIR filter coefficients not computed\n'
+
+        b, a = result
+        order = len(b) - 1  # filter order
+
+        cutoff = self.preprocessing.get('lpf_cutoff_hz', 5)
+        prec = self.feature_precision
+
+        lines = [
+            f'// IIR Low-pass filter: Butterworth, cutoff={cutoff}Hz, order={order}, fs={self.sampling_rate}Hz',
+            f'// Coefficients computed by scipy.signal.butter to match training pipeline',
+            f'#define IIR_ORDER {order}',
+            '',
+            f'static const float iir_b[{len(b)}] = {{{", ".join(self._float_literal(v) for v in b)}}};',
+            f'static const float iir_a[{len(a)}] = {{{", ".join(self._float_literal(v) for v in a)}}};',
+            '',
+            f'// Filter state: delay lines per channel',
+            f'static float iir_x_hist[N_CHANNELS][IIR_ORDER] = {{{{0}}}};  // input history',
+            f'static float iir_y_hist[N_CHANNELS][IIR_ORDER] = {{{{0}}}};  // output history',
+            '',
+            'void iir_filter_reset(void) {',
+            f'    for (int ch = 0; ch < N_CHANNELS; ch++) {{',
+            f'        for (int i = 0; i < IIR_ORDER; i++) {{',
+            '            iir_x_hist[ch][i] = 0.0f;',
+            '            iir_y_hist[ch][i] = 0.0f;',
+            '        }',
+            '    }',
+            '}',
+            '',
+            'void iir_filter_sample(float raw[N_CHANNELS]) {',
+            '    for (int ch = 0; ch < N_CHANNELS; ch++) {',
+            '        float x = raw[ch];',
+            '        float y = iir_b[0] * x;',
+            f'        for (int i = 1; i <= IIR_ORDER; i++) {{',
+            '            y += iir_b[i] * iir_x_hist[ch][i-1];',
+            '            y -= iir_a[i] * iir_y_hist[ch][i-1];',
+            '        }',
+            '        // Shift history',
+            f'        for (int i = IIR_ORDER - 1; i > 0; i--) {{',
+            '            iir_x_hist[ch][i] = iir_x_hist[ch][i-1];',
+            '            iir_y_hist[ch][i] = iir_y_hist[ch][i-1];',
+            '        }',
+            '        iir_x_hist[ch][0] = x;',
+            '        iir_y_hist[ch][0] = y;',
+            '        raw[ch] = y;',
+            '    }',
+            '}',
+        ]
+        return '\n'.join(lines) + '\n'
 
     def _get_logging_macros(self) -> str:
         """Generate platform-portable logging macros.
@@ -741,8 +912,17 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
     float median = (samples % 2 == 0) ?
         (sorted[samples/2 - 1] + sorted[samples/2]) / 2.0f :
         sorted[samples/2];
-    float q25 = sorted[samples/4];
-    float q75 = sorted[(3*samples)/4];
+    // Quartiles using linear interpolation (matches numpy default)
+    float q25_pos = 0.25f * (samples - 1);
+    int q25_lo = (int)q25_pos;
+    float q25_frac = q25_pos - q25_lo;
+    float q25 = sorted[q25_lo] + q25_frac * (sorted[q25_lo + 1 < samples ? q25_lo + 1 : q25_lo] - sorted[q25_lo]);
+
+    float q75_pos = 0.75f * (samples - 1);
+    int q75_lo = (int)q75_pos;
+    float q75_frac = q75_pos - q75_lo;
+    float q75 = sorted[q75_lo] + q75_frac * (sorted[q75_lo + 1 < samples ? q75_lo + 1 : q75_lo] - sorted[q75_lo]);
+
     float iqr = q75 - q25;
 
     features[idx++] = median;       // 5: median
@@ -756,7 +936,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
 
     float m3_sum = 0.0f, m4_sum = 0.0f;
     for (int i = 0; i < samples; i++) {
-        float z = (mag[i] - mean) / (pop_std + 0.0001f);
+        float z = (mag[i] - mean) / (pop_std + 1e-7f);
         float z2 = z * z;
         m3_sum += z * z2;
         m4_sum += z2 * z2;
@@ -869,8 +1049,17 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         float median = (samples % 2 == 0)
             ? (sorted_data[mid - 1] + sorted_data[mid]) / 2.0f
             : sorted_data[mid];
-        float q25 = sorted_data[samples / 4];
-        float q75 = sorted_data[(3 * samples) / 4];
+        // Quartiles using linear interpolation (matches numpy default)
+        float q25_pos = 0.25f * (samples - 1);
+        int q25_lo = (int)q25_pos;
+        float q25_frac = q25_pos - q25_lo;
+        float q25 = sorted_data[q25_lo] + q25_frac * (sorted_data[q25_lo + 1 < samples ? q25_lo + 1 : q25_lo] - sorted_data[q25_lo]);
+
+        float q75_pos = 0.75f * (samples - 1);
+        int q75_lo = (int)q75_pos;
+        float q75_frac = q75_pos - q75_lo;
+        float q75 = sorted_data[q75_lo] + q75_frac * (sorted_data[q75_lo + 1 < samples ? q75_lo + 1 : q75_lo] - sorted_data[q75_lo]);
+
         float iqr = q75 - q25;
 
         // Feature vector (same 15 features in same order as training)
@@ -890,7 +1079,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
 
         float m3_sum = 0.0f, m4_sum = 0.0f;
         for (int i = 0; i < samples; i++) {{
-            float z = (sensor_data[i][axis] - mean) / (pop_std + 0.001f);
+            float z = (sensor_data[i][axis] - mean) / (pop_std + 1e-7f);
             float z2 = z * z;
             m3_sum += z * z2;
             m4_sum += z2 * z2;
@@ -1139,8 +1328,6 @@ void app_main(void) {{
             'balanced': 10   # Standard sampling
         }.get(self.optimization, 10)
 
-        reading_interval = 1000 // self.sampling_rate
-
         # Platform-specific IMU initialization code
         platform_code = self._get_platform_specific_code()
 
@@ -1163,9 +1350,11 @@ float sensor_buffer[WINDOW_SIZE][N_CHANNELS];  // aX, aY, aZ, gX, gY, gZ
 int buffer_index = 0;
 float features[NUM_FEATURES];
 unsigned long last_reading = 0;
-const unsigned long READING_INTERVAL = {reading_interval}; // ms between readings
+const unsigned long READING_INTERVAL = 1000 / SAMPLING_RATE; // ms between readings
 
 {platform_code['overlap_defines']}
+
+{self._generate_smoothing_variables()}
 
 void setup() {{
     Serial.begin(115200);
@@ -1189,6 +1378,9 @@ void setup() {{
 
     // Initialize HAR model
     har_init();
+    #ifdef IIR_FILTER_ENABLED
+    iir_filter_reset();
+    #endif
 
 {platform_code['imu_init']}
 
@@ -1205,6 +1397,16 @@ void loop() {{
 
 {platform_code['sensor_read']}
 
+        // Apply on-device IIR filter (matches training preprocessing)
+        #ifdef IIR_FILTER_ENABLED
+        {{
+            float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};
+            iir_filter_sample(raw_sample);
+            aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];
+            gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];
+        }}
+        #endif
+
         // Store in buffer
         sensor_buffer[buffer_index][0] = aX;
         sensor_buffer[buffer_index][1] = aY;
@@ -1218,23 +1420,21 @@ void loop() {{
         // Check if buffer is full → run inference
         const char* activity_name = NULL;
         if (buffer_index >= WINDOW_SIZE) {{
-            // Use overlap for smoother predictions
-            for (int i = 0; i < WINDOW_SIZE / 2; i++) {{
-                for (int axis = 0; axis < N_CHANNELS; axis++) {{
-                    sensor_buffer[i][axis] = sensor_buffer[i + WINDOW_SIZE / 2][axis];
-                }}
-            }}
-            buffer_index = (int)buffer_index_shift;
-
-            // Extract features and predict
+            // Extract features and predict BEFORE overlap copy
             extract_features(sensor_buffer, WINDOW_SIZE, features);
             float confidence = 0.0f;
             int predicted_class = har_predict(features, &confidence);
-            if (predicted_class >= 0) {{
-                activity_name = get_activity_name(predicted_class);
-            }} else {{
-                activity_name = "unknown";
+
+{self._generate_smoothing_prediction_logic()}
+
+            // Shift buffer for overlap: keep the last overlap portion
+            int keep_samples = WINDOW_SIZE - (int)buffer_index_shift;
+            for (int i = 0; i < keep_samples; i++) {{
+                for (int axis = 0; axis < N_CHANNELS; axis++) {{
+                    sensor_buffer[i][axis] = sensor_buffer[i + (int)buffer_index_shift][axis];
+                }}
             }}
+            buffer_index = keep_samples;
         }}
 
         // Always output sensor CSV (for Device Test graph plotting)
@@ -1466,7 +1666,7 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
             self.debug_enabled = False
             self.buffer_optimization = True
         else:  # balanced
-            self.feature_precision = 3
+            self.feature_precision = 4
             self.debug_enabled = False
             self.buffer_optimization = False
 

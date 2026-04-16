@@ -563,7 +563,10 @@ class CodeGeneratorFactory:
     def create_generator(cls, model_type: str, model_data: Dict[str, Any],
                          platform: str = 'arduino', optimization: str = 'balanced',
                          overlap: float = 0.5, quantization: str = 'none',
-                         deployment_approach: str = 'direct') -> BaseCodeGenerator:
+                         deployment_approach: str = 'direct',
+                         confidence_threshold: float = 0.6,
+                         smoothing_window: int = 1,
+                         enable_iir_filter: bool = False) -> BaseCodeGenerator:
         """
         Create appropriate code generator based on model type, platform, and deployment approach.
 
@@ -627,7 +630,10 @@ class CodeGeneratorFactory:
                                  f"Supported types: {available_types}")
 
             generator_class = cls._generators[model_type]
-            return generator_class(model_data, platform, optimization, overlap, quantization)
+            return generator_class(model_data, platform, optimization, overlap, quantization,
+                                   confidence_threshold=confidence_threshold,
+                                   smoothing_window=smoothing_window,
+                                   enable_iir_filter=enable_iir_filter)
 
         except (ValidationError, ModelDataError, OptimizationError) as e:
             # Re-raise validation errors with context
@@ -669,7 +675,10 @@ class CodeGeneratorFactory:
 def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
                              platform: str = 'arduino', optimization: str = 'balanced',
                              overlap: float = 0.5, quantization: str = 'none',
-                             deployment_approach: str = 'direct') -> Dict[str, str]:
+                             deployment_approach: str = 'direct',
+                             confidence_threshold: float = 0.6,
+                             smoothing_window: int = 1,
+                             enable_iir_filter: bool = False) -> Dict[str, str]:
     """
     Convenience function to generate deployment code with organized naming.
 
@@ -698,7 +707,8 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
 
         generator = CodeGeneratorFactory.create_generator(
             model_type, model_data, platform, optimization, overlap, quantization,
-            deployment_approach)
+            deployment_approach, confidence_threshold=confidence_threshold,
+            smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter)
 
         # Create organized filenames
         # For alternative deployment approaches, generate files differently
@@ -863,7 +873,10 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
                                       optimization: str = 'balanced',
                                       overlap: float = 0.5,
                                       quantization: str = 'none',
-                                      deployment_approach: str = 'direct') -> Dict[str, str]:
+                                      deployment_approach: str = 'direct',
+                                      confidence_threshold: float = 0.6,
+                                      smoothing_window: int = 1,
+                                      enable_iir_filter: bool = False) -> Dict[str, str]:
     """
     Generate deployment code and save to organized folder structure.
 
@@ -894,7 +907,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
     # Generate code with organized naming and optimization
     generated_code = generate_deployment_code(
         model_type, model_data, platform, optimization, overlap, quantization,
-        deployment_approach)
+        deployment_approach, confidence_threshold=confidence_threshold,
+        smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter)
 
     # Save files and return file paths
     saved_files = {}

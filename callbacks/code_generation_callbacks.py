@@ -573,6 +573,38 @@ def register_callbacks(app):
                 ])
             ])
 
+            # Add preprocessing parity info
+            preprocess_cfg = fe_config.get('preprocessing', {})
+            preprocess_items = []
+            if preprocess_cfg:
+                if preprocess_cfg.get('low_pass_filter'):
+                    preprocess_items.append(
+                        html.Div(f"Low-pass filter: {preprocess_cfg.get('lpf_cutoff_hz', 5)}Hz "
+                                 f"(order {preprocess_cfg.get('lpf_order', 2)}) — replicated on device via IIR",
+                                 style={'color': '#28a745', 'font-size': '12px'}))
+                if preprocess_cfg.get('savgol_filter'):
+                    preprocess_items.append(
+                        html.Div(f"Savitzky-Golay (window={preprocess_cfg.get('savgol_window_length', 5)}, "
+                                 f"poly={preprocess_cfg.get('savgol_polyorder', 2)}) — NOT replicated on device",
+                                 style={'color': '#ff9800', 'font-size': '12px'}))
+                if preprocess_cfg.get('outlier_removal'):
+                    preprocess_items.append(
+                        html.Div("Outlier removal (3-sigma) — NOT replicated on device (not needed for real-time)",
+                                 style={'color': '#999', 'font-size': '12px'}))
+            if preprocess_items:
+                params_children = params.children + [
+                    html.Hr(style={'margin': '10px 0'}),
+                    html.Div("Signal Preprocessing (training→device parity):",
+                             style={'font-weight': 'bold', 'margin-bottom': '5px'}),
+                ] + preprocess_items
+                params = html.Div(params_children)
+            elif not preprocess_cfg:
+                params_children = params.children + [
+                    html.Div("No signal preprocessing was applied during training",
+                             style={'color': '#999', 'font-size': '12px', 'margin-top': '8px'}),
+                ]
+                params = html.Div(params_children)
+
             return info, params
 
         except Exception as e:
@@ -699,11 +731,16 @@ def register_callbacks(app):
          State('optimization-level', 'value'),
          State('quantization-mode', 'value'),
          State('deployment-stride', 'value'),
+         State('deployment-confidence-threshold', 'value'),
+         State('deployment-smoothing-window', 'value'),
+         State('deployment-iir-filter-enabled', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
     def generate_embedded_code(n_clicks, model_filename, framework, target_board,
-                               deployment_approach, optimization, quantization, stride, base_dir):
+                               deployment_approach, optimization, quantization, stride,
+                               confidence_threshold, smoothing_window, iir_filter_enabled,
+                               base_dir):
         """
         Generate embedded C/C++ code from the trained model using actual metadata.
         Model type is automatically detected from the selected model.
@@ -752,6 +789,11 @@ def register_callbacks(app):
             stride_samples = int((stride_percent / 100.0)
                                  * window_size_samples)
             stride_samples = max(1, stride_samples)  # Ensure at least 1 sample
+
+            # Confidence threshold
+            if confidence_threshold is None:
+                confidence_threshold = 0.6
+            confidence_threshold = max(0.0, min(1.0, float(confidence_threshold)))
 
             # Load the trained model to get actual parameters
             model_path = get_model_path(model_filename, base_dir)
@@ -813,10 +855,15 @@ def register_callbacks(app):
                 'model_info': metadata
             }
 
+            # Parse new deployment options
+            smoothing_window = int(smoothing_window or 3)
+            enable_iir = 'enabled' in (iir_filter_enabled or [])
+
             # Generate code using proper code generators
             generated_code_files = generate_deployment_code(
                 model_type, model_data, platform, optimization, overlap_fraction, quantization,
-                deployment_approach
+                deployment_approach, confidence_threshold=confidence_threshold,
+                smoothing_window=smoothing_window, enable_iir_filter=enable_iir
             )
 
             # Filter out binary files (e.g., .onnx, .tflite) for text-based processing
@@ -845,7 +892,8 @@ def register_callbacks(app):
             output_dir = os.path.join(base_dir, 'generated')
             saved_files = generate_and_save_deployment_code(
                 model_type, model_data, platform, output_dir, optimization, overlap_fraction, quantization,
-                deployment_approach
+                deployment_approach, confidence_threshold=confidence_threshold,
+                smoothing_window=smoothing_window, enable_iir_filter=enable_iir
             )
 
             # Get the first generated file for preview (typically the sketch/example)

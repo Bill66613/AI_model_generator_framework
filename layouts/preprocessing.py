@@ -60,16 +60,61 @@ layout = html.Div([
         html.P("Apply noise reduction, outlier removal, and signal conditioning techniques to raw sensor data",
                style={'color': '#666', 'margin-bottom': '20px'}),
 
+        # Hidden store for preprocessing config (persists to downstream tabs)
+        dcc.Store(id='preprocessing-config', data={}, storage_type='session'),
+
         html.Div([
+            # Left side: configurable pipeline
             html.Div([
                 html.H5("📋 Signal Processing Pipeline", style={
                         'color': '#495057', 'margin-bottom': '15px'}),
-                html.Ul([
-                    html.Li("🗑️ Remove missing values and anomalies"),
-                    html.Li("📊 Filter statistical outliers"),
-                    html.Li("🌊 Apply low-pass filter (5Hz cutoff)"),
-                    html.Li("📈 Savitzky-Golay smoothing (window=5)")
-                ], style={'color': '#666', 'line-height': '1.6'})
+
+                # Outlier removal toggle
+                html.Div([
+                    dcc.Checklist(
+                        id='preprocess-outlier-enabled',
+                        options=[{'label': ' Remove statistical outliers (3-sigma)', 'value': 'enabled'}],
+                        value=['enabled'],
+                        style={'margin-bottom': '10px'}
+                    ),
+                ]),
+
+                # Low-pass filter config
+                html.Div([
+                    dcc.Checklist(
+                        id='preprocess-lpf-enabled',
+                        options=[{'label': ' Low-pass filter (Butterworth)', 'value': 'enabled'}],
+                        value=['enabled'],
+                        style={'margin-bottom': '8px'}
+                    ),
+                    html.Div([
+                        html.Label("Cutoff (Hz):", style={'display': 'inline-block', 'width': '90px', 'font-size': '13px'}),
+                        dcc.Input(id='preprocess-lpf-cutoff', type='number', value=5, min=1, max=50, step=0.5,
+                                  style={'width': '70px', 'display': 'inline-block', 'margin-right': '15px'}),
+                        html.Label("Order:", style={'display': 'inline-block', 'width': '50px', 'font-size': '13px'}),
+                        dcc.Input(id='preprocess-lpf-order', type='number', value=2, min=1, max=6, step=1,
+                                  style={'width': '50px', 'display': 'inline-block'}),
+                    ], style={'margin-left': '25px', 'margin-bottom': '10px'}),
+                ]),
+
+                # Savitzky-Golay config
+                html.Div([
+                    dcc.Checklist(
+                        id='preprocess-savgol-enabled',
+                        options=[{'label': ' Savitzky-Golay smoothing', 'value': 'enabled'}],
+                        value=['enabled'],
+                        style={'margin-bottom': '8px'}
+                    ),
+                    html.Div([
+                        html.Label("Window:", style={'display': 'inline-block', 'width': '90px', 'font-size': '13px'}),
+                        dcc.Input(id='preprocess-savgol-window', type='number', value=5, min=3, max=31, step=2,
+                                  style={'width': '50px', 'display': 'inline-block', 'margin-right': '15px'}),
+                        html.Label("Poly order:", style={'display': 'inline-block', 'width': '80px', 'font-size': '13px'}),
+                        dcc.Input(id='preprocess-savgol-polyorder', type='number', value=2, min=1, max=5, step=1,
+                                  style={'width': '50px', 'display': 'inline-block'}),
+                    ], style={'margin-left': '25px', 'margin-bottom': '10px'}),
+                ]),
+
             ], style={'width': '60%', 'display': 'inline-block', 'vertical-align': 'top'}),
 
             html.Div([
@@ -158,7 +203,7 @@ layout = html.Div([
                     value=1500,
                     style={
                         'width': '100%',
-                        'padding': '12px',
+                        'padding': '8px',
                         'border': '1px solid #ddd',
                         'border-radius': '4px',
                         'font-size': '16px'

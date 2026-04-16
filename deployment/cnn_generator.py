@@ -17,7 +17,7 @@ class CNNCodeGenerator(BaseCodeGenerator):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
                  optimization: str = 'balanced', overlap: float = 0.5,
-                 quantization: str = 'none'):
+                 quantization: str = 'none', **kwargs):
         # CNN doesn't use traditional feature_names — provide channel names
         # as placeholder so the base class validation passes.
         if not model_data.get('feature_names'):
@@ -25,7 +25,7 @@ class CNNCodeGenerator(BaseCodeGenerator):
             model_data = dict(model_data)  # shallow copy
             model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
 
-        super().__init__(model_data, platform, optimization, overlap, quantization)
+        super().__init__(model_data, platform, optimization, overlap, quantization, **kwargs)
 
         self.layers: List[Dict[str, Any]] = []
         self.n_channels = model_data.get('n_channels', 6)
@@ -218,7 +218,6 @@ const char* get_activity_name(int class_id) {{
         as the base generator's Arduino sketch.
         """
         platform_code = self._get_platform_specific_code()
-        reading_interval = 1000 // self.sampling_rate
         delay_ms = {
             'speed': 5,
             'power': 50,
@@ -246,7 +245,7 @@ static float sensor_window[WINDOW_SIZE][N_CHANNELS];
 static int   sample_idx = 0;
 static bool  window_ready = false;
 unsigned long last_reading = 0;
-const unsigned long READING_INTERVAL = {reading_interval}; // ms between readings
+const unsigned long READING_INTERVAL = 1000 / SAMPLING_RATE; // ms between readings
 
 void setup() {{
     Serial.begin(115200);
