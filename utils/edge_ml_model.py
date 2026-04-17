@@ -118,7 +118,10 @@ class EdgeMLModel:
         else:
             X_array = np.asarray(X) if not isinstance(X, np.ndarray) else X
 
-        # CNN uses raw 3D windows — skip scaling entirely
+        # CNN uses raw 3D windows — skip scaling entirely.
+        # Batch normalization layers within the CNN handle internal normalization,
+        # so applying StandardScaler would distort the raw signal characteristics
+        # that convolutional layers need to learn spatial/temporal patterns.
         if self.model_type == 'pytorch_cnn':
             X_scaled = X_array
         elif self.scaler is None:

@@ -46,6 +46,9 @@ def prepare_training_data(
     if len(window_files) != len(labels):
         raise ValueError("Number of window files must match number of labels")
 
+    if not window_files:
+        raise ValueError("window_files and labels cannot be empty")
+
     if sensor_cols is None:
         sensor_cols = list(SENSOR_COLUMNS)
 

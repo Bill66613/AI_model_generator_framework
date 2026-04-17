@@ -445,82 +445,87 @@ def register_callbacks(app):
         if not os.path.exists(file_path):
             return no_update, no_update, no_update
 
-        # Load metadata to get the actual sampling rate for this dataset
-        metadata_file = os.path.join(base_dir, 'metadata.json')
-        sampling_rate = DEFAULT_SAMPLING_RATE
-        if os.path.exists(metadata_file):
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
-            sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
+        try:
+            # Load metadata to get the actual sampling rate for this dataset
+            metadata_file = os.path.join(base_dir, 'metadata.json')
+            sampling_rate = DEFAULT_SAMPLING_RATE
+            if os.path.exists(metadata_file):
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
 
-        df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path)
 
-        # Build preprocessing config for downstream pipeline parity
-        use_outlier = 'enabled' in (outlier_enabled or [])
-        use_lpf = 'enabled' in (lpf_enabled or [])
-        use_savgol = 'enabled' in (savgol_enabled or [])
-        lpf_cutoff = float(lpf_cutoff or 5)
-        lpf_order = int(lpf_order or 2)
-        savgol_window = int(savgol_window or 5)
-        savgol_polyorder = int(savgol_polyorder or 2)
+            # Build preprocessing config for downstream pipeline parity
+            use_outlier = 'enabled' in (outlier_enabled or [])
+            use_lpf = 'enabled' in (lpf_enabled or [])
+            use_savgol = 'enabled' in (savgol_enabled or [])
+            lpf_cutoff = float(lpf_cutoff or 5)
+            lpf_order = int(lpf_order or 2)
+            savgol_window = int(savgol_window or 5)
+            savgol_polyorder = int(savgol_polyorder or 2)
 
-        preprocess_config = {
-            'outlier_removal': use_outlier,
-            'low_pass_filter': use_lpf,
-            'lpf_cutoff_hz': lpf_cutoff,
-            'lpf_order': lpf_order,
-            'savgol_filter': use_savgol,
-            'savgol_window_length': savgol_window,
-            'savgol_polyorder': savgol_polyorder,
-        }
+            preprocess_config = {
+                'outlier_removal': use_outlier,
+                'low_pass_filter': use_lpf,
+                'lpf_cutoff_hz': lpf_cutoff,
+                'lpf_order': lpf_order,
+                'savgol_filter': use_savgol,
+                'savgol_window_length': savgol_window,
+                'savgol_polyorder': savgol_polyorder,
+            }
 
-        # Clean the data
-        df = clean_data(df, method='remove_missing')
-        if use_outlier:
-            df = clean_data(df, method='filter_outliers')
+            # Clean the data
+            df = clean_data(df, method='remove_missing')
+            if use_outlier:
+                df = clean_data(df, method='filter_outliers')
 
-        # Apply low-pass filter
-        if use_lpf:
-            df = low_pass_filter(df, cutoff=lpf_cutoff, fs=sampling_rate, order=lpf_order)
+            # Apply low-pass filter
+            if use_lpf:
+                df = low_pass_filter(df, cutoff=lpf_cutoff, fs=sampling_rate, order=lpf_order)
 
-        # Apply Savitzky-Golay filter
-        if use_savgol:
-            for col in df.select_dtypes(include=['float64', 'int64']).columns:
-                df[col] = savgol_filter(df[col], window_length=savgol_window, polyorder=savgol_polyorder)
+            # Apply Savitzky-Golay filter
+            if use_savgol:
+                for col in df.select_dtypes(include=['float64', 'int64']).columns:
+                    df[col] = savgol_filter(df[col], window_length=savgol_window, polyorder=savgol_polyorder)
 
-        # Create time axis for proper labeling
-        df['Time_seconds'] = df.index / sampling_rate
+            # Create time axis for proper labeling
+            df['Time_seconds'] = df.index / sampling_rate
 
-        # Get sensor columns for plotting
-        sensor_cols = [col for col in df.columns if col not in ['Time_seconds']]
+            # Get sensor columns for plotting
+            sensor_cols = [col for col in df.columns if col not in ['Time_seconds']]
 
-        # Create figure with proper time axis
-        fig = go.Figure()
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+            # Create figure with proper time axis
+            fig = go.Figure()
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
 
-        for i, col in enumerate(sensor_cols[:6]):  # Limit to 6 sensors for clarity
-            fig.add_trace(
-                go.Scatter(
-                    x=df['Time_seconds'],
-                    y=df[col],
-                    name=col,
-                    line=dict(color=colors[i % len(colors)], width=2),
-                    hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
+            for i, col in enumerate(sensor_cols[:6]):  # Limit to 6 sensors for clarity
+                fig.add_trace(
+                    go.Scatter(
+                        x=df['Time_seconds'],
+                        y=df[col],
+                        name=col,
+                        line=dict(color=colors[i % len(colors)], width=2),
+                        hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
+                    )
                 )
+
+            fig.update_layout(
+                title=f"Cleaned & Smoothed Data: {dataset_name}",
+                xaxis_title="Time (seconds)",
+                yaxis_title="Sensor Values",
+                height=400,
+                showlegend=True,
+                hovermode='x unified'
             )
 
-        fig.update_layout(
-            title=f"Cleaned & Smoothed Data: {dataset_name}",
-            xaxis_title="Time (seconds)",
-            yaxis_title="Sensor Values",
-            height=400,
-            showlegend=True,
-            hovermode='x unified'
-        )
+            stored_datasets = df.to_dict(orient='records')
 
-        stored_datasets = df.to_dict(orient='records')
+            return fig, stored_datasets, preprocess_config
 
-        return fig, stored_datasets, preprocess_config
+        except Exception as e:
+            logger.error(f"Error cleaning/smoothing dataset '{dataset_name}': {e}")
+            return no_update, no_update, no_update
 
 
     @app.callback(
