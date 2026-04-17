@@ -548,8 +548,19 @@ def _magnitude_stats(mag):
     s_data = sorted(mag)
     mid = n // 2
     median = (s_data[mid - 1] + s_data[mid]) / 2 if n % 2 == 0 else s_data[mid]
-    q25 = s_data[n // 4]
-    q75 = s_data[(3 * n) // 4]
+    # Quartiles using linear interpolation (matches numpy default)
+    q25_pos = 0.25 * (n - 1)
+    q25_lo = int(q25_pos)
+    q25_frac = q25_pos - q25_lo
+    q25_hi = min(q25_lo + 1, n - 1)
+    q25 = s_data[q25_lo] + q25_frac * (s_data[q25_hi] - s_data[q25_lo])
+
+    q75_pos = 0.75 * (n - 1)
+    q75_lo = int(q75_pos)
+    q75_frac = q75_pos - q75_lo
+    q75_hi = min(q75_lo + 1, n - 1)
+    q75 = s_data[q75_lo] + q75_frac * (s_data[q75_hi] - s_data[q75_lo])
+
     iqr = q75 - q25
 
     # Skewness/kurtosis (bias-corrected, using population std to match pandas)
@@ -557,7 +568,7 @@ def _magnitude_stats(mag):
     m3 = 0.0
     m4 = 0.0
     for v in mag:
-        z = (v - mean) / (pop_std + 0.0001)
+        z = (v - mean) / (pop_std + 1e-7)
         z2 = z * z
         m3 += z * z2
         m4 += z2 * z2
@@ -674,13 +685,29 @@ def extract_features(sensor_data, samples):
     acc_mag = []
     gyro_mag = []
     jerk_mag = []
+
+    # Per-window mean centering — removes gravity (accel) and
+    # orientation-dependent DC bias (gyro).
+    ax_s = ay_s = az_s = gx_s = gy_s = gz_s = 0.0
+    for i in range(samples):
+        r = sensor_data[i]
+        ax_s += r[0]; ay_s += r[1]; az_s += r[2]
+        gx_s += r[3]; gy_s += r[4]; gz_s += r[5]
+    n = float(samples)
+    ax_m, ay_m, az_m = ax_s / n, ay_s / n, az_s / n
+    gx_m, gy_m, gz_m = gx_s / n, gy_s / n, gz_s / n
+
     prev = sensor_data[0][:3]
     for i in range(samples):
         row = sensor_data[i]
-        am = math.sqrt(row[0] ** 2 + row[1] ** 2 + row[2] ** 2)
-        gm = math.sqrt(row[3] ** 2 + row[4] ** 2 + row[5] ** 2)
+        # Centered magnitudes
+        cax, cay, caz = row[0] - ax_m, row[1] - ay_m, row[2] - az_m
+        cgx, cgy, cgz = row[3] - gx_m, row[4] - gy_m, row[5] - gz_m
+        am = math.sqrt(cax ** 2 + cay ** 2 + caz ** 2)
+        gm = math.sqrt(cgx ** 2 + cgy ** 2 + cgz ** 2)
         acc_mag.append(am)
         gyro_mag.append(gm)
+        # Jerk uses raw differences (centering cancels in diff)
         if i > 0:
             d = [row[j] - prev[j] for j in range(3)]
             jerk_mag.append(math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2))
@@ -746,8 +773,19 @@ def extract_features(sensor_data, samples):
         s_data = sorted(col)
         mid = samples // 2
         median = (s_data[mid - 1] + s_data[mid]) / 2 if samples % 2 == 0 else s_data[mid]
-        q25 = s_data[samples // 4]
-        q75 = s_data[(3 * samples) // 4]
+        # Quartiles using linear interpolation (matches numpy default)
+        q25_pos = 0.25 * (samples - 1)
+        q25_lo = int(q25_pos)
+        q25_frac = q25_pos - q25_lo
+        q25_hi = min(q25_lo + 1, samples - 1)
+        q25 = s_data[q25_lo] + q25_frac * (s_data[q25_hi] - s_data[q25_lo])
+
+        q75_pos = 0.75 * (samples - 1)
+        q75_lo = int(q75_pos)
+        q75_frac = q75_pos - q75_lo
+        q75_hi = min(q75_lo + 1, samples - 1)
+        q75 = s_data[q75_lo] + q75_frac * (s_data[q75_hi] - s_data[q75_lo])
+
         iqr = q75 - q25
 
         # Skewness / kurtosis (using population std to match pandas)
@@ -755,7 +793,7 @@ def extract_features(sensor_data, samples):
         m3 = 0.0
         m4 = 0.0
         for v in col:
-            z = (v - mean) / (pop_std + 0.001)
+            z = (v - mean) / (pop_std + 1e-7)
             z2 = z * z
             m3 += z * z2
             m4 += z2 * z2

@@ -16,7 +16,7 @@ float sensor_buffer[WINDOW_SIZE][6];  // aX, aY, aZ, gX, gY, gZ
 int buffer_index = 0;
 float features[NUM_FEATURES];
 unsigned long last_reading = 0;
-const unsigned long READING_INTERVAL = 10;  // ms between readings
+const unsigned long READING_INTERVAL = 1000 / SAMPLING_RATE;  // ms between readings
 
 void setup() {
   Serial.begin(115200);

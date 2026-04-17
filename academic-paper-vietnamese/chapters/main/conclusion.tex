@@ -3,7 +3,7 @@
 
 \section{Tóm Tắt Đóng Góp}
 
-Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển động được hỗ trợ bởi AI trở nên có thể tiếp cận với các nhà nghiên cứu, nhà phát triển và giáo viên mà không hy sinh hiệu suất hoặc kiểm soát. Chúng tôi đã trình bày một framework mã nguồn mở toàn diện thống nhất tiền xử lý dữ liệu, huấn luyện mô hình và triển khai biên vào một quy trình đơn thân thiện với người dùng. Các đóng góp chính của hệ thống trải dài đổi mới thuật toán, kỹ thuật phần mềm và xác thực thực nghiệm:
+Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển động được hỗ trợ bởi AI trở nên có thể tiếp cận với các nhà nghiên cứu, nhà phát triển và giáo viên mà không hy sinh hiệu suất hoặc kiểm soát trên các thiết bị biên dị thể. Chúng tôi đã trình bày một framework mã nguồn mở toàn diện thống nhất tiền xử lý dữ liệu, huấn luyện mô hình và triển khai biên vào một quy trình đơn thân thiện với người dùng. Các đóng góp chính của hệ thống trải dài đổi mới thuật toán, kỹ thuật phần mềm và xác thực thực nghiệm:
 
 \subsection{Đóng Góp Kỹ Thuật}
 \begin{enumerate}
@@ -11,7 +11,7 @@ Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển đ�
 
     \item \textbf{Hỗ Trợ Đa Thuật Toán Toàn Diện}: Không giống như các nền tảng thương mại giới hạn ở mạng nơ-ron hoặc các thuật toán ML chuyên biệt, framework của chúng tôi tích hợp ba phương pháp bổ sung (Random Forest, SVM, Neural Networks) với các API nhất quán và tối ưu hóa siêu tham số tự động. Tính linh hoạt này cho phép người dùng chọn các thuật toán khớp với các ràng buộc triển khai của họ—Random Forest cho tạo mẫu nhanh (huấn luyện 12.3s), Neural Networks cho độ chính xác tối đa (96.2\%), hoặc SVM cho khả năng diễn giải lý thuyết.
 
-    \item \textbf{Tạo Mã Nhận Biết Tối Ưu Hóa}: Kiến trúc trình tạo modular tạo ra các triển khai C++ đặc thù nền tảng với bốn hồ sơ tối ưu hóa (accuracy, speed, power, balanced). Mã được tạo đạt độ trễ suy luận 12-18ms và dấu chân bộ nhớ 95-182KB trên vi điều khiển 64MHz—hiệu suất cạnh tranh với các triển khai thủ công chuyên gia trong khi yêu cầu không có chuyên môn hệ thống nhúng.
+    \item \textbf{Kiến Trúc Triển Khai Đa Thiết bị Nhận Biết Tối Ưu hóa}: Thay vì gắn với một bo mạch duy nhất, tầng generator được tổ chức theo ba trục—loại mô hình, nền tảng đích và backend triển khai—cho phép xuất các gói C/C++/MicroPython cho Arduino-compatible boards, ARM Cortex-M, ESP-IDF, Zephyr và các backend runtime thay thế như TFLite Micro hoặc ONNX Runtime. Mã được tạo trên nền tảng tham chiếu đạt độ trễ suy luận 12-18ms và dấu chân bộ nhớ 95-182KB trên vi điều khiển 64MHz, cho thấy kiến trúc đủ gọn để chuyển sang các thiết bị cùng lớp tài nguyên.
 
     \item \textbf{Xử Lý Mất Cân Bằng Lớp}: Bằng cách làm cho \texttt{class\_weight='balanced'} là một cấu hình mặc định thay vì tham số tùy chọn, framework hệ thống giải quyết một thách thức quan trọng nhưng thường bị bỏ qua trong theo dõi chuyển động thực tế. Các thử nghiệm của chúng tôi chứng minh cải thiện +42-47\% trong recall lớp thiểu số, chuyển đổi các mô hình từ các nguyên mẫu nghiên cứu thành các hệ thống sẵn sàng triển khai.
 
@@ -27,8 +27,9 @@ Các thử nghiệm toàn diện sử dụng tập dữ liệu Nhận Dạng Ho�
 \begin{itemize}
     \item \textbf{Độ Chính Xác Mô Hình}: 93.8-96.2\% trên ba thuật toán, với Neural Networks đạt 96.2\%—trong vòng 0.3\% của triển khai TensorFlow Lite thủ công chuyên gia trong khi yêu cầu chuyên môn kỹ thuật ít hơn đáng kể
     \item \textbf{Hiệu Suất Theo Từng Lớp}: F1-scores cân bằng (0.93-0.98) trên tất cả các lớp hoạt động, bao gồm các lớp thiểu số đầy thách thức, chứng minh khả năng áp dụng mạnh mẽ
-    \item \textbf{Tính Khả Thi Thời Gian Thực}: Suy luận 9-18ms trên ARM Cortex-M4 @ 64MHz với tiêu thụ điện năng 30mW, cho phép hoạt động pin liên tục 65+ giờ
+    \item \textbf{Tính Khả Thi Thời Gian Thực}: Suy luận 9-18ms trên nền tảng tham chiếu ARM Cortex-M4 @ 64MHz với tiêu thụ điện năng 30mW, cho phép hoạt động pin liên tục 65+ giờ
     \item \textbf{Định Vị Cạnh Tranh}: Vượt trội các nền tảng thương mại (Edge Impulse, SensiML) 1.4-3.1\% độ chính xác trong khi vẫn hoàn toàn miễn phí và mã nguồn mở
+    \item \textbf{Đa Thiết bị theo Kiến trúc}: Tầng generator hỗ trợ các đích Arduino-compatible, ARM Cortex-M, generic C/C++, ESP-IDF, MicroPython và Zephyr; Seeed XIAO được dùng như ca benchmark đại diện chứ không phải thiết bị đích duy nhất
     \item \textbf{Tương Đồng Huấn Luyện-Triển Khai}: Xác minh 12 điểm kiểm tra đảm bảo đặc trưng miền thời gian giống hệt giữa Python và C++, loại bỏ nguồn gốc chính của suy giảm hiệu suất triển khai biên
     \item \textbf{Tăng Cường Nhận Biết Lớp}: Chiến lược tăng cường phân biệt tĩnh/động ngăn chặn class confusion được quan sát với tăng cường đồng nhất, bảo toàn đặc tính phân biệt của hoạt động tĩnh
     \item \textbf{Từ Chối Hoạt Động Không Xác Định}: Ngưỡng tin cậy tích hợp cho phép thiết bị biên từ chối dự đoán khi không đủ tin cậy, tăng độ tin cậy cho triển khai thực tế
@@ -52,9 +53,9 @@ Các mục tiêu nghiên cứu ban đầu được nêu trong Mục 1.3 đã đ�
     
     \item \textbf{Hỗ Trợ Đa Thuật Toán} \checkmark: Ba thuật toán (RF, SVM, NN) được tích hợp với tối ưu hóa siêu tham số tự động mang lại cải thiện độ chính xác 1.9-2.7\%
     
-    \item \textbf{Tạo Mã Không Phụ Thuộc Nền Tảng} \checkmark: Kiến trúc trình tạo modular được xác thực trên ARM Cortex-M4 với bốn chế độ tối ưu hóa và thiết kế có thể mở rộng hỗ trợ các nền tảng tương lai
+    \item \textbf{Tạo Mã Không Phụ Thuộc Nền Tảng} \checkmark: Kiến trúc trình tạo modular được tổ chức theo ma trận model-platform-backend, hỗ trợ nhiều họ đích triển khai; benchmark định lượng hiện được báo cáo trên nền tảng tham chiếu ARM Cortex-M4 với bốn chế độ tối ưu hóa
     
-    \item \textbf{Xác Thực Hiệu Quả Framework} \checkmark: Đánh giá toàn diện chứng minh độ chính xác cạnh tranh (96.2\%), hiệu suất thời gian thực (suy luận 12ms) và sự vượt trội so với các lựa chọn thay thế thương mại trên các số liệu chi phí-hiệu suất
+    \item \textbf{Xác Thực Hiệu Quả Framework} \checkmark: Đánh giá toàn diện chứng minh độ chính xác cạnh tranh (96.2\%), hiệu suất thời gian thực (suy luận 12ms trên nền tảng tham chiếu) và khả năng tái đóng gói cùng một pipeline cho nhiều đích triển khai khác nhau
     
     \item \textbf{Khả Năng Tiếp Cận} \checkmark: GUI dựa trên web với đường cong học tập thấp làm cho phát triển edge AI tiên tiến có thể tiếp cận với phi chuyên gia trong khi duy trì khả năng cấp chuyên nghiệp
     
@@ -99,7 +100,7 @@ Xác thực hiện tại sử dụng dữ liệu đối tượng đơn cho năm 
 
 \subsection{Mở Rộng Nền Tảng}
 \begin{itemize}
-    \item Xác thực tạo mã trên AVR (Arduino Uno), RISC-V (ESP32-C3), ARM Cortex-M0+ (Raspberry Pi Pico)
+    \item Mở rộng ma trận benchmark liên thiết bị trên AVR (Arduino Uno), RISC-V (ESP32-C3), ARM Cortex-M0+ (Raspberry Pi Pico) và các board hỗ trợ MicroPython/Zephyr để chuyển hỗ trợ ở mức generator thành số liệu định lượng xuyên nền tảng
     \item Hỗ trợ các mục tiêu FPGA và ASIC cho các thiết bị đeo công suất siêu thấp (<1mW)
     \item Triển khai di động (Android, iOS) cho theo dõi chuyển động dựa trên điện thoại thông minh
 \end{itemize}
@@ -116,7 +117,7 @@ Xác thực hiện tại sử dụng dữ liệu đối tượng đơn cho năm 
 
 \section{Suy Nghĩ Cuối Cùng}
 
-Luận văn này đã trình bày một framework toàn diện giải quyết các thách thức cơ bản trong theo dõi chuyển động dựa trên biên: khả năng tiếp cận, hiệu suất và tính linh hoạt. Thông qua tiền xử lý tương tác mới lạ, xử lý mất cân bằng lớp hệ thống và tạo mã nhận biết tối ưu hóa, chúng tôi đã tạo ra một công cụ khớp với dễ sử dụng của các nền tảng thương mại trong khi cung cấp kiểm soát đầy đủ và chi phí bằng không. Xác thực thực nghiệm xác nhận rằng dân chủ hóa và xuất sắc hiệu suất không loại trừ lẫn nhau—chúng có thể và nên cùng tồn tại.
+Luận văn này đã trình bày một framework toàn diện giải quyết các thách thức cơ bản trong theo dõi chuyển động dựa trên biên: khả năng tiếp cận, hiệu suất và tính linh hoạt. Thông qua tiền xử lý tương tác mới lạ, xử lý mất cân bằng lớp hệ thống và tạo mã nhận biết tối ưu hóa, chúng tôi đã tạo ra một công cụ khớp với dễ sử dụng của các nền tảng thương mại trong khi cung cấp kiểm soát đầy đủ và chi phí bằng không. Giá trị cốt lõi của framework không nằm ở việc tối ưu cho riêng Seeed XIAO, mà ở khả năng chuyển cùng một pipeline sang nhiều thiết bị biên khác nhau mà vẫn giữ được tính minh bạch và khả năng kiểm chứng. Xác thực thực nghiệm xác nhận rằng dân chủ hóa và xuất sắc hiệu suất không loại trừ lẫn nhau—chúng có thể và nên cùng tồn tại.
 
 Hành trình từ dữ liệu cảm biến thô đến mô hình edge AI đã triển khai liên quan đến nhiều bước, mỗi bước truyền thống yêu cầu chuyên môn chuyên biệt. Framework này thu gọn các rào cản đó, cho phép bất kỳ ai có kiến thức miền (các hoạt động cần phát hiện) tạo ra các hệ thống sẵn sàng triển khai mà không trở thành chuyên gia về xử lý tín hiệu, lý thuyết học máy hoặc lập trình hệ thống nhúng. Đây là bản chất của dân chủ hóa: hạ thấp rào cản mà không hạ thấp tiêu chuẩn.
 

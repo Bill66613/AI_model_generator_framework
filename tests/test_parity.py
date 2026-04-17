@@ -23,6 +23,16 @@ from deployment.code_generator_factory import (
 
 
 # ---------------------------------------------------------------------------
+# Helpers: Centered magnitude (mirrors Python & C++ centering)
+# ---------------------------------------------------------------------------
+
+def _centered_magnitude(df: pd.DataFrame, cols: list) -> np.ndarray:
+    """Compute magnitude after per-window mean centering (matches feature extraction)."""
+    centered = {c: df[c].values - df[c].values.mean() for c in cols}
+    return np.sqrt(sum(centered[c] ** 2 for c in cols))
+
+
+# ---------------------------------------------------------------------------
 # Helpers: C++ formulas re-implemented in pure Python (must mirror
 # base_generator.py extract_magnitude_stats and DFT code exactly)
 # ---------------------------------------------------------------------------
@@ -211,9 +221,9 @@ class TestTimeDomainParity:
         df = synthetic_window
         py_feats = extract_orientation_invariant_features(df)
 
-        # Compute magnitude the same way Python does
+        # Compute magnitude the same way Python does (centered)
         cols = accel_cols if accel_cols else gyro_cols
-        mag = np.sqrt(sum(df[c].values**2 for c in cols))
+        mag = _centered_magnitude(df, cols)
         cpp_stats = _cpp_magnitude_stats(mag)
 
         for stat_name, cpp_val in cpp_stats.items():
@@ -299,7 +309,7 @@ class TestFrequencyDomainParity:
         """Magnitude DFT features: Python FFT vs C++ DFT loop."""
         df = synthetic_window
         py_feats = extract_frequency_magnitude_features(df, sampling_rate=100)
-        mag = np.sqrt(sum(df[c].values**2 for c in cols))
+        mag = _centered_magnitude(df, cols)
         self._check_dft_features(py_feats, mag_name, mag)
 
 
@@ -399,7 +409,7 @@ class TestPopulationStd:
         df = synthetic_window
         feats = extract_orientation_invariant_features(df)
 
-        acc_mag = np.sqrt(df['aX']**2 + df['aY']**2 + df['aZ']**2).values
+        acc_mag = _centered_magnitude(df, ['aX', 'aY', 'aZ'])
         pop_std = np.std(acc_mag, ddof=0)
         sample_std = np.std(acc_mag, ddof=1)
 

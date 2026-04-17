@@ -18,7 +18,7 @@ Cân bằng lớp đã cải thiện recall thiểu số lên 0.93-0.95 (+42-47\
 Framework của chúng tôi giải quyết điều này bằng cách làm cho cân bằng lớp là một cài đặt mặc định, không phải tùy chọn. Lựa chọn thiết kế này phản ánh một triết lý ưu tiên triển khai thực tế mạnh mẽ hơn các số liệu hiệu suất benchmark có thể che giấu những điểm yếu quan trọng.
 
 \subsection{Tính Khả Thi Triển Khai Biên}
-Các kết quả thời gian suy luận (9-18ms mỗi cửa sổ trên vi điều khiển 64MHz) xác thực tính khả thi thực tế của HAR trên thiết bị. Với cửa sổ 1,5 giây và bước trượt 0,75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms—các mô hình của chúng tôi đạt được điều này với biên độ 40-80×, để lại khoảng trống cho:
+Các kết quả thời gian suy luận (9-18ms mỗi cửa sổ trên vi điều khiển 64MHz) trên nền tảng tham chiếu Seeed XIAO nRF52840 xác thực rằng pipeline do framework sinh ra có thể vận hành thời gian thực trên ít nhất một lớp phần cứng đại diện (ARM Cortex-M4F). Điều quan trọng là nên diễn giải các số đo này như bằng chứng khả thi cho kiến trúc đa đích, thay vì như benchmark duy nhất cho mọi thiết bị mà framework hỗ trợ. Với cửa sổ 1,5 giây và bước trượt 0,75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms—các mô hình của chúng tôi đạt được điều này với biên độ 40-80×, để lại khoảng trống cho:
 \begin{itemize}
     \item Ensemble đa mô hình (kết hợp dự đoán RF + NN)
     \item Các phương thức cảm biến bổ sung (nhịp tim, GPS)
@@ -26,7 +26,7 @@ Các kết quả thời gian suy luận (9-18ms mỗi cửa sổ trên vi điề
     \item Quản lý điện năng (ngủ sâu giữa các chu kỳ suy luận)
 \end{itemize}
 
-Sử dụng bộ nhớ (95-182KB flash) tương tự bảo thủ, chiếm 9-18\% của 1MB khả dụng trên Seeed XIAO nRF52840. Điều này cho phép triển khai trên các nền tảng bị giới hạn hơn như Arduino Nano 33 BLE (256KB flash) hoặc ESP32-C3 (384KB flash), mở rộng khả năng áp dụng.
+Trên nền tảng tham chiếu, sử dụng bộ nhớ (95-182KB flash) tương tự bảo thủ, chiếm 9-18\% của 1MB khả dụng trên Seeed XIAO nRF52840. Điều này cho thấy kiến trúc sinh mã còn nhiều dư địa khi chuyển sang các nền tảng bị giới hạn hơn như Arduino Nano 33 BLE (256KB flash) hoặc ESP32-C3 (384KB flash), mặc dù các số đo định lượng cuối cùng vẫn cần được benchmark trực tiếp trên từng thiết bị.
 
 Tiêu thụ điện năng trung bình 30mW chuyển thành 65+ giờ hoạt động liên tục trên pin 600mAh—đủ cho các nghiên cứu đeo nhiều ngày mà không cần sạc lại. Tối ưu hóa chế độ Power kéo dài điều này đến 92 giờ, tiếp cận thời lượng triển khai cả tuần thường được yêu cầu cho phân tích dáng đi lâm sàng hoặc giám sát đào tạo thể thao.
 
@@ -53,7 +53,7 @@ So sánh của chúng tôi với Edge Impulse và SensiML tiết lộ các đán
 
 \textbf{Triển khai TensorFlow Lite thủ công} đạt độ chính xác 96.5\% (tốt hơn một chút so với 96.2\% của chúng tôi), nhưng yêu cầu kiến thức cấp chuyên gia về lượng tử hóa mô hình, tích hợp runtime TFLM và tối ưu hóa đặc thù nền tảng—kỹ năng vượt quá hầu hết các nhà nghiên cứu và người đam mê. Framework của chúng tôi thu hẹp khoảng cách này đến 0.3\% trong khi không yêu cầu chuyên môn hệ thống nhúng.
 
-Kết luận: framework của chúng tôi chiếm một vị thế độc đáo kết hợp hiệu suất cấp chuyên nghiệp, tính minh bạch đầy đủ và chi phí bằng không—một kết hợp không có sẵn trong các giải pháp hiện có.
+Kết luận: framework của chúng tôi chiếm một vị thế độc đáo kết hợp hiệu suất cấp chuyên nghiệp, tính minh bạch đầy đủ, chi phí bằng không và khả năng triển khai đa đích từ cùng một pipeline huấn luyện—một kết hợp không có sẵn trong các giải pháp hiện có.
 
 \subsection{Các Hệ Thống HAR Học Thuật}
 So với nghiên cứu HAR học thuật sử dụng các phương pháp dựa trên IMU tương tự \cite{anguita2013har}, độ chính xác của chúng tôi (96.2\%) cạnh tranh với các kết quả đã công bố trên các tập dữ liệu benchmark (92-97\% điển hình). Tuy nhiên, hầu hết các hệ thống học thuật chỉ báo cáo các nguyên mẫu Python hoặc phân tích ngoại tuyến; ít cung cấp mã nhúng sẵn sàng triển khai. Đóng góp của chúng tôi nằm ở việc bắc cầu "khoảng cách triển khai" này bằng cách tự động hóa việc dịch từ các mô hình scikit-learn đã huấn luyện sang firmware vi điều khiển sản xuất.
@@ -87,7 +87,7 @@ Các thử nghiệm giả định IMU được đeo ở cổ tay trong một hư
 Các hệ thống mạnh mẽ yêu cầu trích xuất đặc trưng không phụ thuộc hướng (ví dụ: tính toán độ lớn gia tốc thay vì các trục riêng lẻ) hoặc các thuật toán ước lượng hướng. Bộ đặc trưng của framework chúng tôi bao gồm một số đặc trưng dựa trên độ lớn, nhưng đánh giá hệ thống về độ bền vững hướng là cần thiết.
 
 \subsection{Sự Đa Dạng Nền Tảng Tính Toán}
-Trong khi chúng tôi chứng minh triển khai trên ARM Cortex-M4 (Seeed XIAO), framework tuyên bố tạo mã không phụ thuộc nền tảng. Xác thực trên các kiến trúc khác—AVR (Arduino Uno), RISC-V (ESP32-C3), ARM Cortex-M0+ (Raspberry Pi Pico)—là cần thiết để xác nhận tính di động. Đặc điểm bộ nhớ và tốc độ sẽ khác nhau, đặc biệt trên các bộ xử lý AVR 8-bit thiếu hỗ trợ dấu phẩy động phần cứng.
+Framework hiện đã hiện thực generator cho nhiều họ đích, nhưng mức độ xác thực cần được phân tách thành hai lớp. Ở lớp thứ nhất, \textit{khả năng triển khai} đã được chứng minh bởi kiến trúc factory, các generator đặc thù nền tảng và các gói mã đầu ra tương ứng. Ở lớp thứ hai, \textit{benchmark định lượng liên thiết bị} vẫn mới chỉ được đo chi tiết trên XIAO. Vì vậy, phát biểu chính xác của luận văn không nên là ``framework đã benchmark trên mọi thiết bị'', mà là ``framework cung cấp năng lực triển khai đa thiết bị ở mức kiến trúc và sinh mã, với XIAO là nền tảng thực nghiệm tham chiếu đầu tiên''. Các bước tiếp theo cần bổ sung benchmark trên các kiến trúc khác—AVR (Arduino Uno), RISC-V (ESP32-C3), ARM Cortex-M0+ (Raspberry Pi Pico)—để định lượng đầy đủ tính di động. Đặc điểm bộ nhớ và tốc độ chắc chắn sẽ khác nhau, đặc biệt trên các bộ xử lý AVR 8-bit thiếu hỗ trợ dấu phẩy động phần cứng.
 
 \subsection{Tính Hợp Lệ Bên Ngoài}
 Kết quả cụ thể cho nhận dạng hoạt động con người sử dụng các cảm biến IMU đeo cổ tay. Khả năng áp dụng cho các lĩnh vực theo dõi chuyển động khác (nhận dạng cử chỉ, theo dõi hành vi động vật, lập hồ sơ chuyển động robot) vẫn cần được xác thực. Kiến trúc của framework được thiết kế để không phụ thuộc miền, nhưng các chiến lược tiền xử lý và bộ đặc trưng có thể yêu cầu thích ứng cho các ứng dụng không phải HAR.
@@ -117,7 +117,7 @@ Phần~\ref{sec:codegen_rationale} trình bày lý do thiết kế cho việc ch
 \paragraph{Lợi ích Đã được Xác nhận}
 Ba lợi ích dự kiến đã được xác nhận qua thực nghiệm:
 
-Thứ nhất, \textit{dấu chân bộ nhớ tối thiểu}: Neural Network chỉ chiếm 95KB flash---bao gồm trọng số mô hình, logic suy luận, trích xuất đặc trưng 15 thống kê, và chuẩn hóa StandardScaler. Với TFLite Micro, cùng chức năng sẽ yêu cầu thêm 150--250KB cho runtime interpreter, đẩy tổng lên 245--345KB và chiếm $>$25\% flash khả dụng chỉ cho suy luận. Trên Seeed XIAO (1MB flash), điều này vẫn khả thi; trên các vi điều khiển với 256KB flash (ví dụ: STM32F103, ATmega2560), phương pháp runtime sẽ không thể triển khai.
+Thứ nhất, \textit{dấu chân bộ nhớ tối thiểu}: Neural Network chỉ chiếm 95KB flash---bao gồm trọng số mô hình, logic suy luận, trích xuất đặc trưng 15 thống kê, và chuẩn hóa StandardScaler. Với TFLite Micro, cùng chức năng sẽ yêu cầu thêm 150--250KB cho runtime interpreter, đẩy tổng lên 245--345KB và chiếm $>$25\% flash khả dụng chỉ cho suy luận. Trên nền tảng tham chiếu Seeed XIAO (1MB flash), điều này vẫn khả thi; trên các vi điều khiển với 256KB flash (ví dụ: STM32F103, ATmega2560), phương pháp runtime sẽ không thể triển khai.
 
 Thứ hai, \textit{minh bạch cho gỡ lỗi}---đây là yếu tố có tác động lớn nhất ngoài dự kiến. Khi mô hình đã triển khai luôn dự đoán \texttt{walking\_downstairs}, chúng tôi có thể: (a) đọc chính xác mã C++ đã tạo để xác minh logic suy luận, (b) in giá trị đặc trưng trung gian trên serial để so sánh với Python, (c) xác định lỗi zero-padding và kurtosis formula bằng cách truy vết từng dòng. Với runtime đóng gói, bước (b) và (c) sẽ yêu cầu công cụ debugging chuyên biệt hoặc không thể thực hiện. Kinh nghiệm phát triển thực tế cho thấy 3 trong 10 phát hiện kỹ thuật (Finding 1: zero-padding, Finding 2: kurtosis, Finding 7: feature order) chỉ có thể phát hiện nhờ khả năng kiểm tra mã đã tạo dòng-theo-dòng.
 
@@ -163,7 +163,7 @@ tương đương sai lệch $\sim$1,3\% cho mỗi đặc trưng kurtosis và ske
 Python huấn luyện trên các cột DataFrame được sắp xếp theo thứ tự bảng chữ cái, trong khi C++ trích xuất đặc trưng theo thứ tự cố định (magnitude $\rightarrow$ per-axis). Mức reorder đặc trưng tại thời điểm tạo mã đảm bảo trọng số mô hình và tham số scaler tương ứng chính xác với thứ tự trích xuất C++.
 
 \subsection{Tác động Thực tế}
-Khi triển khai trên thiết bị Seeed XIAO nRF52840, các lỗi không khớp khiến mô hình luôn dự đoán lớp \texttt{walking\_downstairs} bất kể hoạt động thực tế. Phân tích cho thấy output biases của mạng nơ-ron $[-0{,}116; -0{,}160; -0{,}066; 0{,}116; 0{,}048]$ chi phối khi đặc trưng đầu vào nằm hoàn toàn ngoài phân phối huấn luyện---lớp có bias cao nhất ($0{,}116$, tương ứng \texttt{walking\_downstairs}) luôn thắng quyết.
+Trong ca kiểm chứng trên thiết bị tham chiếu Seeed XIAO nRF52840, các lỗi không khớp khiến mô hình luôn dự đoán lớp \texttt{walking\_downstairs} bất kể hoạt động thực tế. Phân tích cho thấy output biases của mạng nơ-ron $[-0{,}116; -0{,}160; -0{,}066; 0{,}116; 0{,}048]$ chi phối khi đặc trưng đầu vào nằm hoàn toàn ngoài phân phối huấn luyện---lớp có bias cao nhất ($0{,}116$, tương ứng \texttt{walking\_downstairs}) luôn thắng quyết. Bài học này không chỉ áp dụng cho XIAO mà cho toàn bộ ma trận đích của framework, vì bất kỳ backend nào cũng sẽ thất bại nếu tính tương đồng huấn luyện-triển khai không được đảm bảo.
 
 \subsection{Danh sách Kiểm tra Tương đồng}
 Bảng~\ref{tab:parity_checklist} tóm tắt 12 biện pháp đảm bảo tương đồng đã được triển khai và xác minh trong framework:
@@ -213,7 +213,7 @@ Tăng cường dữ liệu là kỹ thuật đã được chứng minh hiệu qu
 Năm phương pháp tăng cường được chọn mô phỏng các nguồn biến thiên thực tế mà mô hình sẽ gặp trong triển khai: nhiễu cảm biến (jitter), biến thiên cường độ (scaling), thay đổi vị trí đặt cảm biến (rotation), biến thiên tốc độ thực hiện (time warping) và tính bất biến với thứ tự thời gian (permutation). Sự kết hợp này bao phủ các nguồn biến thiên chính được xác định trong tài liệu HAR \cite{eyobu2018feature, rashid2022ahar}.
 
 \subsection{Bài học từ Tăng cường Không-Nhận-biết Lớp}
-Thực nghiệm ban đầu áp dụng tất cả năm phương pháp đồng nhất cho mọi lớp hoạt động, phát hiện vấn đề: mô hình Neural Network sau tăng cường thống nhất phân loại sai hoạt động \textit{still} thành \textit{walking\_downstairs} với tỷ lệ đáng kể. Nguyên nhân gốc: jitter ($\sigma = 0{,}05$) và rotation ($15°$) trên cửa sổ tĩnh tạo ra dao động nhân tạo có biên độ tương đương hoạt động cường độ thấp (đi xuống cầu thang chậm), dẫn đến chồng lấn vùng đặc trưng giữa hai lớp.
+Thực nghiệm ban đầu áp dụng tất cả năm phương pháp đồng nhất cho mọi lớp hoạt động, phát hiện vấn đề: mô hình Neural Network sau tăng cường thống nhất phân loại sai hoạt động \textit{still} thành \textit{walking\_downstairs} với tỷ lệ đáng kể. Nguyên nhân gốc: jitter ($\sigma = 0{,}05$) và rotation ($15^{\circ}$) trên cửa sổ tĩnh tạo ra dao động nhân tạo có biên độ tương đương hoạt động cường độ thấp (đi xuống cầu thang chậm), dẫn đến chồng lấn vùng đặc trưng giữa hai lớp.
 
 Phân tích định lượng xác nhận: perturbation tối đa trên cửa sổ tĩnh với tăng cường đầy đủ đạt 0,6059 (tương đương dao động gia tốc đáng kể), trong khi cửa sổ tĩnh gốc có perturbation $< 0{,}01$. Chiến lược nhận biết lớp giảm perturbation tĩnh về $\leq 0{,}0002$ (micro-jitter), bảo toàn hoàn toàn đặc tính phân biệt.
 

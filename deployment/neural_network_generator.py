@@ -14,8 +14,8 @@ class NeuralNetworkCodeGenerator(BaseCodeGenerator):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
                  optimization: str = 'balanced', overlap: float = 0.5,
-                 quantization: str = 'none'):
-        super().__init__(model_data, platform, optimization, overlap, quantization)
+                 quantization: str = 'none', **kwargs):
+        super().__init__(model_data, platform, optimization, overlap, quantization, **kwargs)
         self.weights = model_data.get('weights', {})
         self.hidden_size = self.weights.get('hidden_size', 50)
 

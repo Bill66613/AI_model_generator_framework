@@ -220,6 +220,68 @@ layout = html.Div([
                                  'margin-bottom': '5px'}),
                         html.Div("Higher overlap = MORE frequent updates = HIGHER power consumption", style={
                                  'font-size': '11px', 'color': '#999'})
+                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic', 'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'}),
+
+                    html.Label("Confidence Threshold:", style={
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                    dcc.Input(
+                        id='deployment-confidence-threshold',
+                        type='number',
+                        placeholder='0.6',
+                        value=0.6,
+                        min=0.0,
+                        max=1.0,
+                        step=0.05,
+                        style={'width': '100%', 'padding': '8px',
+                               'border': '1px solid #ddd', 'border-radius': '4px'}
+                    ),
+                    html.Div([
+                        html.Div("Minimum confidence to accept a prediction (0.0-1.0)",
+                                 style={'margin-bottom': '5px'}),
+                        html.Div("• Below threshold → returns 'unknown' instead of forcing a class", style={
+                                 'margin-bottom': '3px'}),
+                        html.Div("• Higher = fewer false positives, lower = more responsive", style={
+                                 'margin-bottom': '3px'}),
+                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic', 'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'}),
+
+                    html.Label("Prediction Smoothing:", style={
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                    dcc.Input(
+                        id='deployment-smoothing-window',
+                        type='number',
+                        placeholder='3',
+                        value=3,
+                        min=1,
+                        max=9,
+                        step=2,
+                        style={'width': '100%', 'padding': '8px',
+                               'border': '1px solid #ddd', 'border-radius': '4px'}
+                    ),
+                    html.Div([
+                        html.Div("Majority vote over last N predictions to reduce spurious misclassifications",
+                                 style={'margin-bottom': '5px'}),
+                        html.Div("• 1 = No smoothing (raw predictions)", style={
+                                 'margin-bottom': '3px'}),
+                        html.Div("• 3 = Recommended (filters transient errors, fast response)", style={
+                                 'margin-bottom': '3px'}),
+                        html.Div("• 5-9 = More stable but slower to react to activity changes", style={
+                                 'margin-bottom': '3px'}),
+                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic', 'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'}),
+
+                    html.Label("On-device IIR Filter:", style={
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                    dcc.Checklist(
+                        id='deployment-iir-filter-enabled',
+                        options=[{'label': ' Enable causal IIR low-pass filter', 'value': 'enabled'}],
+                        value=[],
+                        style={'margin-bottom': '5px'}
+                    ),
+                    html.Div([
+                        html.Div("Applies a Butterworth IIR filter per-sample before buffering",
+                                 style={'margin-bottom': '5px'}),
+                        html.Div("Note: Training uses zero-phase filtfilt; on-device uses causal lfilter. "
+                                 "This can increase skewness/kurtosis for transient events.",
+                                 style={'color': '#ff9800', 'margin-bottom': '3px'}),
                     ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic', 'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'})
                 ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'})
             ])

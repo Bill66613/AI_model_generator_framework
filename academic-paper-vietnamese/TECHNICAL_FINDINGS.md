@@ -1,14 +1,14 @@
 # PHÁT HIỆN KỸ THUẬT QUAN TRỌNG
 # Technical Findings — Framework vs Commercial Platforms
 
-**Last updated:** 2026-03-08  
-**Version:** 6.0 (added finding 11: Data augmentation with class-aware protection)
+**Last updated:** 2026-04-08  
+**Version:** 6.1 (added finding 12: multi-device deployment matrix vs single-board narrative)
 
 ---
 
 ## QUICK CONTEXT (Read this first in any new session)
 
-This file documents **11 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
+This file documents **12 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
 
 | # | Finding | Severity | Status | Code Files Affected | Thesis Chapters |
 |---|---------|----------|--------|---------------------|-----------------|
@@ -23,8 +23,9 @@ This file documents **11 critical technical findings** discovered during framewo
 | 9 | CNN validation false positives — architecture-unaware validator | MEDIUM | ✅ FIXED | `deployment/validation.py` | Ch.3 §CodeGen, Ch.5 §validation |
 | 10 | Confidence threshold for unknown activity rejection | FEATURE | ✅ IMPLEMENTED | `deployment/base_generator.py`, `*_generator.py` (all) | Ch.3 §CodeGen, Ch.4 §robustness |
 | 11 | Data augmentation with class-aware protection | FEATURE | ✅ IMPLEMENTED | `utils/data_augmentation.py`, `callbacks/feature_engineering_callbacks.py`, `layouts/feature_engineering.py` | Ch.3 §Augmentation, Ch.5 §augmentation |
+| 12 | Multi-device deployment matrix vs single-board narrative | DESIGN | ✅ DOCUMENTED | `deployment/code_generator_factory.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py`, `deployment/zephyr_generator.py` | Ch.1 §motivation, Ch.3 §CodeGen, Ch.4 §deployment, Ch.5 §validity |
 
-**Action required:** Collect longer recordings (≥1.5s per window), use sliding window to generate 50+ windows/class, retrain, collect before/after accuracy data for Ch.4.
+**Action required:** Collect longer recordings (≥1.5s per window), use sliding window to generate 50+ windows/class, retrain, collect before/after accuracy data for Ch.4, and if possible add at least one more cross-device build/benchmark besides XIAO.
 
 ### Cross-Reference Index
 
@@ -40,6 +41,8 @@ This file documents **11 critical technical findings** discovered during framewo
 - **Finding 8 (double extraction)** → Code: `deployment/code_generator_factory.py` line 589 removed → Thesis: Ch.5 pipeline correctness
 - **Finding 9 (CNN validation)** → Code: `deployment/validation.py` (CNN-aware validation branch + `_validate_cnn_code` + `_estimate_cnn_resources`) → Thesis: Ch.3 multi-architecture support, Ch.5 validation framework
 - **Finding 10 (Confidence threshold)** → Code: `deployment/base_generator.py` (har_predict wrapper + softmax), `deployment/neural_network_generator.py`, `deployment/random_forest_generator.py`, `deployment/svm_generator.py`, `deployment/cnn_generator.py`, `deployment/micropython_generator.py` → Thesis: Ch.3 code generation robustness, Ch.4 real-world deployment
+- **Finding 11 (class-aware augmentation)** → Code: `utils/data_augmentation.py`, `callbacks/feature_engineering_callbacks.py`, `layouts/feature_engineering.py` → Thesis: Ch.3 augmentation, Ch.5 augmentation analysis
+- **Finding 12 (multi-device deployment matrix)** → Code: `deployment/code_generator_factory.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py`, `deployment/zephyr_generator.py` → Thesis: Ch.1 problem framing, Ch.3 generator matrix, Ch.4 multi-device results, Ch.5 validity scope
 
 ---
 
@@ -51,6 +54,7 @@ This file documents **11 critical technical findings** discovered during framewo
 | 2025-02-27 | Restructure v2.0 | Added Quick Context, Cross-Reference Index, Session Log for cross-session AI continuity |
 | 2025-02-27 | Finding 5 added | Documented edge-replication distortion and tiny dataset root cause analysis |
 | 2026-03-01 | Findings 6-8 added | Three critical deployment bugs: double standardization, feature order mismatch, double extraction in code gen pipeline |
+| 2026-04-08 | Finding 12 added | Documented mismatch between single-board thesis narrative and already-implemented multi-device deployment matrix |
 
 *Add a row here each time this file is updated.*
 
@@ -713,6 +717,59 @@ The augmented "still" windows developed feature profiles nearly identical to "wa
 - Our framework: Integrated augmentation with automatic static activity protection
 
 **Defense argument:** Demonstrates deep understanding of IMU signal physics — not just applying generic ML techniques, but designing augmentation that respects the physical constraints of inertial measurement data. The "still" class confusion bug is a real-world problem that would affect any HAR system using naive augmentation.
+
+---
+
+## Finding 12: Multi-Device Deployment Matrix vs Single-Board Narrative
+
+**Severity:** DESIGN  
+**Status:** ✅ DOCUMENTED  
+**Date:** 2026-04-08  
+**Files:** `deployment/code_generator_factory.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py`, `deployment/zephyr_generator.py`, `deployment/tflite_generator.py`, `deployment/onnx_generator.py`
+
+### §12.1 Mô tả vấn đề
+
+Trong quá trình rà soát nội dung luận văn, phát hiện một sai lệch quan trọng giữa **narrative báo cáo** và **năng lực thực sự của codebase**: phần viết đã dần bị neo vào Seeed XIAO nRF52840 như thể đây là đích triển khai duy nhất, trong khi hệ thống tạo mã trong mã nguồn đã được tổ chức theo ma trận đa nền tảng và đa backend.
+
+Nói cách khác, hạn chế nằm ở cách diễn đạt trong luận văn, không nằm ở kiến trúc phần mềm. Nếu tiếp tục giữ framing ``framework cho XIAO'', luận văn sẽ làm nhỏ đi một trong những đóng góp mạnh nhất của hệ thống: khả năng tái sử dụng cùng một pipeline huấn luyện cho nhiều họ thiết bị và môi trường thực thi khác nhau.
+
+### §12.2 Dữ liệu chứng minh
+
+Evidence trực tiếp từ mã nguồn generator:
+
+- `CodeGeneratorFactory.get_supported_platforms()` trả về các khóa nền tảng: `arduino`, `arm_cortex_m`, `esp32`, `m5stack`, `teensy`, `seeed_xiao`, `generic_c`, `generic_cpp`, `esp_idf`, `micropython`, `zephyr`
+- `create_generator()` định tuyến theo ba trục: `model_type`, `platform`, và `deployment_approach`
+- `DEPLOYMENT_APPROACHES = ('direct', 'tflite_micro', 'onnx_runtime')` cho thấy framework hỗ trợ không chỉ direct code generation mà còn các backend runtime thay thế
+- `create_output_folder_structure()` và `generate_deployment_code()` sinh các bộ tệp khác nhau tùy đích: `.h/.cpp/.ino`, `.c`, `.py`, hoặc gói chứa model `.tflite/.onnx`
+- `ARMCortexMCodeGenerator`, `MicroPythonCodeGenerator`, `ZephyrCodeGenerator` là các generator chuyên biệt đã được hiện thực hóa riêng, không phải ý tưởng trong tương lai
+
+Điều này chứng minh framework đã có **khả năng triển khai đa thiết bị ở mức kiến trúc và sinh mã**, dù benchmark định lượng hiện vẫn tập trung chủ yếu trên XIAO.
+
+### §12.3 Hậu quả / Phân tích
+
+Nếu narrative không được chỉnh lại, có ba hậu quả:
+
+1. **Làm suy giảm đóng góp khoa học**: luận văn sẽ bị đọc như một hệ thống ``demo trên một board'' thay vì một framework đa đích.
+2. **Gây hiểu nhầm về phạm vi xác thực**: người đọc có thể đồng nhất ``benchmark trên XIAO'' với ``chỉ hỗ trợ XIAO'', trong khi hai điều này khác nhau.
+3. **Làm yếu luận điểm so sánh với nền tảng thương mại**: một lợi thế lớn của framework là tính mở và khả năng đóng gói linh hoạt theo nhiều backend/đích triển khai; nếu không nêu rõ, điểm khác biệt này sẽ bị mất.
+
+Phân tích phù hợp nhất là tách phát biểu thành hai lớp:
+
+- **Lớp 1 — Khả năng triển khai**: framework đã hỗ trợ nhiều họ đích ở mức generator và cấu trúc tệp đầu ra
+- **Lớp 2 — Benchmark định lượng**: các số liệu thời gian/bộ nhớ/điện năng hiện được đo chi tiết trên Seeed XIAO như nền tảng tham chiếu đầu tiên
+
+### §12.4 Giải pháp
+
+Giải pháp là điều chỉnh lại toàn bộ narrative luận văn theo nguyên tắc sau:
+
+- Seeed XIAO nRF52840 được mô tả là **nền tảng tham chiếu** hoặc **ca benchmark đại diện**, không phải đích duy nhất
+- Các chương Phương pháp luận và Kết quả phải bổ sung **ma trận đích triển khai** để phản ánh đúng kiến trúc generator hiện có
+- Chương Thảo luận phải phân biệt rõ giữa ``hỗ trợ đa thiết bị ở mức kiến trúc'' và ``benchmark liên thiết bị chưa đầy đủ''
+- Chương Kết luận phải nêu rõ đóng góp đa thiết bị như một đóng góp riêng biệt của framework
+
+### §12.5 Thesis Significance
+
+Finding này rất quan trọng cho bảo vệ vì nó giúp định vị đúng đề tài: đây không phải là luận văn về một firmware cho XIAO, mà là luận văn về **một framework triển khai edge AI đa thiết bị**, trong đó XIAO chỉ là nền tảng đo thực nghiệm đầu tiên. Cách framing này phù hợp hơn với kiến trúc mã nguồn thực tế và tăng sức thuyết phục khi so sánh với Edge Impulse hoặc SensiML.
 
 ---
 

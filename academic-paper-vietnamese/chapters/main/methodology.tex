@@ -11,10 +11,10 @@ Framework được đề xuất triển khai một quy trình từ đầu đến
     \label{fig:architecture}
 \end{figure}
 
-\section{Thu thập Dữ liệu và Nền tảng Phần cứng}
+\section{Thu thập Dữ liệu và Nền tảng Tham chiếu}
 
-\subsection{Phần cứng Cảm biến}
-Thu thập dữ liệu sử dụng vi điều khiển Seeed XIAO nRF52840 Sense \cite{web:XIAO}, có bộ xử lý ARM Cortex-M4F (64MHz, 256KB RAM, 1MB Flash) và cảm biến IMU 6 trục LSM6DS3 tích hợp giao tiếp qua I2C tại địa chỉ 0x6A. LSM6DS3 cung cấp dữ liệu gia tốc kế 3 trục (được cấu hình ở phạm vi $\pm$2g) và dữ liệu con quay hồi chuyển 3 trục, được lấy mẫu ở 100Hz để đảm bảo độ phân giải thời gian đầy đủ để bắt giữ động lực học chuyển động con người trong khi cân bằng các ràng buộc bộ nhớ.
+\subsection{Thiết bị tham chiếu cho thu thập và benchmark}
+Để thu thập dữ liệu và đo benchmark phần cứng đại diện, nghiên cứu sử dụng vi điều khiển Seeed XIAO nRF52840 Sense \cite{web:XIAO}, có bộ xử lý ARM Cortex-M4F (64MHz, 256KB RAM, 1MB Flash) và cảm biến IMU 6 trục LSM6DS3 tích hợp giao tiếp qua I2C tại địa chỉ 0x6A. LSM6DS3 cung cấp dữ liệu gia tốc kế 3 trục (được cấu hình ở phạm vi $\pm$2g) và dữ liệu con quay hồi chuyển 3 trục, được lấy mẫu ở 100Hz để đảm bảo độ phân giải thời gian đầy đủ để bắt giữ động lực học chuyển động con người trong khi cân bằng các ràng buộc bộ nhớ. Việc lựa chọn thiết bị này không hàm ý framework chỉ nhắm đến duy nhất XIAO; trong luận văn này, XIAO đóng vai trò nền tảng tham chiếu thuộc lớp ARM Cortex-M4F phổ biến trong các ứng dụng đeo, còn năng lực cốt lõi của framework nằm ở khả năng đóng gói cùng một mô hình sang nhiều đích triển khai khác nhau.
 
 \subsection{Giao thức Thu thập Dữ liệu}
 Firmware thu thập dữ liệu triển khai quy trình sau:
@@ -27,7 +27,7 @@ Firmware thu thập dữ liệu triển khai quy trình sau:
     \item Đầu ra định dạng CSV: aX, aY, aZ, gX, gY, gZ, Time\_seconds
 \end{enumerate}
 
-Tốc độ lấy mẫu chuẩn hóa 100Hz đảm bảo tính nhất quán giữa thu thập dữ liệu huấn luyện và triển khai suy luận thời gian thực, loại bỏ các vấn đề không khớp tần số có thể làm suy giảm hiệu suất mô hình.
+Tốc độ lấy mẫu chuẩn hóa 100Hz đảm bảo tính nhất quán giữa thu thập dữ liệu huấn luyện và triển khai suy luận thời gian thực, loại bỏ các vấn đề không khớp tần số có thể làm suy giảm hiệu suất mô hình. Trong pha triển khai, framework tách riêng pipeline học máy khỏi lớp driver cảm biến và lớp đóng gói mã; do đó, thiết bị thu thập dữ liệu có thể khác với thiết bị suy luận cuối cùng miễn là các giả định về cột cảm biến, đơn vị đo và tần số lấy mẫu vẫn được giữ nhất quán.
 
 \section{Quy trình Tiền xử lý Tương tác}
 
@@ -131,7 +131,7 @@ Năm phương pháp biến đổi được triển khai, mỗi phương pháp m�
     
     \item \textbf{Tỷ lệ (Scaling)}: Nhân toàn bộ cửa sổ với hệ số tỷ lệ ngẫu nhiên $s \sim \mathcal{N}(1, \sigma_s^2)$, mô phỏng sự khác biệt về cường độ chuyển động giữa các lần thực hiện. Ví dụ, $s = 1{,}15$ tương ứng với bước đi mạnh hơn 15\%.
     
-    \item \textbf{Xoay (Rotation)}: Áp dụng ma trận xoay ngẫu nhiên lên các trục gia tốc kế và con quay hồi chuyển, mô phỏng sự thay đổi vị trí đặt cảm biến trên cơ thể---một nguồn biến thiên phổ biến và quan trọng trong ứng dụng HAR thực tế \cite{eyobu2018feature}. Góc xoay tối đa có thể cấu hình (mặc định: $15°$).
+    \item \textbf{Xoay (Rotation)}: Áp dụng ma trận xoay ngẫu nhiên lên các trục gia tốc kế và con quay hồi chuyển, mô phỏng sự thay đổi vị trí đặt cảm biến trên cơ thể---một nguồn biến thiên phổ biến và quan trọng trong ứng dụng HAR thực tế \cite{eyobu2018feature}. Góc xoay tối đa có thể cấu hình (mặc định: $15^{\circ}$).
     
     \item \textbf{Biến dạng Thời gian (Time Warping)}: Áp dụng biến đổi phi tuyến lên trục thời gian qua nội suy cubic spline, mô phỏng sự biến thiên tốc độ tự nhiên trong thực hiện hoạt động---ví dụ, bước đi bắt đầu chậm và tăng tốc dần \cite{le_guennec2016augmentation}.
     
@@ -272,17 +272,34 @@ Tối ưu hóa xác định các cấu hình tối đa hóa độ chính xác x�
 \section{Tạo Mã cho Triển khai Biên}
 
 \subsection{Kiến trúc}
-Hệ thống con tạo mã dịch các mô hình scikit-learn đã huấn luyện thành các triển khai C++ độc lập có thể thực thi trên vi điều khiển mà không có các phụ thuộc bên ngoài. Kiến trúc tuân theo mẫu thiết kế Factory với kế thừa:
+Hệ thống con tạo mã dịch các mô hình đã huấn luyện thành các gói triển khai phù hợp với nhiều họ thiết bị và môi trường thực thi khác nhau, thay vì nhắm đến một bo mạch đơn lẻ. Kiến trúc tuân theo mẫu thiết kế Factory, trong đó generator được chọn theo ba trục: \textit{loại mô hình}, \textit{họ nền tảng đích} và \textit{cách tiếp cận triển khai}. Danh sách khóa nền tảng và backend cụ thể được tóm tắt trong Bảng~\ref{tab:deployment_target_matrix}.
+
+Ở mức tổ chức mã, kiến trúc gồm ba lớp chính:
 \begin{itemize}
-    \item \textbf{BaseCodeGenerator}: Lớp trừu tượng với chức năng chung\\(cấu trúc tệp, tuần tự hóa, xác thực).
-    \item \textbf{Các Trình Tạo Đặc thù Mô hình}: Các lớp con triển khai logic dự đoán đặc thù cho thuật toán:
-    \begin{itemize}
-        \item \texttt{SVMGenerator}: Tính toán kernel RBF, lưu trữ vector hỗ trợ, tính điểm quyết định đa lớp
-        \item \texttt{NeuralNetworkGenerator}: Lan truyền tiến qua các lớp ẩn/đầu ra, hàm kích hoạt (ReLU, sigmoid)
-        \item \texttt{RandomForestGenerator}: Duyệt cây nhị phân, bỏ phiếu đa số
-        \item \texttt{ARMCortexGenerator}: Số học điểm cố định, tối ưu hóa ARM CMSIS-DSP (tùy chọn)
-    \end{itemize}
+    \item \textbf{BaseCodeGenerator}: cung cấp phần dùng chung như sinh tệp, trích xuất đặc trưng, tuần tự hóa tham số, kiểm tra tương đồng và ví dụ tích hợp.
+    \item \textbf{Generator theo mô hình}: \texttt{RandomForestCodeGenerator}, \texttt{SVMCodeGenerator}, \texttt{NeuralNetworkCodeGenerator}, \texttt{CNNCodeGenerator} hiện thực logic suy luận đặc thù thuật toán.
+    \item \textbf{Generator theo nền tảng/backend}: các lớp như \texttt{ARMCortexMCodeGenerator}, \texttt{MicroPythonCodeGenerator}, \texttt{ZephyrCodeGenerator}, cùng các backend TFLite Micro và ONNX Runtime, chịu trách nhiệm điều chỉnh mã theo môi trường đích.
 \end{itemize}
+
+Bảng~\ref{tab:deployment_target_matrix} tóm tắt ma trận đích triển khai được hỗ trợ ở mức generator.
+
+\begin{table}[H]
+    \centering
+    \caption{Ma trận đích triển khai được hỗ trợ trong kiến trúc generator}
+    \small
+    \begin{tabular}{@{}p{2.6cm}p{2.8cm}p{2.6cm}p{4.6cm}@{}}
+        \toprule
+        Nhóm đích & Khóa nền tảng/backend & Gói sinh ra & Mục đích sử dụng chính \\
+        \midrule
+        Arduino-compatible & arduino, seeed\_xiao, esp32, m5stack, teensy & .h + .cpp + .ino & Quy trình Arduino IDE/PlatformIO cho các bo vi điều khiển phổ biến \\
+        ARM Cortex-M thuần & arm\_cortex\_m & .c & Tích hợp bare-metal hoặc CMSIS trên các vi điều khiển ARM \\
+        SDK/RTOS native & generic\_c, generic\_cpp, esp\_idf, zephyr & .h + .c/.cpp + ví dụ & Ứng dụng nhúng native, SDK hãng và RTOS \\
+        MicroPython & micropython & module .py + ví dụ .py & Nguyên mẫu nhanh hoặc giáo dục trên board hỗ trợ MicroPython \\
+        Backend runtime thay thế & tflite\_micro, onnx\_runtime & mã glue + model nhị phân & Mở rộng cho các pipeline cần runtime suy luận chuẩn hóa \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:deployment_target_matrix}
+\end{table}
 
 \subsection{Lý do Chọn Tạo Mã Trực tiếp thay vì Runtime Suy luận}
 \label{sec:codegen_rationale}
@@ -345,7 +362,7 @@ Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên 
 Quyết định sử dụng tạo mã trực tiếp được lập luận bởi bốn yếu tố:
 
 \paragraph{(1) Dấu chân bộ nhớ tối thiểu}
-Trên vi điều khiển như Seeed XIAO nRF52840 (1MB flash, 256KB RAM), mỗi KB đều quan trọng. TFLite Micro interpreter chiếm khoảng 150--250KB flash \cite{warden2019tinyml, ray2023tinyml_survey}---tương đương 15--25\% tổng flash khả dụng---chỉ riêng runtime, trước khi tính trọng số mô hình. Phương pháp trực tiếp loại bỏ hoàn toàn overhead này: một mô hình Neural Network chỉ chiếm 95KB (trọng số + logic suy luận + trích xuất đặc trưng), để lại $>$900KB cho firmware ứng dụng.
+Trên các vi điều khiển lớp wearable như Seeed XIAO nRF52840 (1MB flash, 256KB RAM), mỗi KB đều quan trọng. TFLite Micro interpreter chiếm khoảng 150--250KB flash \cite{warden2019tinyml, ray2023tinyml_survey}---tương đương 15--25\% tổng flash khả dụng---chỉ riêng runtime, trước khi tính trọng số mô hình. Phương pháp trực tiếp loại bỏ hoàn toàn overhead này: một mô hình Neural Network chỉ chiếm 95KB (trọng số + logic suy luận + trích xuất đặc trưng), để lại $>$900KB cho firmware ứng dụng và giúp việc chuyển sang các board cùng lớp tài nguyên trở nên khả thi hơn.
 
 \paragraph{(2) Minh bạch và Khả năng Xác minh}
 Một bài học quan trọng từ phát triển framework (xem Phần~\ref{sec:training_deployment_parity}) là \textit{khả năng kiểm tra mã suy luận đã tạo là yêu cầu thiết yếu}, không phải tính năng tùy chọn. Khi phát hiện lỗi zero-padding và sai lệch công thức kurtosis, chúng tôi có thể truy vết trực tiếp đến mã C++ đã tạo, so sánh từng dòng với triển khai Python, và sửa chữa. Với runtime đóng gói (TFLite Micro) hoặc trình biên dịch đóng (EON Compiler), quá trình gỡ lỗi này sẽ không thể thực hiện---lỗi sẽ biểu hiện như ``mô hình hoạt động kém trên thiết bị'' mà không có cách xác định nguyên nhân gốc.
@@ -368,21 +385,21 @@ Tạo mã trực tiếp không phải giải pháp phổ quát. Nó không phù 
 Các phiên bản tương lai của framework nên tích hợp đường dẫn TFLite Micro bên cạnh tạo mã trực tiếp, cho phép người dùng chọn phương pháp phù hợp với ràng buộc của họ: tạo mã trực tiếp cho ML cổ điển và TFLite Micro cho học sâu.
 
 \subsection{Cấu trúc Mã Đã Tạo}
-Đối với mỗi mô hình đã huấn luyện, trình tạo sản xuất ba tệp:
+Đối với mỗi mô hình đã huấn luyện, trình tạo sản xuất một gói triển khai gồm các tệp tham số, tệp cài đặt và tệp ví dụ tích hợp. Cụ thể:
 \begin{enumerate}
     \item \textbf{Tệp Header (.h)}: Chứa các tham số mô hình (ví dụ: vectors hỗ trợ, cấu trúc cây, ma trận trọng số), khai báo hàm, các macro số lượng đặc trưng/lớp
-    \item \textbf{Tệp Triển khai (.cpp)}: Triển khai trích xuất đặc trưng, logic dự đoán (đặc thù cho thuật toán) và các hàm tiện ích
-    \item \textbf{Arduino Sketch (.ino)}: Cung cấp khởi tạo cảm biến, quản lý bộ đệm cửa sổ trượt, vòng lặp suy luận thời gian thực và đầu ra serial của các dự đoán
+    \item \textbf{Tệp Triển khai (.c/.cpp/.py)}: Triển khai trích xuất đặc trưng, logic dự đoán (đặc thù cho thuật toán) và các hàm tiện ích, với phần mở rộng phụ thuộc nền tảng đích
+    \item \textbf{Tệp Ví dụ Tích hợp}: Có thể là Arduino sketch (.ino), chương trình C/C++ ví dụ hoặc script MicroPython, minh họa khởi tạo cảm biến, quản lý bộ đệm cửa sổ trượt, vòng lặp suy luận thời gian thực và đầu ra dự đoán
 \end{enumerate}
 
 \textbf{Xác minh Công thức Thống kê}: Mã C++ đã tạo cho trích xuất đặc trưng sử dụng các công thức thống kê được xác minh khớp chính xác với triển khai Python (pandas/NumPy). Cụ thể, các đặc trưng kurtosis và skewness sử dụng \textit{độ lệch chuẩn tổng thể} (population standard deviation, chia $n$) cho chuẩn hóa z-scores, thay vì độ lệch chuẩn mẫu (chia $n-1$). Sự khác biệt này, mặc dù nhỏ ($\sim$1,3\% cho $n=150$), là hệ thống và tích lũy qua nhiều đặc trưng, có thể ảnh hưởng đến độ chính xác triển khai nếu không được xử lý.
 
-Hình \ref{fig:ui_code_generation} cho thấy giao diện tạo mã với bản xem trước mã Arduino C++ đã tạo, các tùy chọn cấu hình triển khai và các tệp đầu ra có thể tải xuống.
+Hình \ref{fig:ui_code_generation} cho thấy giao diện tạo mã với bản xem trước gói mã triển khai đã tạo, các tùy chọn cấu hình nền tảng/backend và các tệp đầu ra có thể tải xuống.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{figures/ui_code_generation.png}
-    \caption{Giao diện xem trước mã Arduino C++ đã tạo. Framework hiển thị các tệp header đã tạo, tệp triển khai và các sketch Arduino với làm nổi bật cú pháp. Người dùng có thể chọn các chế độ tối ưu hóa (Accuracy, Speed, Power, Balanced), cấu hình các tham số nền tảng đích và tải xuống gói triển khai hoàn chỉnh.}
+    \caption{Giao diện xem trước gói mã triển khai đã tạo. Framework hiển thị các tệp header, tệp triển khai và tệp ví dụ tích hợp tương ứng với nền tảng đích, cho phép người dùng chọn các chế độ tối ưu hóa (Accuracy, Speed, Power, Balanced), cấu hình các tham số backend và tải xuống gói triển khai hoàn chỉnh.}
     \label{fig:ui_code_generation}
 \end{figure}
 
@@ -422,12 +439,14 @@ Thỏa hiệp giữa độ chính xác, tốc độ và điện năng:
 \end{itemize}
 
 \subsection{Các Điều chỉnh Đặc thù Nền tảng}
-Trong khi framework hiện nhắm mục tiêu các nền tảng tương thích Arduino (Seeed XIAO, ESP32, Arduino Nano 33 BLE), kiến trúc modular hỗ trợ các điều chỉnh đặc thù cho nền tảng:
+Thay vì khóa vào một bo mạch cụ thể, framework nhóm các điều chỉnh đặc thù theo họ đích triển khai:
 \begin{itemize}
-    \item \textbf{Bố trí Bộ nhớ}: Điều chỉnh lưu trữ mảng (PROGMEM cho AVR, const cho ARM) dựa trên tính khả dụng flash/RAM
-    \item \textbf{Tăng tốc Phần cứng}: Các nền tảng ARM Cortex-M có thể tận dụng thư viện CMSIS-DSP cho các phép toán SIMD trên tính toán đặc trưng
-    \item \textbf{Trình điều khiển Cảm biến}: Trừu tượng hóa khởi tạo cảm biến để hỗ trợ các mô hình IMU khác nhau (LSM6DS3, MPU6050, BNO055)
+    \item \textbf{Arduino-compatible boards}: sinh cấu trúc tệp \texttt{.ino}/\texttt{.cpp}/\texttt{.h}, dùng \texttt{Serial}, \texttt{Wire} và các đoạn mã khởi tạo cảm biến phù hợp cho từng board phổ biến.
+    \item \textbf{ARM Cortex-M native}: sinh mã C độc lập, ưu tiên bộ nhớ tĩnh và sẵn sàng tích hợp vào firmware bare-metal hoặc CMSIS.
+    \item \textbf{SDK/RTOS native}: điều chỉnh include, macro logging và entry-point cho \texttt{generic\_c}, \texttt{generic\_cpp}, ESP-IDF và Zephyr.
+    \item \textbf{MicroPython}: sinh module Python độc lập cùng ví dụ gọi hàm, đồng thời duy trì tương đồng công thức với bản C/C++ để thuận tiện cho nguyên mẫu nhanh.
 \end{itemize}
+Nhờ cách phân lớp này, cùng một mô hình đã huấn luyện có thể được xuất lại cho nhiều đích triển khai mà không cần huấn luyện lại, ngoại trừ các điều chỉnh phụ thuộc tài nguyên như chế độ tối ưu hóa hoặc backend suy luận.
 
 \section{Thiết kế Thực nghiệm}
 
@@ -436,7 +455,7 @@ Các thử nghiệm xác thực sử dụng một tập dữ liệu Nhận dạn
 \begin{itemize}
     \item \textit{Running}, \textit{Still}, \textit{Walking}, \textit{Walking Downstairs}, \textit{Walking Upstairs}
 \end{itemize}
-Dữ liệu được thu thập bằng nền tảng Seeed XIAO nRF52840 Sense ở 100Hz qua nhiều phiên ghi. Mỗi hoạt động được ghi trong 30-60 giây qua nhiều phiên, với sự chú ý cẩn thận đến các giai đoạn chuyển tiếp. Giao diện cửa sổ kéo thả được sử dụng để phân đoạn các bản ghi liên tục thành \textbf{mẫu được gán nhãn} (các đoạn hoạt động được chú thích thủ công), trích xuất nhiều cửa sổ đại diện mỗi hoạt động.
+Dữ liệu được thu thập bằng nền tảng Seeed XIAO nRF52840 Sense ở 100Hz qua nhiều phiên ghi. Trong luận văn này, thiết bị này được dùng như nền tảng cảm biến và benchmark tham chiếu; năng lực đa thiết bị của framework được đánh giá riêng thông qua kiến trúc generator và các loại gói sinh ra cho từng đích. Mỗi hoạt động được ghi trong 30-60 giây qua nhiều phiên, với sự chú ý cẩn thận đến các giai đoạn chuyển tiếp. Giao diện cửa sổ kéo thả được sử dụng để phân đoạn các bản ghi liên tục thành \textbf{mẫu được gán nhãn} (các đoạn hoạt động được chú thích thủ công), trích xuất nhiều cửa sổ đại diện mỗi hoạt động.
 
 \textit{Quy trình Trích xuất Đặc trưng}: Mỗi mẫu được gán nhãn (thường dài 30-60 giây) sau đó được xử lý bằng cách tiếp cận cửa sổ trượt (Phần~\ref{sec:feature_extraction}) với cửa sổ 1,5 giây và chồng lấp 50\%. Điều này chuyển đổi các mẫu được gán nhãn thành 159 \textbf{vectors đặc trưng} (điểm dữ liệu huấn luyện) được chia thành các tập huấn luyện (101 mẫu, 63,5\%), xác thực (28 mẫu, 17,6\%) và kiểm tra (30 mẫu, 18,9\%). Tập dữ liệu chứa năm lớp hoạt động:
 \begin{itemize}
@@ -464,6 +483,7 @@ Hiệu suất triển khai biên được đo qua:
     \item \textbf{Sử dụng Bộ nhớ}: Flash (lưu trữ chương trình) và SRAM (biến/bộ đệm thời gian chạy) tiêu thụ (KB), được trích xuất từ các tệp bản đồ trình biên dịch và đầu ra xây dựng Arduino IDE cho thấy kích thước nhị phân đã biên dịch thực tế
     \item \textbf{Tiêu thụ Điện năng}: Dòng điện trung bình rút trong các giai đoạn hoạt động khác nhau (nhàn rỗi, lấy mẫu cảm biến, trích xuất đặc trưng, dự đoán). \textit{Lưu ý: Các giá trị điện năng được báo cáo trong luận văn này là ước lượng được tính toán từ các đặc tả tiêu thụ dòng điện ARM Cortex-M4F điển hình (8-12 mA hoạt động, 2-3 mA nhàn rỗi ở 64MHz) và phần trăm thời gian thực thi đã đo, không phải đo lường phần cứng trực tiếp với các màn hình điện năng (ví dụ: Joulescope, Nordic PPK2). Tiêu thụ điện năng thực tế có thể thay đổi $\pm$15-20\% dựa trên triển khai phần cứng cụ thể, đặc tính cảm biến và các yếu tố môi trường. Công việc tương lai nên xác thực các ước lượng này với thiết bị tạo hồ sơ điện năng phần cứng.}
     \item \textbf{Tần số Dự đoán}: Tốc độ suy luận bền vững tính đến chi phí lấy mẫu cảm biến (dự đoán mỗi giây)
+    \item \textbf{Độ phủ Đích Triển khai}: Số lượng họ nền tảng và backend triển khai có thể được sinh mã từ cùng một mô hình đã huấn luyện, được xác minh qua ma trận generator và cấu trúc tệp đầu ra
 \end{itemize}
 Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: suy luận $<$ 100ms mỗi cửa sổ (cho phép cập nhật 10Hz thời gian thực), flash $<$ 500KB (để lại khoảng trống cho mã ứng dụng), SRAM $<$ 128KB (50\% của 256KB có sẵn), điện năng $<$ 50mW trung bình (hỗ trợ hoạt động pin nhiều giờ).
 
@@ -487,8 +507,9 @@ Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: su
 \textbf{Phần cứng:}
 \begin{itemize}
     \item Phát triển: Máy trạm Windows 11 (Intel i7, 16GB RAM)
-    \item Triển khai: Seeed XIAO nRF52840 Sense (ARM Cortex-M4F @ 64MHz, 256KB RAM, 1MB Flash)
+    \item Benchmark tham chiếu: Seeed XIAO nRF52840 Sense (ARM Cortex-M4F @ 64MHz, 256KB RAM, 1MB Flash)
     \item Cảm biến: LSM6DS3 6-axis IMU (I2C, lấy mẫu 100Hz)
+    \item Các họ đích được hỗ trợ ở mức generator: Arduino-compatible, ARM Cortex-M, generic C/C++, ESP-IDF, MicroPython, Zephyr; cùng các backend TFLite Micro và ONNX Runtime
 \end{itemize}
 
 \textbf{Tính khả dụng Mã:}

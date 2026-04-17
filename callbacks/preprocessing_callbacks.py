@@ -217,32 +217,92 @@ def register_callbacks(app):
             base_dir = PERSISTENT_DIR
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
-        try:
-            with open(metadata_file, 'r') as f:
-                metadata = json.load(f)
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
 
-            dataset_info = metadata.get(dataset_name, {})
+        dataset_info = metadata.get(dataset_name, {})
 
-            # Determine processing stages
-            stages = {
-                'raw': True,  # Always true if dataset exists
-                'preprocessed': 'cleaned_data_path' in dataset_info,
-                'split': 'dragged_samples' in dataset_info and len(dataset_info.get('dragged_samples', [])) > 0,
-                'training_ready': False  # Check for training data files
-            }
+        # Determine processing stages
+        stages = {
+            'raw': True,  # Always true if dataset exists
+            'preprocessed': 'cleaned_data_path' in dataset_info,
+            'split': 'dragged_samples' in dataset_info and len(dataset_info.get('dragged_samples', [])) > 0,
+            'training_ready': False  # Check for training data files
+        }
 
-            # Check if training data exists
-            train_file = get_training_data_path(dataset_name, 'train', base_dir)
-            test_file = get_training_data_path(dataset_name, 'test', base_dir)
-            stages['training_ready'] = os.path.exists(
-                train_file) and os.path.exists(test_file)
+        # Check if training data exists
+        train_file = get_training_data_path(dataset_name, 'train', base_dir)
+        test_file = get_training_data_path(dataset_name, 'test', base_dir)
+        stages['training_ready'] = os.path.exists(
+            train_file) and os.path.exists(test_file)
 
-            # Create status display
-            status_badges = []
+        # Create status display
+        status_badges = []
 
-            # Raw Data Status
+        # Raw Data Status
+        status_badges.append(
+            html.Span("📁 Raw Data", className="badge", style={
+                'background-color': '#6c757d',
+                'color': 'white',
+                'padding': '6px 12px',
+                'border-radius': '12px',
+                'margin-right': '8px',
+                'margin-bottom': '8px',
+                'font-size': '12px',
+                'display': 'inline-block'
+            })
+        )
+
+        # Signal Preprocessed Status
+        if stages['preprocessed']:
             status_badges.append(
-                html.Span("📁 Raw Data", className="badge", style={
+                html.Span("🔧 Signal Processed", className="badge", style={
+                    'background-color': '#17a2b8',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        else:
+            status_badges.append(
+                html.Span("⏳ Signal Processing Pending", className="badge", style={
+                    'background-color': '#ffc107',
+                    'color': '#212529',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+
+        # Split Status
+        if stages['split']:
+            # Count only files that actually exist on disk
+            dragged_samples = dataset_info.get('dragged_samples', [])
+            actual_split_count = sum(
+                1 for file_path in dragged_samples if os.path.exists(file_path))
+
+            status_badges.append(
+                html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
+                    'background-color': '#fd7e14',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        else:
+            status_badges.append(
+                html.Span("⏳ Split Pending", className="badge", style={
                     'background-color': '#6c757d',
                     'color': 'white',
                     'padding': '6px 12px',
@@ -254,184 +314,128 @@ def register_callbacks(app):
                 })
             )
 
-            # Signal Preprocessed Status
-            if stages['preprocessed']:
-                status_badges.append(
-                    html.Span("🔧 Signal Processed", className="badge", style={
-                        'background-color': '#17a2b8',
-                        'color': 'white',
-                        'padding': '6px 12px',
-                        'border-radius': '12px',
-                        'margin-right': '8px',
-                        'margin-bottom': '8px',
-                        'font-size': '12px',
-                        'display': 'inline-block'
-                    })
-                )
-            else:
-                status_badges.append(
-                    html.Span("⏳ Signal Processing Pending", className="badge", style={
-                        'background-color': '#ffc107',
-                        'color': '#212529',
-                        'padding': '6px 12px',
-                        'border-radius': '12px',
-                        'margin-right': '8px',
-                        'margin-bottom': '8px',
-                        'font-size': '12px',
-                        'display': 'inline-block'
-                    })
-                )
+        # Training Data Status
+        if stages['training_ready']:
+            status_badges.append(
+                html.Span("🚀 Training Ready", className="badge", style={
+                    'background-color': '#28a745',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
+        else:
+            status_badges.append(
+                html.Span("⏳ Training Prep Pending", className="badge", style={
+                    'background-color': '#6c757d',
+                    'color': 'white',
+                    'padding': '6px 12px',
+                    'border-radius': '12px',
+                    'margin-right': '8px',
+                    'margin-bottom': '8px',
+                    'font-size': '12px',
+                    'display': 'inline-block'
+                })
+            )
 
-            # Split Status
-            if stages['split']:
-                # Count only files that actually exist on disk
-                dragged_samples = dataset_info.get('dragged_samples', [])
-                actual_split_count = sum(
-                    1 for file_path in dragged_samples if os.path.exists(file_path))
+        # Create comprehensive status display
+        status_display = html.Div([
+            html.H6("📊 Dataset Processing Status", style={
+                'margin-bottom': '10px',
+                'color': '#495057',
+                'font-weight': 'bold'
+            }),
+            html.Div(status_badges, style={'line-height': '2.5'}),
+            html.Hr(style={'margin': '15px 0'}),
+            html.Div([
+                html.Small(f"📁 Dataset: {dataset_name}", style={
+                    'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
+                html.Small(f"📡 Sampling Rate: {dataset_info.get('sampling_rate', 'Unknown')} Hz", style={
+                    'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
+                html.Small(f"🏷️ Activity: {dataset_info.get('label', 'Unknown')}", style={
+                    'display': 'block', 'color': '#6c757d'})
+            ])
+        ], style={
+            'background-color': '#f8f9fa',
+            'padding': '15px',
+            'border-radius': '8px',
+            'border': '1px solid #dee2e6'
+        })
 
-                status_badges.append(
-                    html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
-                        'background-color': '#fd7e14',
-                        'color': 'white',
-                        'padding': '6px 12px',
-                        'border-radius': '12px',
-                        'margin-right': '8px',
-                        'margin-bottom': '8px',
-                        'font-size': '12px',
-                        'display': 'inline-block'
-                    })
-                )
-            else:
-                status_badges.append(
-                    html.Span("⏳ Split Pending", className="badge", style={
-                        'background-color': '#6c757d',
-                        'color': 'white',
-                        'padding': '6px 12px',
-                        'border-radius': '12px',
-                        'margin-right': '8px',
-                        'margin-bottom': '8px',
-                        'font-size': '12px',
-                        'display': 'inline-block'
-                    })
-                )
+        # Load and display the graph
+        if stages['preprocessed']:
+            file_path = dataset_info["cleaned_data_path"]
+        else:
+            file_path = dataset_info["path"]
 
-            # Training Data Status
-            if stages['training_ready']:
-                status_badges.append(
-                    html.Span("🚀 Training Ready", className="badge", style={
-                        'background-color': '#28a745',
-                        'color': 'white',
-                        'padding': '6px 12px',
-                        'border-radius': '12px',
-                        'margin-right': '8px',
-                        'margin-bottom': '8px',
-                        'font-size': '12px',
-                        'display': 'inline-block'
-                    })
-                )
-            else:
-                status_badges.append(
-                    html.Span("⏳ Training Prep Pending", className="badge", style={
-                        'background-color': '#6c757d',
-                        'color': 'white',
-                        'padding': '6px 12px',
-                        'border-radius': '12px',
-                        'margin-right': '8px',
-                        'margin-bottom': '8px',
-                        'font-size': '12px',
-                        'display': 'inline-block'
-                    })
-                )
+        if os.path.exists(file_path):
+            df = pd.read_csv(file_path)
 
-            # Create comprehensive status display
-            status_display = html.Div([
-                html.H6("📊 Dataset Processing Status", style={
-                    'margin-bottom': '10px',
-                    'color': '#495057',
-                    'font-weight': 'bold'
-                }),
-                html.Div(status_badges, style={'line-height': '2.5'}),
-                html.Hr(style={'margin': '15px 0'}),
-                html.Div([
-                    html.Small(f"📁 Dataset: {dataset_name}", style={
-                        'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
-                    html.Small(f"📡 Sampling Rate: {dataset_info.get('sampling_rate', 'Unknown')} Hz", style={
-                        'display': 'block', 'color': '#6c757d', 'margin-bottom': '5px'}),
-                    html.Small(f"🏷️ Activity: {dataset_info.get('label', 'Unknown')}", style={
-                        'display': 'block', 'color': '#6c757d'})
-                ])
-            ], style={
-                'background-color': '#f8f9fa',
-                'padding': '15px',
-                'border-radius': '8px',
-                'border': '1px solid #dee2e6'
-            })
+            # Create time axis for proper labeling
+            sampling_rate = dataset_info.get('sampling_rate', 100)
+            df['Time_seconds'] = df.index / sampling_rate
 
-            # Load and display the graph
-            if stages['preprocessed']:
-                file_path = dataset_info["cleaned_data_path"]
-            else:
-                file_path = dataset_info["path"]
+            # Get sensor columns for plotting
+            sensor_cols = [
+                col for col in df.columns if col not in ['Time_seconds']]
 
-            if os.path.exists(file_path):
-                df = pd.read_csv(file_path)
+            # Create figure with proper time axis
+            fig = go.Figure()
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
+                      '#d62728', '#9467bd', '#8c564b']
 
-                # Create time axis for proper labeling
-                sampling_rate = dataset_info.get('sampling_rate', 100)
-                df['Time_seconds'] = df.index / sampling_rate
-
-                # Get sensor columns for plotting
-                sensor_cols = [
-                    col for col in df.columns if col not in ['Time_seconds']]
-
-                # Create figure with proper time axis
-                fig = go.Figure()
-                colors = ['#1f77b4', '#ff7f0e', '#2ca02c',
-                          '#d62728', '#9467bd', '#8c564b']
-
-                # Limit to 6 sensors for clarity
-                for i, col in enumerate(sensor_cols[:6]):
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df['Time_seconds'],
-                            y=df[col],
-                            name=col,
-                            line=dict(color=colors[i % len(colors)], width=2),
-                            hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
-                        )
+            # Limit to 6 sensors for clarity
+            for i, col in enumerate(sensor_cols[:6]):
+                fig.add_trace(
+                    go.Scatter(
+                        x=df['Time_seconds'],
+                        y=df[col],
+                        name=col,
+                        line=dict(color=colors[i % len(colors)], width=2),
+                        hovertemplate=f'<b>{col}</b><br>Time: %{{x:.3f}}s<br>Value: %{{y:.3f}}<extra></extra>'
                     )
-
-                fig.update_layout(
-                    title=f"Preview of {dataset_name} ({'Signal Processed' if stages['preprocessed'] else 'Raw Data'})",
-                    xaxis_title="Time (seconds)",
-                    yaxis_title="Sensor Values",
-                    height=400,
-                    showlegend=True,
-                    hovermode='x unified'
                 )
 
-                return fig, status_display
+            fig.update_layout(
+                title=f"Preview of {dataset_name} ({'Signal Processed' if stages['preprocessed'] else 'Raw Data'})",
+                xaxis_title="Time (seconds)",
+                yaxis_title="Sensor Values",
+                height=400,
+                showlegend=True,
+                hovermode='x unified'
+            )
 
-            return {}, status_display
+            return fig, status_display
 
-        except (json.JSONDecodeError, IOError, KeyError) as e:
-            error_msg = html.Div(f"❌ Error loading dataset: {str(e)}",
-                                 style={'color': '#dc3545', 'font-style': 'italic'})
-            return {}, error_msg
+        return {}, status_display
 
 
     @app.callback(
         Output('preprocessed-graph', 'figure', allow_duplicate=True),
         Output('stored-datasets', 'data', allow_duplicate=True),
+        Output('preprocessing-config', 'data'),
         Input('clean-smooth-btn', 'n_clicks'),
         State('dataset-selector_', 'value'),
         State('working-directory-store', 'data'),
+        State('preprocess-outlier-enabled', 'value'),
+        State('preprocess-lpf-enabled', 'value'),
+        State('preprocess-lpf-cutoff', 'value'),
+        State('preprocess-lpf-order', 'value'),
+        State('preprocess-savgol-enabled', 'value'),
+        State('preprocess-savgol-window', 'value'),
+        State('preprocess-savgol-polyorder', 'value'),
         prevent_initial_call=True
     )
-    def clean_and_smooth_data(n_clicks, dataset_name, base_dir):
+    def clean_and_smooth_data(n_clicks, dataset_name, base_dir,
+                              outlier_enabled, lpf_enabled, lpf_cutoff, lpf_order,
+                              savgol_enabled, savgol_window, savgol_polyorder):
         """Clean and smooth the selected dataset and display it in a graph."""
         if not dataset_name:
-            return no_update, no_update
+            return no_update, no_update, no_update
 
         if not base_dir:
             base_dir = PERSISTENT_DIR
@@ -439,7 +443,7 @@ def register_callbacks(app):
 
         file_path = os.path.join(datasets_dir, dataset_name)
         if not os.path.exists(file_path):
-            return no_update, no_update
+            return no_update, no_update, no_update
 
         try:
             # Load metadata to get the actual sampling rate for this dataset
@@ -452,16 +456,38 @@ def register_callbacks(app):
 
             df = pd.read_csv(file_path)
 
+            # Build preprocessing config for downstream pipeline parity
+            use_outlier = 'enabled' in (outlier_enabled or [])
+            use_lpf = 'enabled' in (lpf_enabled or [])
+            use_savgol = 'enabled' in (savgol_enabled or [])
+            lpf_cutoff = float(lpf_cutoff or 5)
+            lpf_order = int(lpf_order or 2)
+            savgol_window = int(savgol_window or 5)
+            savgol_polyorder = int(savgol_polyorder or 2)
+
+            preprocess_config = {
+                'outlier_removal': use_outlier,
+                'low_pass_filter': use_lpf,
+                'lpf_cutoff_hz': lpf_cutoff,
+                'lpf_order': lpf_order,
+                'savgol_filter': use_savgol,
+                'savgol_window_length': savgol_window,
+                'savgol_polyorder': savgol_polyorder,
+            }
+
             # Clean the data
             df = clean_data(df, method='remove_missing')
-            df = clean_data(df, method='filter_outliers')
+            if use_outlier:
+                df = clean_data(df, method='filter_outliers')
 
-            # Apply low-pass filter (use actual sampling rate, not hardcoded fs=50)
-            df = low_pass_filter(df, cutoff=5, fs=sampling_rate, order=2)
+            # Apply low-pass filter
+            if use_lpf:
+                df = low_pass_filter(df, cutoff=lpf_cutoff, fs=sampling_rate, order=lpf_order)
 
             # Apply Savitzky-Golay filter
-            for col in df.select_dtypes(include=['float64', 'int64']).columns:
-                df[col] = savgol_filter(df[col], window_length=5, polyorder=2)
+            if use_savgol:
+                for col in df.select_dtypes(include=['float64', 'int64']).columns:
+                    df[col] = savgol_filter(df[col], window_length=savgol_window, polyorder=savgol_polyorder)
 
             # Create time axis for proper labeling
             df['Time_seconds'] = df.index / sampling_rate
@@ -495,11 +521,11 @@ def register_callbacks(app):
 
             stored_datasets = df.to_dict(orient='records')
 
-            return fig, stored_datasets
+            return fig, stored_datasets, preprocess_config
 
         except Exception as e:
             logger.error(f"Error cleaning/smoothing dataset '{dataset_name}': {e}")
-            return no_update, no_update
+            return no_update, no_update, no_update
 
 
     @app.callback(
@@ -509,9 +535,10 @@ def register_callbacks(app):
         State('stored-datasets', 'data'),
         State('preprocessed-graph', 'figure'),
         State('working-directory-store', 'data'),
+        State('preprocessing-config', 'data'),
         prevent_initial_call=True
     )
-    def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, processed_figure, base_dir):
+    def save_cleaned_smoothed_data(n_clicks, dataset_name, cleaned_smoothed, processed_figure, base_dir, preprocess_config):
         """Save the cleaned and smoothed dataset to a new file and update metadata."""
         if not (dataset_name and processed_figure):
             return {}
@@ -535,6 +562,8 @@ def register_callbacks(app):
             metadata = {}
 
         metadata[dataset_name]["cleaned_data_path"] = cleaned_smoothed_file_path
+        if preprocess_config:
+            metadata[dataset_name]["preprocessing"] = preprocess_config
 
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f)

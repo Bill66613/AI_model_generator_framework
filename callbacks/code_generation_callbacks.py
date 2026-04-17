@@ -506,12 +506,18 @@ def register_callbacks(app):
             train_acc = metadata.get('train_accuracy', 0) * 100
             val_acc = metadata.get('val_accuracy', 0) * 100
             test_acc = metadata.get('test_accuracy', 0) * 100
-            features = metadata.get('features', 0)
+            raw_features = metadata.get('features', 0)
             classes = metadata.get('classes', 0)
 
-            # Get training parameters — prefer fe_config (from Feature Engineering)
-            # over model_params (which stores model hyperparameters like n_estimators, C, etc.)
+            # Derive accurate feature count from fe_config or model data
             fe_config = metadata.get('fe_config', {})
+            fe_feature_names = fe_config.get('feature_names', [])
+            num_extracted_features = (
+                metadata.get('num_features_extracted')
+                or len(fe_feature_names)
+                or fe_config.get('num_features')
+                or raw_features
+            )
             model_params = metadata.get('model_params', {})
             sampling_rate = fe_config.get('sampling_rate',
                                           model_params.get('sampling_rate', 100))
@@ -539,7 +545,7 @@ def register_callbacks(app):
                          'margin-bottom': '5px'}),
                 html.Div(f"Accuracy: Train {train_acc:.1f}% | Val {val_acc:.1f}% | Test {test_acc:.1f}%", style={
                          'margin-bottom': '5px'}),
-                html.Div(f"Features: {features}", style={
+                html.Div(f"Features: {num_extracted_features}", style={
                          'margin-bottom': '5px'}),
                 html.Div(f"Classes: {classes} activities",
                          style={'color': '#28a745'})
@@ -566,12 +572,47 @@ def register_callbacks(app):
                 html.Div([
                     html.Span("🎯 Feature Count: ", style={
                               'font-weight': 'bold'}),
-                    html.Span(f"{features} features",
-                              style={'color': '#2E86AB'}),
+                    html.Span(
+                        f"{raw_features} samples x {fe_config.get('num_channels', '?')} ch (raw windows)"
+                        if model_type == 'PYTORCH_CNN'
+                        else f"{num_extracted_features} features",
+                        style={'color': '#2E86AB'}),
                     html.Span(f" ({feature_domain_label})",
                               style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
                 ])
             ])
+
+            # Add preprocessing parity info
+            preprocess_cfg = fe_config.get('preprocessing', {})
+            preprocess_items = []
+            if preprocess_cfg:
+                if preprocess_cfg.get('low_pass_filter'):
+                    preprocess_items.append(
+                        html.Div(f"Low-pass filter: {preprocess_cfg.get('lpf_cutoff_hz', 5)}Hz "
+                                 f"(order {preprocess_cfg.get('lpf_order', 2)}) — replicated on device via IIR",
+                                 style={'color': '#28a745', 'font-size': '12px'}))
+                if preprocess_cfg.get('savgol_filter'):
+                    preprocess_items.append(
+                        html.Div(f"Savitzky-Golay (window={preprocess_cfg.get('savgol_window_length', 5)}, "
+                                 f"poly={preprocess_cfg.get('savgol_polyorder', 2)}) — NOT replicated on device",
+                                 style={'color': '#ff9800', 'font-size': '12px'}))
+                if preprocess_cfg.get('outlier_removal'):
+                    preprocess_items.append(
+                        html.Div("Outlier removal (3-sigma) — NOT replicated on device (not needed for real-time)",
+                                 style={'color': '#999', 'font-size': '12px'}))
+            if preprocess_items:
+                params_children = params.children + [
+                    html.Hr(style={'margin': '10px 0'}),
+                    html.Div("Signal Preprocessing (training→device parity):",
+                             style={'font-weight': 'bold', 'margin-bottom': '5px'}),
+                ] + preprocess_items
+                params = html.Div(params_children)
+            elif not preprocess_cfg:
+                params_children = params.children + [
+                    html.Div("No signal preprocessing was applied during training",
+                             style={'color': '#999', 'font-size': '12px', 'margin-top': '8px'}),
+                ]
+                params = html.Div(params_children)
 
             return info, params
 
@@ -699,11 +740,16 @@ def register_callbacks(app):
          State('optimization-level', 'value'),
          State('quantization-mode', 'value'),
          State('deployment-stride', 'value'),
+         State('deployment-confidence-threshold', 'value'),
+         State('deployment-smoothing-window', 'value'),
+         State('deployment-iir-filter-enabled', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
     def generate_embedded_code(n_clicks, model_filename, framework, target_board,
-                               deployment_approach, optimization, quantization, stride, base_dir):
+                               deployment_approach, optimization, quantization, stride,
+                               confidence_threshold, smoothing_window, iir_filter_enabled,
+                               base_dir):
         """
         Generate embedded C/C++ code from the trained model using actual metadata.
         Model type is automatically detected from the selected model.
@@ -752,6 +798,11 @@ def register_callbacks(app):
             stride_samples = int((stride_percent / 100.0)
                                  * window_size_samples)
             stride_samples = max(1, stride_samples)  # Ensure at least 1 sample
+
+            # Confidence threshold
+            if confidence_threshold is None:
+                confidence_threshold = 0.6
+            confidence_threshold = max(0.0, min(1.0, float(confidence_threshold)))
 
             # Load the trained model to get actual parameters
             model_path = get_model_path(model_filename, base_dir)
@@ -813,10 +864,15 @@ def register_callbacks(app):
                 'model_info': metadata
             }
 
+            # Parse new deployment options
+            smoothing_window = int(smoothing_window or 3)
+            enable_iir = 'enabled' in (iir_filter_enabled or [])
+
             # Generate code using proper code generators
             generated_code_files = generate_deployment_code(
                 model_type, model_data, platform, optimization, overlap_fraction, quantization,
-                deployment_approach
+                deployment_approach, confidence_threshold=confidence_threshold,
+                smoothing_window=smoothing_window, enable_iir_filter=enable_iir
             )
 
             # Filter out binary files (e.g., .onnx, .tflite) for text-based processing
@@ -845,7 +901,8 @@ def register_callbacks(app):
             output_dir = os.path.join(base_dir, 'generated')
             saved_files = generate_and_save_deployment_code(
                 model_type, model_data, platform, output_dir, optimization, overlap_fraction, quantization,
-                deployment_approach
+                deployment_approach, confidence_threshold=confidence_threshold,
+                smoothing_window=smoothing_window, enable_iir_filter=enable_iir
             )
 
             # Get the first generated file for preview (typically the sketch/example)
