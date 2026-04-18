@@ -419,6 +419,9 @@ layout = html.Div([
                 html.Div([
                     html.Label("Build Toolchain:", style={
                                'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                    html.P("Select how to compile the Arduino C++ code generated in Step 3. "
+                           "Both toolchains use the same generated code.",
+                           style={'font-size': '12px', 'color': '#6c757d', 'margin-bottom': '8px'}),
                     dcc.RadioItems(
                         id='toolchain-selector',
                         options=[
@@ -491,6 +494,44 @@ layout = html.Div([
                         labelStyle={'display': 'block', 'margin-bottom': '8px'}
                     )
                 ]),
+
+                # Load previously generated code
+                html.Div([
+                    html.Label("Or load previously generated code:", style={
+                               'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                    html.Div([
+                        dcc.Dropdown(
+                            id='load-generated-code-selector',
+                            options=[],
+                            placeholder="Select a previously generated project...",
+                            style={'width': '75%', 'display': 'inline-block'}
+                        ),
+                        html.Button(
+                            "📂 Load",
+                            id='load-generated-code-btn',
+                            n_clicks=0,
+                            style={
+                                'background-color': '#6c757d',
+                                'color': 'white',
+                                'border': 'none',
+                                'padding': '8px 15px',
+                                'border-radius': '4px',
+                                'cursor': 'pointer',
+                                'margin-left': '10px',
+                                'display': 'inline-block',
+                                'vertical-align': 'top'
+                            }
+                        )
+                    ])
+                ], style={'margin-bottom': '15px'}),
+
+                # Code readiness status
+                html.Div(id='compile-code-status', style={
+                    'margin-bottom': '15px',
+                    'padding': '10px',
+                    'border-radius': '4px',
+                    'font-size': '13px'
+                }),
 
                 # Action buttons
                 html.Div([

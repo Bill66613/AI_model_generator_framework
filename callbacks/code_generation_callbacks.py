@@ -14,6 +14,11 @@ import traceback
 
 from config.config import MODELS_DIR, PERSISTENT_DIR, get_model_path, get_models_metadata_path
 from utils.model_training import EdgeMLModel
+from utils.toolchain_discovery import (
+    find_arduino_cli, find_platformio_cli, get_tool_version,
+    check_arduino_core_for_board, check_pio_platform_for_board,
+    make_tool_env, clear_cache as clear_toolchain_cache,
+)
 from deployment import (generate_deployment_code, generate_and_save_deployment_code,
                         validate_before_deployment)
 
@@ -24,23 +29,28 @@ from deployment import (generate_deployment_code, generate_and_save_deployment_c
 # Board options grouped by framework
 FRAMEWORK_BOARDS = {
     'arduino_cpp': [
-        {'label': '🌐 Generic (any Arduino-compatible board)', 'value': 'generic'},
+        {'label': '🌐 Generic (any Arduino-compatible board)',
+         'value': 'generic'},
         {'label': '🔷 Arduino Uno (ATmega328P)', 'value': 'arduino:avr:uno'},
         {'label': '🔷 Arduino Nano', 'value': 'arduino:avr:nano'},
         {'label': '📡 ESP32 DevKit', 'value': 'esp32:esp32:esp32'},
         {'label': '📡 ESP32-S3', 'value': 'esp32:esp32:esp32s3'},
-        {'label': '📱 M5StickC Plus2 (ESP32-PICO-V3-02)', 'value': 'm5stack:esp32:m5stick_c'},
-        {'label': '🔋 XIAO nRF52840 Sense (BLE + IMU)', 'value': 'seeed:nrf52:xiaonRF52840Sense'},
+        {'label': '📱 M5StickC Plus2 (ESP32-PICO-V3-02)',
+         'value': 'm5stack:esp32:m5stick_c'},
+        {'label': '🔋 XIAO nRF52840 Sense (BLE + IMU)',
+         'value': 'Seeeduino:nrf52:xiaonRF52840Sense'},
         {'label': '⚡ STM32F4 (ARM Cortex-M4)', 'value': 'STM32:stm32:GenF4'},
     ],
     'generic_c': [
-        {'label': '🌐 Generic (portable C99, any platform)', 'value': 'generic'},
+        {'label': '🌐 Generic (portable C99, any platform)',
+         'value': 'generic'},
         {'label': '🖥️ x86 / x64 (PC / Linux / macOS)', 'value': 'x86_64'},
         {'label': '💪 ARM Cortex-M (bare-metal)', 'value': 'arm_cortex_m'},
         {'label': '🔩 RISC-V', 'value': 'riscv'},
     ],
     'generic_cpp': [
-        {'label': '🌐 Generic (portable C++11, any platform)', 'value': 'generic'},
+        {'label': '🌐 Generic (portable C++11, any platform)',
+         'value': 'generic'},
         {'label': '🖥️ x86 / x64 (PC / Linux / macOS)', 'value': 'x86_64'},
         {'label': '💪 ARM Cortex-M (bare-metal)', 'value': 'arm_cortex_m'},
         {'label': '🔩 RISC-V', 'value': 'riscv'},
@@ -64,8 +74,9 @@ FRAMEWORK_BOARDS = {
 
 # Descriptions for each framework
 FRAMEWORK_DESCRIPTIONS = {
-    'arduino_cpp': '🔷 Arduino C++ uses the Arduino framework with setup()/loop(), Serial, '
-                   'and wide library support. Best for rapid prototyping. Generates .ino files.',
+    'arduino_cpp': '🔷 Arduino C++ uses the Arduino framework with setup()/loop() and Serial. '
+                   'Compatible with both Arduino CLI and PlatformIO toolchains. Generates .ino files '
+                   '(auto-converted to .cpp for PlatformIO).',
     'generic_c': '🇨 Portable C99 code with no framework dependencies. Uses only <stdio.h>, <math.h>, '
                  '<string.h>, <stdlib.h>. Ideal for bare-metal, RTOS integration, or cross-compilation.',
     'generic_cpp': '🅒+ Portable C++11 code with standard library only. No Arduino or vendor-specific '
@@ -79,6 +90,8 @@ FRAMEWORK_DESCRIPTIONS = {
 }
 
 # Map (framework, board) → internal platform string used by generators
+
+
 def resolve_platform(framework: str, board: str) -> str:
     """Map UI selections to the internal platform string used by code generators."""
     if framework == 'arduino_cpp':
@@ -89,7 +102,7 @@ def resolve_platform(framework: str, board: str) -> str:
             'esp32:esp32:esp32': 'esp32',
             'esp32:esp32:esp32s3': 'esp32',
             'm5stack:esp32:m5stick_c': 'm5stack',
-            'seeed:nrf52:xiaonRF52840Sense': 'seeed_xiao',
+            'Seeeduino:nrf52:xiaonRF52840Sense': 'seeed_xiao',
             'STM32:stm32:GenF4': 'arm_cortex_m',
         }
         return board_platform_map.get(board, 'esp32')
@@ -109,6 +122,7 @@ def resolve_platform(framework: str, board: str) -> str:
         return 'zephyr'
     return 'esp32'
 
+
 # Board specs for resource analysis (RAM in KB, Flash in KB, Speed in MHz)
 BOARD_SPECS = {
     'generic': {'name': 'Generic', 'ram': 256, 'flash': 1024, 'speed': 100},
@@ -124,7 +138,7 @@ BOARD_SPECS = {
     'esp32:esp32:esp32s3': {'name': 'ESP32-S3', 'ram': 512, 'flash': 8192, 'speed': 240},
     'esp32:esp32:esp32c3': {'name': 'ESP32-C3', 'ram': 400, 'flash': 4096, 'speed': 160},
     'm5stack:esp32:m5stick_c': {'name': 'M5StickC Plus2', 'ram': 320, 'flash': 8192, 'speed': 240},
-    'seeed:nrf52:xiaonRF52840Sense': {'name': 'XIAO nRF52840 Sense', 'ram': 256, 'flash': 1024, 'speed': 64},
+    'Seeeduino:nrf52:xiaonRF52840Sense': {'name': 'XIAO nRF52840 Sense', 'ram': 256, 'flash': 1024, 'speed': 64},
     'STM32:stm32:GenF4': {'name': 'STM32F4', 'ram': 192, 'flash': 1024, 'speed': 168},
 }
 
@@ -143,40 +157,74 @@ BOARD_NAMES = {
     'esp32:esp32:esp32s3': 'ESP32-S3',
     'esp32:esp32:esp32c3': 'ESP32-C3',
     'm5stack:esp32:m5stick_c': 'M5StickC Plus2',
-    'seeed:nrf52:xiaonRF52840Sense': 'XIAO nRF52840 Sense',
+    'Seeeduino:nrf52:xiaonRF52840Sense': 'XIAO nRF52840 Sense',
     'STM32:stm32:GenF4': 'STM32F4',
 }
 
 
-def compile_with_arduino_cli(code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose):
+def compile_with_arduino_cli(code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose, cli_path=None):
     """
     Compile using Arduino CLI.
     """
     try:
+        # Resolve CLI path
+        if cli_path is None:
+            cli_path = find_arduino_cli()
+        if cli_path is None:
+            return ("❌ Arduino CLI not found.\n\n"
+                    "Set ARDUINO_CLI_PATH environment variable or install from "
+                    "https://arduino.github.io/arduino-cli/"), False
+
+        # Check board core is installed
+        if board_fqbn and board_fqbn != 'generic':
+            core_info = check_arduino_core_for_board(cli_path, board_fqbn)
+            if not core_info['installed']:
+                return (f"❌ Required core '{core_info['core_id']}' is not installed.\n\n"
+                        f"Run: {cli_path} core install {core_info['core_id']}\n\n"
+                        f"Then try again."), False
+
+        # Prepare environment with tool directory on PATH
+        env = make_tool_env(cli_path)
+
         # Create sketch directory
         sketch_name = code_data.get(
             'filename', 'sketch.ino').replace('.ino', '')
         sketch_dir = os.path.join(temp_dir, sketch_name)
         os.makedirs(sketch_dir, exist_ok=True)
 
-        # Save .ino file
-        sketch_path = os.path.join(sketch_dir, f"{sketch_name}.ino")
-        with open(sketch_path, 'w') as f:
-            f.write(code_data['code'])
+        # Save all generated files (.ino, .h, .cpp) into the sketch directory
+        all_files = code_data.get('all_files', {})
+        if all_files:
+            for filename, content in all_files.items():
+                if isinstance(content, str) and not filename.endswith('.ini'):
+                    filepath = os.path.join(sketch_dir, filename)
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(content)
+            # Ensure the .ino file exists (may already be in all_files)
+            ino_path = os.path.join(sketch_dir, f"{sketch_name}.ino")
+            if not os.path.exists(ino_path):
+                with open(ino_path, 'w', encoding='utf-8') as f:
+                    f.write(code_data['code'])
+        else:
+            # Fallback: only the main code
+            sketch_path = os.path.join(sketch_dir, f"{sketch_name}.ino")
+            with open(sketch_path, 'w', encoding='utf-8') as f:
+                f.write(code_data['code'])
 
         # Compile
-        compile_cmd = ['arduino-cli', 'compile', '--fqbn', board_fqbn]
+        compile_cmd = [cli_path, 'compile', '--fqbn', board_fqbn]
         if verbose:
             compile_cmd.append('--verbose')
         compile_cmd.append(sketch_dir)
 
         result = subprocess.run(
-            compile_cmd, capture_output=True, text=True, timeout=120)
+            compile_cmd, capture_output=True, text=True, timeout=120, env=env)
         output = f"""Arduino CLI Compilation
 {'='*50}
 
 Sketch: {sketch_name}.ino
 Board: {board_fqbn}
+CLI: {cli_path}
 
 {result.stdout}
 {result.stderr}
@@ -187,13 +235,13 @@ Board: {board_fqbn}
 
         # Upload if requested
         if should_upload:
-            upload_cmd = ['arduino-cli', 'upload', '-p',
+            upload_cmd = [cli_path, 'upload', '-p',
                           serial_port, '--fqbn', board_fqbn, sketch_dir]
             if verbose:
                 upload_cmd.insert(2, '--verbose')
 
             upload_result = subprocess.run(
-                upload_cmd, capture_output=True, text=True, timeout=60)
+                upload_cmd, capture_output=True, text=True, timeout=60, env=env)
             output += f"\n\n{'='*50}\nUpload to {serial_port}\n{'='*50}\n\n{upload_result.stdout}\n{upload_result.stderr}"
 
             if upload_result.returncode != 0:
@@ -208,26 +256,49 @@ Board: {board_fqbn}
     except subprocess.TimeoutExpired:
         return "❌ Compilation timeout (>120s)", False
     except FileNotFoundError:
-        return "❌ Arduino CLI not found. Please install from https://arduino.github.io/arduino-cli/", False
+        return "❌ Arduino CLI not found at resolved path. Please check your installation.", False
     except Exception as e:
         return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}", False
 
 
-def compile_with_platformio(code_data, temp_dir, serial_port, should_upload, verbose):
+def compile_with_platformio(code_data, temp_dir, serial_port, should_upload, verbose, cli_path=None):
     """
     Compile using PlatformIO.
     """
     try:
+        # Resolve CLI path
+        if cli_path is None:
+            cli_path = find_platformio_cli()
+        if cli_path is None:
+            return ("❌ PlatformIO CLI not found.\n\n"
+                    "Set PLATFORMIO_CLI_PATH environment variable or install from "
+                    "https://platformio.org/install"), False
+
+        # Prepare environment with tool directory on PATH
+        env = make_tool_env(cli_path)
+
         # Create PlatformIO project structure
         src_dir = os.path.join(temp_dir, 'src')
         os.makedirs(src_dir, exist_ok=True)
 
-        # Save main.cpp (rename .ino to .cpp for PlatformIO)
+        # Save all generated source files (.h, .cpp, .ino→.cpp) into src/
         sketch_name = code_data.get(
             'filename', 'sketch.ino').replace('.ino', '')
-        main_path = os.path.join(src_dir, 'main.cpp')
-        with open(main_path, 'w') as f:
-            f.write(code_data['code'])
+        all_files = code_data.get('all_files', {})
+        if all_files:
+            for filename, content in all_files.items():
+                if isinstance(content, str) and not filename.endswith('.ini'):
+                    # Rename .ino to .cpp for PlatformIO
+                    if filename.endswith('.ino'):
+                        filename = filename.replace('.ino', '.cpp')
+                    filepath = os.path.join(src_dir, filename)
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(content)
+        else:
+            # Fallback: only the main code
+            main_path = os.path.join(src_dir, 'main.cpp')
+            with open(main_path, 'w', encoding='utf-8') as f:
+                f.write(code_data['code'])
 
         # Save platformio.ini
         ini_path = os.path.join(temp_dir, 'platformio.ini')
@@ -236,21 +307,53 @@ def compile_with_platformio(code_data, temp_dir, serial_port, should_upload, ver
             # Add upload port to config
             platformio_config += f"\nupload_port = {serial_port}\nmonitor_port = {serial_port}\n"
 
-        with open(ini_path, 'w') as f:
+        with open(ini_path, 'w', encoding='utf-8') as f:
             f.write(platformio_config)
 
+        # Write custom board definition if needed (for boards not in PlatformIO registry)
+        custom_board = code_data.get('custom_board')
+        if custom_board:
+            boards_dir = os.path.join(temp_dir, 'boards')
+            os.makedirs(boards_dir, exist_ok=True)
+            board_json_path = os.path.join(boards_dir, f"{custom_board['id']}.json")
+            with open(board_json_path, 'w', encoding='utf-8') as f:
+                json.dump(custom_board['json'], f, indent=2)
+
+            # Install variant files if the variant doesn't exist in PlatformIO's framework
+            variant_name = custom_board['json'].get('build', {}).get('variant', '')
+            if variant_name:
+                import shutil as _shutil
+                pio_framework_dir = os.path.join(
+                    os.path.expanduser('~'), '.platformio', 'packages',
+                    'framework-arduinoadafruitnrf52', 'variants', variant_name)
+                if not os.path.isdir(pio_framework_dir):
+                    # Try to copy from Seeeduino Arduino package
+                    arduino_variant_dir = os.path.join(
+                        os.environ.get('LOCALAPPDATA', ''), 'Arduino15', 'packages',
+                        'Seeeduino', 'hardware', 'nrf52')
+                    # Find the installed version directory
+                    if os.path.isdir(arduino_variant_dir):
+                        versions = [d for d in os.listdir(arduino_variant_dir)
+                                    if os.path.isdir(os.path.join(arduino_variant_dir, d))]
+                        if versions:
+                            src_variant = os.path.join(
+                                arduino_variant_dir, versions[0], 'variants', variant_name)
+                            if os.path.isdir(src_variant):
+                                _shutil.copytree(src_variant, pio_framework_dir)
+
         # Compile
-        compile_cmd = ['pio', 'run', '-d', temp_dir]
+        compile_cmd = [cli_path, 'run', '-d', temp_dir]
         if verbose:
             compile_cmd.append('-v')
 
         result = subprocess.run(
-            compile_cmd, capture_output=True, text=True, timeout=180)
+            compile_cmd, capture_output=True, text=True, timeout=180, env=env)
         output = f"""PlatformIO Compilation
 {'='*50}
 
 Project: {sketch_name}
 Directory: {temp_dir}
+CLI: {cli_path}
 
 {result.stdout}
 {result.stderr}
@@ -261,12 +364,13 @@ Directory: {temp_dir}
 
         # Upload if requested
         if should_upload:
-            upload_cmd = ['pio', 'run', '-d', temp_dir, '--target', 'upload']
+            upload_cmd = [cli_path, 'run', '-d',
+                          temp_dir, '--target', 'upload']
             if verbose:
                 upload_cmd.append('-v')
 
             upload_result = subprocess.run(
-                upload_cmd, capture_output=True, text=True, timeout=60)
+                upload_cmd, capture_output=True, text=True, timeout=60, env=env)
             output += f"\n\n{'='*50}\nUpload to {serial_port}\n{'='*50}\n\n{upload_result.stdout}\n{upload_result.stderr}"
 
             if upload_result.returncode != 0:
@@ -281,7 +385,7 @@ Directory: {temp_dir}
     except subprocess.TimeoutExpired:
         return "❌ Compilation timeout (>180s)", False
     except FileNotFoundError:
-        return "❌ PlatformIO CLI not found. Please install from https://platformio.org/install", False
+        return "❌ PlatformIO CLI not found at resolved path. Please check your installation.", False
     except Exception as e:
         return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}", False
 
@@ -289,6 +393,7 @@ Directory: {temp_dir}
 def generate_platformio_config(target_board, model_filename, board_name):
     """
     Generate platformio.ini configuration for the selected board.
+    Returns a dict with 'ini' (str) and optionally 'custom_board' (dict with 'id' and 'json').
     """
     # Map Arduino FQBNs to PlatformIO boards
     board_mapping = {
@@ -328,11 +433,57 @@ def generate_platformio_config(target_board, model_filename, board_name):
             'framework': 'arduino',
             'lib_deps': []
         },
-        'seeed:nrf52:xiaonRF52840Sense': {
+        'Seeeduino:nrf52:xiaonRF52840Sense': {
             'platform': 'nordicnrf52',
-            'board': 'xiaonRF52840Sense',
+            'board': 'xiao_nrf52840_sense',
             'framework': 'arduino',
-            'lib_deps': ['sparkfun/SparkFun LSM6DS3 Breakout']
+            'lib_deps': ['sparkfun/SparkFun LSM6DS3 Breakout'],
+            'custom_board_json': {
+                "build": {
+                    "arduino": {
+                        "ldscript": "nrf52840_s140_v7.ld"
+                    },
+                    "core": "nRF5",
+                    "cpu": "cortex-m4",
+                    "extra_flags": "-DARDUINO_Seeed_XIAO_nRF52840_Sense -DNRF52840_XXAA",
+                    "f_cpu": "64000000L",
+                    "hwids": [["0x2886", "0x8045"], ["0x2886", "0x0045"]],
+                    "usb_product": "XIAO nRF52840 Sense",
+                    "mcu": "nrf52840",
+                    "variant": "Seeed_XIAO_nRF52840_Sense",
+                    "bsp": {
+                        "name": "adafruit"
+                    },
+                    "softdevice": {
+                        "sd_flags": "-DS140",
+                        "sd_name": "s140",
+                        "sd_version": "7.3.0",
+                        "sd_fwid": "0x0123"
+                    },
+                    "bootloader": {
+                        "settings_addr": "0xFF000"
+                    }
+                },
+                "connectivity": ["bluetooth"],
+                "debug": {
+                    "jlink_device": "nRF52840_xxAA",
+                    "svd_path": "nrf52840.svd"
+                },
+                "frameworks": ["arduino"],
+                "name": "Seeed XIAO nRF52840 Sense",
+                "upload": {
+                    "maximum_ram_size": 237568,
+                    "maximum_size": 811008,
+                    "speed": 115200,
+                    "protocol": "nrfutil",
+                    "protocols": ["nrfutil", "jlink", "nrfjprog"],
+                    "require_upload_port": True,
+                    "use_1200bps_touch": True,
+                    "wait_for_upload_port": True
+                },
+                "url": "https://www.seeedstudio.com/XIAO-BLE-Sense-nRF52840-p-5253.html",
+                "vendor": "Seeed Studio"
+            }
         }
     }
 
@@ -347,7 +498,15 @@ def generate_platformio_config(target_board, model_filename, board_name):
         config['lib_deps']) if config['lib_deps'] else ''
     lib_deps_section = f"lib_deps = \n    {lib_deps_str}" if lib_deps_str else ""
 
-    return f"""; PlatformIO Project Configuration File for {board_name}
+    # Build custom board info for boards not in PlatformIO registry
+    custom_board = None
+    if 'custom_board_json' in config:
+        custom_board = {
+            'id': config['board'],
+            'json': config['custom_board_json']
+        }
+
+    ini_content = f"""; PlatformIO Project Configuration File for {board_name}
 ; Auto-generated for HAR Model: {model_filename.split('.')[0]}
 ;
 ; Build: pio run
@@ -362,6 +521,8 @@ monitor_speed = 115200
 upload_speed = 921600
 {lib_deps_section}
 """
+
+    return {'ini': ini_content, 'custom_board': custom_board}
 
 
 def register_callbacks(app):
@@ -464,8 +625,9 @@ def register_callbacks(app):
         return html.Div([
             html.Span(f"📋 {specs['name']}", style={'font-weight': 'bold'}),
             html.Span(f"  •  RAM: {specs['ram']} KB  •  Flash: {specs['flash']} KB  •  Clock: {specs['speed']} MHz",
-                       style={'margin-left': '8px'})
+                      style={'margin-left': '8px'})
         ])
+
     @app.callback(
         [Output('model-info-display', 'children'),
          Output('model-parameters-display', 'children')],
@@ -626,64 +788,115 @@ def register_callbacks(app):
 
     @app.callback(
         Output('toolchain-status', 'children'),
-        Input('toolchain-selector', 'value')
+        [Input('toolchain-selector', 'value'),
+         Input('target-board-selector', 'value')]
     )
-    def check_toolchain_status(toolchain):
+    def check_toolchain_status(toolchain, target_board):
         """
         Check if selected toolchain is installed and display status.
+        Uses auto-discovery to find tools even when not on PATH.
         """
         try:
             if toolchain == 'arduino':
-                # Check Arduino CLI
-                result = subprocess.run(['arduino-cli', 'version'],
-                                        capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    version = result.stdout.strip().split('\n')[0]
+                cli_path = find_arduino_cli()
+                if not cli_path:
                     return html.Div([
-                        html.Span("✅ Arduino CLI detected: ", style={
-                                  'font-weight': 'bold', 'color': '#155724'}),
-                        html.Span(version)
-                    ])
-                else:
-                    return html.Div([
-                        html.Span("⚠️ Arduino CLI not found. ", style={
-                                  'font-weight': 'bold', 'color': '#856404'}),
+                        html.Span("❌ Arduino CLI not found. ", style={
+                                  'font-weight': 'bold', 'color': '#721c24'}),
+                        html.Br(),
+                        html.Span("Searched common locations. ",
+                                  style={'font-size': '12px'}),
                         html.A("Download here", href="https://arduino.github.io/arduino-cli/",
-                               target="_blank", style={'color': '#007bff'})
+                               target="_blank", style={'color': '#007bff'}),
+                        html.Span(" or set ", style={'font-size': '12px'}),
+                        html.Code("ARDUINO_CLI_PATH", style={
+                                  'font-size': '11px'}),
+                        html.Span(" env variable.", style={
+                                  'font-size': '12px'}),
                     ])
+
+                version = get_tool_version(cli_path, ['version']) or 'unknown'
+                status_items = [
+                    html.Span("✅ Arduino CLI detected: ", style={
+                              'font-weight': 'bold', 'color': '#155724'}),
+                    html.Span(version),
+                    html.Br(),
+                    html.Span(f"Path: {cli_path}", style={
+                              'font-size': '11px', 'color': '#6c757d'}),
+                ]
+
+                # Check board core if a board is selected
+                if target_board and target_board != 'generic':
+                    core_info = check_arduino_core_for_board(
+                        cli_path, target_board)
+                    if core_info['installed']:
+                        status_items.extend([
+                            html.Br(),
+                            html.Span(f"✅ Core {core_info['core_id']} installed", style={
+                                      'color': '#155724', 'font-size': '12px'}),
+                            html.Span(f" (v{core_info['installed_version']})" if core_info['installed_version'] else "",
+                                      style={'font-size': '11px', 'color': '#6c757d'}),
+                        ])
+                    else:
+                        status_items.extend([
+                            html.Br(),
+                            html.Span(f"⚠️ Core {core_info['core_id']} not installed. Run: ", style={
+                                      'color': '#856404', 'font-size': '12px'}),
+                            html.Code(core_info['install_command'], style={
+                                      'background': '#f8f9fa', 'padding': '2px 6px',
+                                      'font-size': '11px', 'border-radius': '3px'}),
+                        ])
+
+                return html.Div(status_items)
+
             elif toolchain == 'platformio':
-                # Check PlatformIO
-                result = subprocess.run(['pio', '--version'],
-                                        capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    version = result.stdout.strip().split('\n')[0]
+                cli_path = find_platformio_cli()
+                if not cli_path:
                     return html.Div([
-                        html.Span("✅ PlatformIO detected: ", style={
-                                  'font-weight': 'bold', 'color': '#155724'}),
-                        html.Span(version)
+                        html.Span("❌ PlatformIO not found. ", style={
+                                  'font-weight': 'bold', 'color': '#721c24'}),
+                        html.Br(),
+                        html.Span("Searched common locations. ",
+                                  style={'font-size': '12px'}),
+                        html.A("Install here", href="https://platformio.org/install",
+                               target="_blank", style={'color': '#007bff'}),
+                        html.Span(" or set ", style={'font-size': '12px'}),
+                        html.Code("PLATFORMIO_CLI_PATH",
+                                  style={'font-size': '11px'}),
+                        html.Span(" env variable.", style={
+                                  'font-size': '12px'}),
                     ])
-                else:
-                    return html.Div([
-                        html.Span("⚠️ PlatformIO not found. ", style={
-                                  'font-weight': 'bold', 'color': '#856404'}),
-                        html.A("Install via VS Code Extension or CLI", href="https://platformio.org/install",
-                               target="_blank", style={'color': '#007bff'})
-                    ])
-        except FileNotFoundError:
-            if toolchain == 'arduino':
-                return html.Div([
-                    html.Span("❌ Arduino CLI not installed. ", style={
-                              'font-weight': 'bold', 'color': '#721c24'}),
-                    html.A("Download here", href="https://arduino.github.io/arduino-cli/",
-                           target="_blank", style={'color': '#007bff'})
-                ])
-            else:
-                return html.Div([
-                    html.Span("❌ PlatformIO not installed. ", style={
-                              'font-weight': 'bold', 'color': '#721c24'}),
-                    html.A("Install here", href="https://platformio.org/install",
-                           target="_blank", style={'color': '#007bff'})
-                ])
+
+                version = get_tool_version(cli_path) or 'unknown'
+                status_items = [
+                    html.Span("✅ PlatformIO detected: ", style={
+                              'font-weight': 'bold', 'color': '#155724'}),
+                    html.Span(version),
+                    html.Br(),
+                    html.Span(f"Path: {cli_path}", style={
+                              'font-size': '11px', 'color': '#6c757d'}),
+                ]
+
+                # Check platform if a board is selected
+                if target_board and target_board != 'generic':
+                    platform_info = check_pio_platform_for_board(
+                        cli_path, target_board)
+                    if platform_info['platform'] != 'unknown':
+                        if platform_info['installed']:
+                            status_items.extend([
+                                html.Br(),
+                                html.Span(f"✅ Platform {platform_info['platform']} installed", style={
+                                          'color': '#155724', 'font-size': '12px'}),
+                            ])
+                        else:
+                            status_items.extend([
+                                html.Br(),
+                                html.Span(f"ℹ️ Platform {platform_info['platform']} will auto-install on first build", style={
+                                          'color': '#856404', 'font-size': '12px'}),
+                            ])
+
+                return html.Div(status_items)
+
         except Exception as e:
             return html.Div(f"⚠️ Error checking toolchain: {str(e)}", style={'color': '#856404'})
 
@@ -802,7 +1015,8 @@ def register_callbacks(app):
             # Confidence threshold
             if confidence_threshold is None:
                 confidence_threshold = 0.6
-            confidence_threshold = max(0.0, min(1.0, float(confidence_threshold)))
+            confidence_threshold = max(
+                0.0, min(1.0, float(confidence_threshold)))
 
             # Load the trained model to get actual parameters
             model_path = get_model_path(model_filename, base_dir)
@@ -839,7 +1053,8 @@ def register_callbacks(app):
                 'activity_1', 'activity_2']
 
             # Map target board + framework to platform string for code generator
-            platform = resolve_platform(framework or 'arduino_cpp', target_board or 'generic')
+            platform = resolve_platform(
+                framework or 'arduino_cpp', target_board or 'generic')
 
             # Infer feature_method if not present in metadata
             if 'feature_method' not in model_params and feature_names:
@@ -888,11 +1103,11 @@ def register_callbacks(app):
                 'arm_cortex_m': 'stm32f4',
             }
             device_key = device_key_mapping.get(platform)
-            
+
             # Add optimization and extracted model params for validation
             validation_model_data = model_data.copy()
             validation_model_data['optimization'] = optimization
-            
+
             validation_report = validate_before_deployment(
                 validation_model_data, text_code_files, device_key
             )
@@ -930,20 +1145,24 @@ def register_callbacks(app):
             code_checks = validation_report.get('checks', {}).get('code', {})
             if code_checks:
                 for check in code_checks.get('checks_passed', []):
-                    validation_items.append(html.Li(f"✅ {check}", style={'color': '#155724'}))
+                    validation_items.append(
+                        html.Li(f"✅ {check}", style={'color': '#155724'}))
                 for issue in code_checks.get('issues', []):
-                    validation_items.append(html.Li(f"❌ {issue}", style={'color': '#721c24', 'font-weight': 'bold'}))
+                    validation_items.append(
+                        html.Li(f"❌ {issue}", style={'color': '#721c24', 'font-weight': 'bold'}))
                 for warning in code_checks.get('warnings', []):
-                    validation_items.append(html.Li(f"⚠️ {warning}", style={'color': '#856404'}))
-            
+                    validation_items.append(
+                        html.Li(f"⚠️ {warning}", style={'color': '#856404'}))
+
             validation_passed = validation_report.get('passed', True)
             validation_div = html.Div([
                 html.Strong(
-                    "🔍 Pre-deployment Validation: " + 
+                    "🔍 Pre-deployment Validation: " +
                     ("PASSED ✅" if validation_passed else "ISSUES FOUND ❌"),
                     style={'color': '#155724' if validation_passed else '#721c24'}
                 ),
-                html.Ul(validation_items, style={'margin-top': '5px', 'font-size': '12px'})
+                html.Ul(validation_items, style={
+                        'margin-top': '5px', 'font-size': '12px'})
                 if validation_items else None
             ], style={
                 'margin-top': '10px', 'padding': '10px',
@@ -959,7 +1178,7 @@ def register_callbacks(app):
 
             # Count binary files saved
             binary_files = {k: v for k, v in generated_code_files.items()
-                           if isinstance(v, bytes)}
+                            if isinstance(v, bytes)}
 
             status = html.Div([
                 html.H5("✅ Code Generated Successfully!",
@@ -1025,9 +1244,12 @@ def register_callbacks(app):
 
             # Generate PlatformIO configuration (only relevant for Arduino framework)
             platformio_ini = ''
+            custom_board = None
             if framework == 'arduino_cpp' and target_board and target_board != 'generic':
-                platformio_ini = generate_platformio_config(
+                pio_config = generate_platformio_config(
                     target_board, model_filename, board_name)
+                platformio_ini = pio_config['ini']
+                custom_board = pio_config.get('custom_board')
 
             # Store only text files (binary files like .tflite/.onnx are already saved to disk)
             code_data = {
@@ -1036,6 +1258,7 @@ def register_callbacks(app):
                 'board': target_board,
                 'framework': framework,
                 'platformio_ini': platformio_ini,
+                'custom_board': custom_board,
                 'all_files': text_code_files
             }
 
@@ -1069,6 +1292,155 @@ def register_callbacks(app):
         return dcc.send_string(code_data['code'], filename=code_data['filename'])
 
     @app.callback(
+        Output('compile-code-status', 'children'),
+        [Input('generated-code-store', 'data'),
+         Input('tabs', 'value')]
+    )
+    def update_compile_code_status(code_data, tab):
+        """Show whether generated code is ready for compilation."""
+        if tab != 'tab-5':
+            return no_update
+        if code_data and code_data.get('code'):
+            filename = code_data.get('filename', 'unknown')
+            file_count = len(code_data.get('all_files', {}))
+            return html.Div([
+                html.Span("✅ Code ready: ", style={
+                    'font-weight': 'bold', 'color': '#155724'}),
+                html.Span(f"{filename} ({file_count} files)", style={
+                    'color': '#155724'})
+            ], style={'background': '#d4edda', 'padding': '10px', 'border-radius': '4px'})
+        return html.Div([
+            html.Span("⚠️ No code loaded. ", style={
+                'font-weight': 'bold', 'color': '#856404'}),
+            html.Span("Generate code in Step 3 above, or load a previously generated project.",
+                      style={'color': '#856404'})
+        ], style={'background': '#fff3cd', 'padding': '10px', 'border-radius': '4px'})
+
+    @app.callback(
+        Output('load-generated-code-selector', 'options'),
+        [Input('tabs', 'value'),
+         Input('load-generated-code-btn', 'n_clicks')],
+        State('working-directory-store', 'data'),
+        prevent_initial_call=False
+    )
+    def populate_generated_code_selector(tab, n_clicks, base_dir):
+        """Populate dropdown with previously generated code folders."""
+        if tab != 'tab-5':
+            return no_update
+
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        generated_dir = os.path.join(base_dir, 'generated')
+
+        if not os.path.isdir(generated_dir):
+            return []
+
+        options = []
+        # Walk through the generated directory structure
+        for root, dirs, files in os.walk(generated_dir):
+            # Look for directories containing .ino or .h files
+            code_files = [f for f in files if f.endswith(('.ino', '.h', '.cpp', '.c'))]
+            if code_files:
+                # Use relative path from generated_dir as label
+                rel_path = os.path.relpath(root, generated_dir)
+                ino_files = [f for f in code_files if f.endswith('.ino')]
+                label = ino_files[0] if ino_files else code_files[0]
+                options.append({
+                    'label': f"{rel_path} ({len(code_files)} files)",
+                    'value': root
+                })
+
+        return options
+
+    @app.callback(
+        [Output('generated-code-store', 'data', allow_duplicate=True),
+         Output('code-preview', 'value', allow_duplicate=True),
+         Output('code-preview-section', 'style', allow_duplicate=True),
+         Output('compile-btn', 'disabled', allow_duplicate=True),
+         Output('compile-flash-btn', 'disabled', allow_duplicate=True),
+         Output('compile-btn', 'style', allow_duplicate=True),
+         Output('compile-flash-btn', 'style', allow_duplicate=True)],
+        Input('load-generated-code-btn', 'n_clicks'),
+        [State('load-generated-code-selector', 'value'),
+         State('target-board-selector', 'value'),
+         State('working-directory-store', 'data')],
+        prevent_initial_call=True
+    )
+    def load_generated_code(n_clicks, folder_path, target_board, base_dir):
+        """Load previously generated code from disk into the code store."""
+        if not folder_path or not os.path.isdir(folder_path):
+            return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+
+        # Read all code files from the folder
+        all_files = {}
+        for filename in os.listdir(folder_path):
+            filepath = os.path.join(folder_path, filename)
+            if os.path.isfile(filepath):
+                if filename.endswith(('.ino', '.h', '.cpp', '.c', '.py')):
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        all_files[filename] = f.read()
+                elif filename == 'platformio.ini':
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        all_files[filename] = f.read()
+
+        if not all_files:
+            return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+
+        # Find the main preview file (sketch > source > header)
+        sketch_file = None
+        source_file = None
+        header_file = None
+        for filename, code in all_files.items():
+            if filename.endswith('.ino') or 'example' in filename.lower():
+                sketch_file = (filename, code)
+            elif filename.endswith(('.cpp', '.c')):
+                source_file = (filename, code)
+            elif filename.endswith('.h'):
+                header_file = (filename, code)
+
+        preview_file = sketch_file or source_file or header_file
+        if not preview_file:
+            preview_file = list(all_files.items())[0]
+
+        preview_filename = preview_file[0]
+        preview_code = preview_file[1]
+
+        # Read platformio.ini if present
+        platformio_ini = all_files.get('platformio.ini', '')
+
+        # Generate custom board info if needed
+        custom_board = None
+        if target_board:
+            board_name = BOARD_NAMES.get(target_board, 'Unknown Board')
+            pio_config = generate_platformio_config(target_board, preview_filename, board_name)
+            if not platformio_ini:
+                platformio_ini = pio_config['ini']
+            custom_board = pio_config.get('custom_board')
+
+        code_data = {
+            'code': preview_code,
+            'filename': preview_filename,
+            'board': target_board,
+            'framework': 'arduino_cpp',
+            'platformio_ini': platformio_ini,
+            'custom_board': custom_board,
+            'all_files': {k: v for k, v in all_files.items() if k != 'platformio.ini'}
+        }
+
+        compile_btn_style = {
+            'background-color': '#007bff', 'color': 'white', 'border': 'none',
+            'padding': '12px 25px', 'border-radius': '6px', 'cursor': 'pointer',
+            'font-weight': 'bold', 'margin-right': '10px', 'opacity': '1'
+        }
+        flash_btn_style = {
+            'background-color': '#dc3545', 'color': 'white', 'border': 'none',
+            'padding': '12px 25px', 'border-radius': '6px', 'cursor': 'pointer',
+            'font-weight': 'bold', 'opacity': '1'
+        }
+
+        return code_data, preview_code, {'display': 'block'}, False, False, compile_btn_style, flash_btn_style
+
+    @app.callback(
         [Output('compilation-output', 'children'),
          Output('compilation-section', 'style'),
          Output('flash-progress', 'children')],
@@ -1086,7 +1458,11 @@ def register_callbacks(app):
         Compile code using Arduino CLI or PlatformIO and optionally flash to device.
         """
         if not code_data or 'code' not in code_data:
-            return "No code to compile", {'display': 'block'}, ""
+            return html.Div([
+                html.Span("⚠️ No code to compile. ", style={
+                    'font-weight': 'bold', 'color': '#856404'}),
+                html.Span("Please generate code in Step 3 first, or load a previously generated project above.")
+            ], style={'color': '#856404'}), {'display': 'block'}, ""
 
         try:
             # Determine which button was clicked
@@ -1096,7 +1472,21 @@ def register_callbacks(app):
             if should_upload and not serial_port:
                 return "❌ Please select a serial port for flashing", {'display': 'block'}, ""
 
-            verbose = 'verbose' in options
+            verbose = options and 'verbose' in options
+
+            # Resolve tool path upfront
+            if toolchain == 'arduino':
+                cli_path = find_arduino_cli()
+                if not cli_path:
+                    return ("❌ Arduino CLI not found.\n\n"
+                            "Set ARDUINO_CLI_PATH environment variable or install from "
+                            "https://arduino.github.io/arduino-cli/"), {'display': 'block'}, ""
+            else:
+                cli_path = find_platformio_cli()
+                if not cli_path:
+                    return ("❌ PlatformIO CLI not found.\n\n"
+                            "Set PLATFORMIO_CLI_PATH environment variable or install from "
+                            "https://platformio.org/install"), {'display': 'block'}, ""
 
             # Create temporary project directory
             import tempfile
@@ -1106,10 +1496,12 @@ def register_callbacks(app):
             try:
                 if toolchain == 'arduino':
                     output, success = compile_with_arduino_cli(
-                        code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose)
+                        code_data, temp_dir, board_fqbn, serial_port, should_upload, verbose,
+                        cli_path=cli_path)
                 else:  # platformio
                     output, success = compile_with_platformio(
-                        code_data, temp_dir, serial_port, should_upload, verbose)
+                        code_data, temp_dir, serial_port, should_upload, verbose,
+                        cli_path=cli_path)
             finally:
                 # Cleanup temp directory
                 try:
