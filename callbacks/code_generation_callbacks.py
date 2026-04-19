@@ -323,23 +323,37 @@ def compile_with_platformio(code_data, temp_dir, serial_port, should_upload, ver
             variant_name = custom_board['json'].get('build', {}).get('variant', '')
             if variant_name:
                 import shutil as _shutil
-                pio_framework_dir = os.path.join(
+                pio_framework_base = os.path.join(
                     os.path.expanduser('~'), '.platformio', 'packages',
-                    'framework-arduinoadafruitnrf52', 'variants', variant_name)
-                if not os.path.isdir(pio_framework_dir):
-                    # Try to copy from Seeeduino Arduino package
-                    arduino_variant_dir = os.path.join(
-                        os.environ.get('LOCALAPPDATA', ''), 'Arduino15', 'packages',
-                        'Seeeduino', 'hardware', 'nrf52')
-                    # Find the installed version directory
-                    if os.path.isdir(arduino_variant_dir):
-                        versions = [d for d in os.listdir(arduino_variant_dir)
-                                    if os.path.isdir(os.path.join(arduino_variant_dir, d))]
-                        if versions:
-                            src_variant = os.path.join(
-                                arduino_variant_dir, versions[0], 'variants', variant_name)
-                            if os.path.isdir(src_variant):
-                                _shutil.copytree(src_variant, pio_framework_dir)
+                    'framework-arduinoadafruitnrf52')
+                pio_variant_dir = os.path.join(pio_framework_base, 'variants', variant_name)
+
+                # Find Seeeduino Arduino package as source for missing files
+                arduino_nrf52_dir = os.path.join(
+                    os.environ.get('LOCALAPPDATA', ''), 'Arduino15', 'packages',
+                    'Seeeduino', 'hardware', 'nrf52')
+                arduino_version_dir = None
+                if os.path.isdir(arduino_nrf52_dir):
+                    versions = [d for d in os.listdir(arduino_nrf52_dir)
+                                if os.path.isdir(os.path.join(arduino_nrf52_dir, d))]
+                    if versions:
+                        arduino_version_dir = os.path.join(arduino_nrf52_dir, versions[0])
+
+                # Copy variant files if missing
+                if not os.path.isdir(pio_variant_dir) and arduino_version_dir:
+                    src_variant = os.path.join(arduino_version_dir, 'variants', variant_name)
+                    if os.path.isdir(src_variant):
+                        _shutil.copytree(src_variant, pio_variant_dir)
+
+                # Copy linker script if missing (Seeeduino uses S140 v7, Adafruit ships v6)
+                ldscript = custom_board['json'].get('build', {}).get('arduino', {}).get('ldscript', '')
+                if ldscript:
+                    pio_linker_dir = os.path.join(pio_framework_base, 'cores', 'nRF5', 'linker')
+                    pio_ld_path = os.path.join(pio_linker_dir, ldscript)
+                    if not os.path.isfile(pio_ld_path) and arduino_version_dir:
+                        src_ld = os.path.join(arduino_version_dir, 'cores', 'nRF5', 'linker', ldscript)
+                        if os.path.isfile(src_ld):
+                            _shutil.copy2(src_ld, pio_ld_path)
 
         # Compile
         compile_cmd = [cli_path, 'run', '-d', temp_dir]
@@ -437,7 +451,7 @@ def generate_platformio_config(target_board, model_filename, board_name):
             'platform': 'nordicnrf52',
             'board': 'xiao_nrf52840_sense',
             'framework': 'arduino',
-            'lib_deps': ['sparkfun/SparkFun LSM6DS3 Breakout'],
+            'lib_deps': ['seeed-studio/Seeed Arduino LSM6DS3'],
             'custom_board_json': {
                 "build": {
                     "arduino": {

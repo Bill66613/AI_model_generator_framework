@@ -86,7 +86,7 @@ board = xiaonRF52840Sense
 framework = arduino
 monitor_speed = 115200
 lib_deps =
-    sparkfun/SparkFun LSM6DS3 Breakout
+    seeed-studio/Seeed Arduino LSM6DS3
 ```
 
 **STM32F4:**

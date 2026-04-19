@@ -29,7 +29,7 @@ Go to **Sketch → Include Library → Manage Libraries** and install:
 | Board | Required Libraries |
 |-------|--------------------|
 | M5StickC Plus2 | `M5StickCPlus2` by M5Stack |
-| XIAO nRF52840 Sense | `SparkFun LSM6DS3 Breakout` |
+| XIAO nRF52840 Sense | `Seeed Arduino LSM6DS3` by Seeed Studio |
 | TFLite deployment | `Arduino_TensorFlowLite` |
 
 ## Step-by-Step Deployment
@@ -116,7 +116,7 @@ arduino-cli core install Seeeduino:nrf52
 
 # Install libraries
 arduino-cli lib install "M5StickCPlus2"
-arduino-cli lib install "SparkFun LSM6DS3 Breakout"
+arduino-cli lib install "Seeed Arduino LSM6DS3"
 
 # Compile
 arduino-cli compile --fqbn m5stack:esp32:m5stick_c ./har_model/
