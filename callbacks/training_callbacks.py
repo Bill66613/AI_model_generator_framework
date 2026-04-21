@@ -650,6 +650,75 @@ def register_callbacks(app):
             # Overfitting Warning
             *overfitting_warning,
 
+            # Deployment-Realistic Accuracy (confidence threshold applied)
+            *(lambda: (
+                [html.Div([
+                    html.H5("🎯 Deployment Accuracy Estimate", style={
+                            'color': '#2E86AB', 'margin-top': '20px'}),
+                    html.P([
+                        "Simulates on-device behavior where predictions below ",
+                        html.Strong(f"{d['confidence_threshold']:.0%}"),
+                        " confidence are rejected as ",
+                        html.Code("unknown"),
+                        "."
+                    ], style={'color': '#6c757d', 'font-size': '13px', 'margin-bottom': '10px'}),
+                    html.Div([
+                        html.Div([
+                            html.H6("On-Device Accuracy", style={
+                                    'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '11px'}),
+                            html.Div(f"{d['accepted_accuracy']:.1%}", style={
+                                     'font-size': '22px', 'font-weight': 'bold',
+                                     'color': '#28a745' if d['accepted_accuracy'] >= 0.85 else '#dc3545'})
+                        ], style={
+                            'background-color': '#f8f9fa', 'padding': '12px',
+                            'border-radius': '8px', 'text-align': 'center',
+                            'border': '2px solid #6f42c1', 'width': '30%',
+                            'display': 'inline-block', 'margin-right': '2%'
+                        }),
+                        html.Div([
+                            html.H6("Rejection Rate", style={
+                                    'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '11px'}),
+                            html.Div(f"{d['rejection_rate']:.1%}", style={
+                                     'font-size': '22px', 'font-weight': 'bold',
+                                     'color': '#dc3545' if d['rejection_rate'] > 0.2 else '#28a745'})
+                        ], style={
+                            'background-color': '#f8f9fa', 'padding': '12px',
+                            'border-radius': '8px', 'text-align': 'center',
+                            'border': '2px solid #fd7e14', 'width': '30%',
+                            'display': 'inline-block', 'margin-right': '2%'
+                        }),
+                        html.Div([
+                            html.H6("Mean Confidence", style={
+                                    'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '11px'}),
+                            html.Div(f"{d['mean_confidence']:.1%}", style={
+                                     'font-size': '22px', 'font-weight': 'bold', 'color': '#17a2b8'})
+                        ], style={
+                            'background-color': '#f8f9fa', 'padding': '12px',
+                            'border-radius': '8px', 'text-align': 'center',
+                            'border': '2px solid #17a2b8', 'width': '30%',
+                            'display': 'inline-block'
+                        }),
+                    ], style={'margin': '10px 0'}),
+                    *(
+                        [html.Div([
+                            html.Strong("⚠️ High rejection rate: ", style={'color': '#dc3545'}),
+                            html.Span(
+                                f"{d['n_rejected']}/{d['n_total']} test samples would be rejected on device. "
+                                "Model lacks confidence — consider more training data or simpler model."
+                            )
+                        ], style={
+                            'background-color': '#fff3cd', 'border-left': '4px solid #ffc107',
+                            'padding': '10px', 'margin-top': '10px', 'border-radius': '4px'
+                        })] if d['rejection_rate'] > 0.2 else []
+                    )
+                ], style={
+                    'background-color': '#f0f4ff', 'border-left': '4px solid #6f42c1',
+                    'padding': '15px', 'margin': '15px 0', 'border-radius': '4px'
+                })]
+                if (d := evaluation_results.get('deployment_eval'))
+                else []
+            ))(),
+
             # Early Stopping Info
             *early_stopping_info,
 
@@ -1043,7 +1112,15 @@ def register_callbacks(app):
         # Evaluation on test set
         evaluation_results = model.evaluate(X_test, y_test)
 
-        training_time = time.time() - start_time
+        # Deployment-realistic accuracy (with confidence threshold)
+        # Shows what accuracy to expect on-device where low-confidence
+        # predictions are rejected as "unknown"
+        try:
+            deploy_eval = model.evaluate_with_confidence_threshold(
+                X_test, y_test, confidence_threshold=0.6)
+            evaluation_results['deployment_eval'] = deploy_eval
+        except Exception:
+            pass  # Non-critical — don't break training if this fails
 
         # Save trained model
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

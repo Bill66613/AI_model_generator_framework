@@ -598,11 +598,18 @@ def _magnitude_stats(mag):
         if include_frequency:
             code += '''
 def _frequency_features(signal, sampling_rate):
-    """Extract 7 frequency features via DFT (matches C extract_frequency_features)."""
+    """Extract 10 frequency features via DFT (matches C extract_frequency_features).
+
+    Pipeline: DC removal -> Hann window -> DFT -> feature extraction.
+    """
     n = len(signal)
     half_n = n // 2
     freq_step = sampling_rate / n
     two_pi_over_n = 6.283185307 / n
+    pi_over_nm1 = 3.141592654 / (n - 1)
+
+    # DC removal (subtract mean)
+    sig_mean = sum(signal) / n
 
     max_mag = 0.0
     max_idx = 0
@@ -615,9 +622,12 @@ def _frequency_features(signal, sampling_rate):
         im = 0.0
         angle_step = two_pi_over_n * k
         for i in range(n):
+            # Hann window: 0.5 - 0.5*cos(2*PI*i/(N-1))
+            w = 0.5 - 0.5 * math.cos(2.0 * pi_over_nm1 * i)
+            val = (signal[i] - sig_mean) * w  # DC-removed + windowed
             angle = angle_step * i
-            re += signal[i] * math.cos(angle)
-            im -= signal[i] * math.sin(angle)
+            re += val * math.cos(angle)
+            im -= val * math.sin(angle)
         mag = math.sqrt(re * re + im * im)
         dft_mag.append(mag)
 
@@ -663,6 +673,33 @@ def _frequency_features(signal, sampling_rate):
             rolloff = (k + 1) * freq_step
             break
     feats.append(rolloff)
+
+    # 7-9: Spectral shape descriptors (RMS, skewness, kurtosis of bins)
+    sq_sum = sum(m * m for m in dft_mag)
+    spec_rms = math.sqrt(sq_sum / half_n) if half_n > 0 else 0.0
+    spec_mean = mag_sum / half_n if half_n > 0 else 0.0
+    spec_var = (sq_sum / half_n - spec_mean * spec_mean) if half_n > 0 else 0.0
+    spec_std = math.sqrt(spec_var) if spec_var > 0 else 0.0001
+
+    m3 = 0.0
+    m4 = 0.0
+    for m in dft_mag:
+        z = (m - spec_mean) / (spec_std + 1e-7)
+        z2 = z * z
+        m3 += z2 * z
+        m4 += z2 * z2
+    nn = half_n
+    spec_skew = 0.0
+    spec_kurt = 0.0
+    if nn > 2:
+        spec_skew = (m3 / nn) * (nn * (nn + 1)) / ((nn - 1) * (nn - 2))
+    if nn > 3:
+        raw_kurt = m4 / nn
+        spec_kurt = ((nn + 1) * raw_kurt - 3.0 * (nn - 1)) * (nn - 1) / ((nn - 2) * (nn - 3))
+        # excess kurtosis (Fisher)
+    feats.append(spec_rms)
+    feats.append(spec_skew)
+    feats.append(spec_kurt)
 
     return feats
 

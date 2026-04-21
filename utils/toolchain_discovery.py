@@ -12,12 +12,13 @@ import platform
 import shutil
 import subprocess
 import time
+from typing import Dict, List, Optional, Tuple
 
 
 # ---------------------------------------------------------------------------
 # TTL cache (60 s) to avoid repeated subprocess calls within a session
 # ---------------------------------------------------------------------------
-_cache: dict[str, tuple[float, object]] = {}
+_cache: Dict[str, Tuple[float, object]] = {}
 _CACHE_TTL = 60  # seconds
 
 
@@ -41,7 +42,7 @@ def clear_cache():
 # Tool path finders
 # ---------------------------------------------------------------------------
 
-def find_arduino_cli() -> str | None:
+def find_arduino_cli() -> Optional[str]:
     """Find the Arduino CLI executable, searching common install locations."""
     # 1. Environment variable override
     env_path = os.environ.get('ARDUINO_CLI_PATH')
@@ -83,7 +84,7 @@ def find_arduino_cli() -> str | None:
     return None
 
 
-def find_platformio_cli() -> str | None:
+def find_platformio_cli() -> Optional[str]:
     """Find the PlatformIO CLI executable, searching common install locations."""
     # 1. Environment variable override
     env_path = os.environ.get('PLATFORMIO_CLI_PATH')
@@ -121,7 +122,7 @@ def find_platformio_cli() -> str | None:
 # Version and core/platform checking
 # ---------------------------------------------------------------------------
 
-def get_tool_version(tool_path: str, version_args: list[str] | None = None) -> str | None:
+def get_tool_version(tool_path: str, version_args: Optional[List[str]] = None) -> Optional[str]:
     """Run <tool> <version_args> and return the first line of stdout."""
     if version_args is None:
         version_args = ['--version']
@@ -144,7 +145,7 @@ def get_tool_version(tool_path: str, version_args: list[str] | None = None) -> s
     return None
 
 
-def list_arduino_cores(cli_path: str) -> list[dict]:
+def list_arduino_cores(cli_path: str) -> List[dict]:
     """List installed Arduino cores via `arduino-cli core list --format json`."""
     cached = _cache_get(f'arduino_cores:{cli_path}')
     if cached is not None:
@@ -199,7 +200,7 @@ def check_arduino_core_for_board(cli_path: str, fqbn: str) -> dict:
     }
 
 
-def list_platformio_platforms(cli_path: str) -> list[str]:
+def list_platformio_platforms(cli_path: str) -> List[str]:
     """List installed PlatformIO platforms."""
     cached = _cache_get(f'pio_platforms:{cli_path}')
     if cached is not None:

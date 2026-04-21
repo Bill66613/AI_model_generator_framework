@@ -691,42 +691,56 @@ static inline float pgm_read_float_near_safe(const float* addr) {
 
     def _generate_orientation_robust_extraction(self, include_frequency=False) -> str:
         """Generate orientation-robust (magnitude-based) feature extraction.
-        
-        Produces 33 time-domain features, plus optionally 14 frequency-domain
-        features (7 per magnitude) via DFT when include_frequency=True (47 total).
+
+        Produces 33 time-domain features, plus optionally 20 frequency-domain
+        features (10 per magnitude) via DFT when include_frequency=True (53 total).
         """
         code = ""
-        
+
         # DFT helper function (only included when frequency features are needed)
         if include_frequency:
             code += """
 // --- DFT-based frequency feature extraction ----------------------------
-// Computes 7 frequency features from a magnitude signal via a direct DFT.
-// For N=150 this takes ~11k multiply-adds, well under 5 ms on ESP32.
+// Computes 10 frequency features from a magnitude signal via a direct DFT.
+// Pipeline: DC removal -> Hann window -> DFT -> feature extraction.
+// Matches Python: _fft_with_windowing() + _spectral_statistics().
 int extract_frequency_features(float* signal, int samples, float sampling_rate,
                                float* features, int start_idx) {
     int idx = start_idx;
     int half_n = samples / 2;  // positive-frequency bins
     float freq_step = sampling_rate / (float)samples;
 
+    // Precompute 2*PI/N
+    float two_pi_over_n = 6.283185307f / (float)samples;
+
+    // --- Step 1: DC removal (subtract mean) ---
+    float sig_mean = 0.0f;
+    for (int i = 0; i < samples; i++) sig_mean += signal[i];
+    sig_mean /= (float)samples;
+
+    // --- Step 2 & 3: Apply Hann window and compute DFT in one pass ---
+    // Hann window: w[n] = 0.5 - 0.5 * cos(2*PI*n/(N-1))
+    // We apply DC removal + windowing inline during the DFT inner loop
+    // to avoid allocating a temporary windowed-signal array.
+    float dft_mag[WINDOW_SIZE / 2 + 1];
+
     float max_mag = 0.0f;
     int max_idx = 0;
     float mag_sum = 0.0f;
     float weighted_freq_sum = 0.0f;
 
-    // Precompute 2*PI/N
-    float two_pi_over_n = 6.283185307f / (float)samples;
-
-    // Temporary array for DFT magnitudes (only positive freqs)
-    float dft_mag[WINDOW_SIZE / 2 + 1];
+    float pi_over_nm1 = 3.141592654f / (float)(samples - 1);
 
     for (int k = 1; k <= half_n; k++) {
         float re = 0.0f, im = 0.0f;
         float angle_step = two_pi_over_n * (float)k;
         for (int n = 0; n < samples; n++) {
+            // Hann window coefficient: 0.5 - 0.5*cos(2*PI*n/(N-1))
+            float w = 0.5f - 0.5f * cosf(2.0f * pi_over_nm1 * (float)n);
+            float val = (signal[n] - sig_mean) * w;  // DC-removed + windowed
             float angle = angle_step * (float)n;
-            re += signal[n] * cosf(angle);
-            im -= signal[n] * sinf(angle);
+            re += val * cosf(angle);
+            im -= val * sinf(angle);
         }
         float mag = sqrtf(re * re + im * im);
         dft_mag[k - 1] = mag;
@@ -774,6 +788,44 @@ int extract_frequency_features(float* signal, int samples, float sampling_rate,
     }
     features[idx++] = rolloff_freq;
 
+    // 7-9: Spectral shape descriptors (EI-style: RMS, skewness, kurtosis of bins)
+    // These match Python _spectral_statistics()
+    float sq_sum = 0.0f;
+    for (int k = 0; k < half_n; k++) sq_sum += dft_mag[k] * dft_mag[k];
+    float spec_rms = sqrtf(sq_sum / (float)half_n);
+
+    float spec_mean = mag_sum / (float)half_n;
+    float spec_var = (sq_sum / (float)half_n) - (spec_mean * spec_mean);
+    float spec_std = sqrtf(spec_var > 0.0f ? spec_var : 0.0001f);
+
+    float m3 = 0.0f, m4 = 0.0f;
+    for (int k = 0; k < half_n; k++) {
+        float z = (dft_mag[k] - spec_mean) / (spec_std + 1e-7f);
+        float z2 = z * z;
+        m3 += z2 * z;
+        m4 += z2 * z2;
+    }
+    int nn = half_n;
+    // Bias-corrected skewness/kurtosis (pandas convention)
+    float spec_skew = 0.0f, spec_kurt = 0.0f;
+    if (nn > 2) {
+        spec_skew = (m3 / (float)nn) * ((float)nn * (float)(nn + 1))
+                    / ((float)(nn - 1) * (float)(nn - 2));
+    }
+    if (nn > 3) {
+        float raw_kurt = m4 / (float)nn;
+        spec_kurt = ((float)(nn + 1) * raw_kurt
+                     - 3.0f * (float)(nn - 1))
+                    * (float)(nn - 1)
+                    / ((float)(nn - 2) * (float)(nn - 3))
+                    + 3.0f;
+        spec_kurt -= 3.0f;  // excess kurtosis (Fisher)
+    }
+
+    features[idx++] = spec_rms;
+    features[idx++] = spec_skew;
+    features[idx++] = spec_kurt;
+
     return idx;
 }
 
@@ -787,7 +839,7 @@ void extract_features(float sensor_data[][N_CHANNELS], int samples, float featur
     // Time-domain: 15 stats x 2 magnitudes + 3 jerk = 33 features
 """
         if include_frequency:
-            code += "    // Frequency-domain: 7 features x 2 magnitudes = 14 features (total: 47)\n"
+            code += "    // Frequency-domain: 10 features x 2 magnitudes = 20 features (total: 53)\n"
 
         code += """
     if (samples <= 1) {
