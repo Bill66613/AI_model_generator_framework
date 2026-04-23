@@ -415,6 +415,8 @@ class EdgeMLModel:
         n_accepted = int(np.sum(accepted_mask))
         n_rejected = n_total - n_accepted
         rejection_rate = n_rejected / n_total if n_total > 0 else 0.0
+        thresholded_preds = y_pred.copy()
+        thresholded_preds[~accepted_mask] = -1
 
         # Standard accuracy (no threshold, no smoothing) for comparison
         standard_accuracy = float(accuracy_score(y_encoded, y_pred_raw))
@@ -423,8 +425,7 @@ class EdgeMLModel:
         smoothing_window = max(1, min(9, smoothing_window))
         if smoothing_window > 1 and n_total > 0:
             # Build per-window predictions: rejected → -1 (unknown)
-            raw_preds = y_pred.copy()
-            raw_preds[~accepted_mask] = -1
+            raw_preds = thresholded_preds.copy()
 
             # Majority vote over sliding window (C++ parity):
             # unknown votes are counted and unknown wins ties
@@ -452,6 +453,8 @@ class EdgeMLModel:
             n_rejected = n_total - n_accepted
             rejection_rate = n_rejected / n_total if n_total > 0 else 0.0
             y_pred = smoothed_preds
+        else:
+            y_pred = thresholded_preds
 
         # Accuracy on accepted predictions only
         if n_accepted > 0:

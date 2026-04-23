@@ -192,6 +192,7 @@ class TestModelTraining:
         assert results['rejection_rate'] == pytest.approx(0.4)
         assert results['accepted_accuracy'] == pytest.approx(2 / 3)
         assert results['deployment_accuracy'] == pytest.approx(0.4)
+        assert results['final_predictions'] == [0, -1, 1, -1, 0]
 
     def test_evaluate_with_confidence_threshold_smoothing_unknown_tie(self):
         """Smoothing should count unknown votes and let unknown win ties (C++ parity)."""
