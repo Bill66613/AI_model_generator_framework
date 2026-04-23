@@ -308,20 +308,7 @@ class TestTimeDomainParity:
 
 class TestFrequencyDomainParity:
     """Compare Python extract_frequency_magnitude_features() with C++ DFT.
-
-    Known difference: Python FFT with ``fft_freq > 0`` uses 74 bins (excludes
-    Nyquist at k=n/2 for even n), while C++ DFT loops ``k=1..n/2`` producing
-    75 bins (includes Nyquist).  This causes small differences in spectral
-    centroid, rolloff, and high-freq energy.  We use 5% tolerance for features
-    affected by this extra bin.
     """
-
-    # Features sensitive to the extra Nyquist bin (Python excludes it, C++ includes it)
-    NYQUIST_SENSITIVE = {'spectral_centroid', 'spectral_rolloff',
-                         'energy_high_freq'}
-
-    # Spectral shape features: C++ bias-corrected vs pandas formulas differ slightly
-    SPECTRAL_SHAPE = {'spectral_skewness', 'spectral_kurtosis'}
 
     def _check_dft_features(self, py_feats, prefix, mag_data):
         cpp_dft = _cpp_dft_features(mag_data, 100.0)
@@ -330,15 +317,8 @@ class TestFrequencyDomainParity:
             assert py_col in py_feats.columns, f"Missing: {py_col}"
             py_val = py_feats[py_col].iloc[0]
 
-            if feat_name in self.NYQUIST_SENSITIVE:
-                # Wider tolerance: Nyquist bin causes ~1-3% drift
-                tol = max(1.0, 0.05 * abs(py_val))
-            elif feat_name in self.SPECTRAL_SHAPE:
-                # Spectral skew/kurt: C++ bias-corrected vs pandas formula
-                tol = max(0.5, 0.10 * abs(py_val))
-            else:
-                # Standard tolerance
-                tol = max(0.1, 0.01 * abs(py_val))
+            # Standard tolerance
+            tol = max(0.1, 0.01 * abs(py_val))
 
             assert abs(cpp_val - py_val) < tol, (
                 f"{py_col}: C++_DFT={cpp_val:.4f}, Python_FFT={py_val:.4f}")

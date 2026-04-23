@@ -475,7 +475,8 @@ def register_callbacks(app):
                 elif feature_method == 'orientation_invariant':
                     # Orientation-robust magnitude features + FFT
                     # 53 features (33 time + 20 freq)
-                    # WARNING: FFT features NOT supported in C++ deployment
+                    # Deployable in C++: orientation-robust magnitude FFT features
+                    # (per-axis FFT modes remain non-deployable)
                     feature_df = create_feature_vector(
                         df_window, sensor_cols, sampling_rate,
                         include_frequency=True,

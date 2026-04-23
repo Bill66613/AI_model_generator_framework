@@ -40,13 +40,12 @@ def _fft_with_windowing(data: np.ndarray, sampling_rate: float
     # Step 2: Hann window to reduce spectral leakage
     window = np.hanning(n)
     data_windowed = data_centered * window
-    # Step 3: FFT
-    fft_vals = np.fft.fft(data_windowed)
+    # Step 3: FFT (rFFT keeps non-negative frequencies and includes Nyquist)
+    fft_vals = np.fft.rfft(data_windowed)
     fft_magnitude = np.abs(fft_vals)
-    fft_freq = np.fft.fftfreq(n, 1.0 / sampling_rate)
-    # Only positive frequencies (exclude DC bin at index 0)
-    pos_mask = fft_freq > 0
-    return fft_magnitude[pos_mask], fft_freq[pos_mask]
+    fft_freq = np.fft.rfftfreq(n, 1.0 / sampling_rate)
+    # Exclude DC bin only (keep Nyquist for parity with C++/MicroPython)
+    return fft_magnitude[1:], fft_freq[1:]
 
 
 def _spectral_statistics(fft_magnitude_pos: np.ndarray
@@ -61,9 +60,30 @@ def _spectral_statistics(fft_magnitude_pos: np.ndarray
     """
     if len(fft_magnitude_pos) == 0:
         return 0.0, 0.0, 0.0
-    rms = np.sqrt(np.mean(fft_magnitude_pos ** 2))
-    s = pd.Series(fft_magnitude_pos)
-    return float(rms), float(s.skew()), float(s.kurtosis())
+    nn = len(fft_magnitude_pos)
+    sq_sum = np.sum(fft_magnitude_pos ** 2)
+    rms = np.sqrt(sq_sum / nn)
+    spec_mean = np.sum(fft_magnitude_pos) / nn
+    spec_var = (sq_sum / nn) - (spec_mean * spec_mean)
+    spec_std = np.sqrt(spec_var) if spec_var > 0 else 0.0001
+
+    m3 = 0.0
+    m4 = 0.0
+    for mag in fft_magnitude_pos:
+        z = (mag - spec_mean) / (spec_std + 1e-7)
+        z2 = z * z
+        m3 += z2 * z
+        m4 += z2 * z2
+
+    skewness = 0.0
+    kurtosis = 0.0
+    if nn > 2:
+        skewness = (m3 / nn) * (nn * (nn + 1)) / ((nn - 1) * (nn - 2))
+    if nn > 3:
+        raw_kurt = m4 / nn
+        kurtosis = ((nn + 1) * raw_kurt - 3.0 * (nn - 1)) * (nn - 1) / ((nn - 2) * (nn - 3))
+
+    return float(rms), float(skewness), float(kurtosis)
 
 
 def _compute_centered_magnitude(df: pd.DataFrame, columns: List[str]) -> np.ndarray:

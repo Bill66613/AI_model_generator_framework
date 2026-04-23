@@ -1120,7 +1120,8 @@ def register_callbacks(app):
                 X_test, y_test, confidence_threshold=0.6)
             evaluation_results['deployment_eval'] = deploy_eval
         except Exception:
-            pass  # Non-critical — don't break training if this fails
+            logger.exception(
+                "Deployment-realistic evaluation failed; continuing with standard metrics.")
 
         # Save trained model
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

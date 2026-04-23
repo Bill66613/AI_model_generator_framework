@@ -162,7 +162,37 @@ class TestModelTraining:
         # Test prediction
         predictions = model.predict(X.head(5))
         assert len(predictions) == 5
-    
+
+    def test_evaluate_with_confidence_threshold_metrics(self):
+        """Test confidence-threshold evaluation metrics on known probabilities."""
+        model = EdgeMLModel('random_forest')
+        mock_model = Mock()
+        mock_model.predict.return_value = np.array([0, 1, 1, 1, 0])
+        mock_model.predict_proba.return_value = np.array([
+            [0.80, 0.20],  # accepted, correct
+            [0.55, 0.45],  # rejected
+            [0.20, 0.80],  # accepted, correct
+            [0.45, 0.55],  # rejected
+            [0.70, 0.30],  # accepted, wrong
+        ])
+        model.model = mock_model
+
+        X_test = pd.DataFrame({
+            'f1': [1.0, 2.0, 3.0, 4.0, 5.0],
+            'f2': [5.0, 4.0, 3.0, 2.0, 1.0],
+        })
+        y_test = pd.Series([0, 0, 1, 1, 1])
+
+        results = model.evaluate_with_confidence_threshold(
+            X_test, y_test, confidence_threshold=0.6)
+
+        assert results['n_total'] == 5
+        assert results['n_accepted'] == 3
+        assert results['n_rejected'] == 2
+        assert results['rejection_rate'] == pytest.approx(0.4)
+        assert results['accepted_accuracy'] == pytest.approx(2 / 3)
+        assert results['deployment_accuracy'] == pytest.approx(0.4)
+
     def test_model_save_load(self, sample_data, tmp_path):
         """Test model saving and loading functionality."""
         data, labels = sample_data
