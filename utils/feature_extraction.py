@@ -237,7 +237,7 @@ def extract_frequency_magnitude_features(
         low_freq_mask = (fft_freq_pos >= 0) & (fft_freq_pos < 2)
         mid_freq_mask = (fft_freq_pos >= 2) & (fft_freq_pos < 5)
         high_freq_mask = (fft_freq_pos >= 5) & (
-            fft_freq_pos < sampling_rate / 2)
+            fft_freq_pos <= sampling_rate / 2)
 
         features[f'{name}_energy_low_freq'] = np.sum(
             fft_magnitude_pos[low_freq_mask] ** 2)
@@ -383,7 +383,7 @@ def extract_frequency_domain_features(
         low_freq_mask = (fft_freq_pos >= 0) & (fft_freq_pos < 5)
         mid_freq_mask = (fft_freq_pos >= 5) & (fft_freq_pos < 15)
         high_freq_mask = (fft_freq_pos >= 15) & (
-            fft_freq_pos < sampling_rate / 2)
+            fft_freq_pos <= sampling_rate / 2)
 
         features[f'{col}_energy_low_freq'] = np.sum(
             fft_magnitude_pos[low_freq_mask] ** 2)

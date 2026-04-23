@@ -1123,6 +1123,8 @@ def register_callbacks(app):
             logger.exception(
                 "Deployment-realistic evaluation failed; continuing with standard metrics.")
 
+        training_time = time.time() - start_time
+
         # Save trained model
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         model_filename = f"{model_type}_har_model_{timestamp}.joblib"
