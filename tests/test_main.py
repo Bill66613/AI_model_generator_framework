@@ -193,6 +193,39 @@ class TestModelTraining:
         assert results['accepted_accuracy'] == pytest.approx(2 / 3)
         assert results['deployment_accuracy'] == pytest.approx(0.4)
 
+    def test_evaluate_with_confidence_threshold_smoothing_unknown_tie(self):
+        """Smoothing should count unknown votes and let unknown win ties (C++ parity)."""
+        model = EdgeMLModel('random_forest')
+        mock_model = Mock()
+        mock_model.predict.return_value = np.array([0, 1, 1, 0, 1])
+        mock_model.predict_proba.return_value = np.array([
+            [0.90, 0.10],  # accepted -> 0
+            [0.55, 0.45],  # rejected -> -1
+            [0.10, 0.90],  # accepted -> 1
+            [0.52, 0.48],  # rejected -> -1
+            [0.05, 0.95],  # accepted -> 1
+        ])
+        model.model = mock_model
+
+        X_test = pd.DataFrame({
+            'f1': [1.0, 2.0, 3.0, 4.0, 5.0],
+            'f2': [5.0, 4.0, 3.0, 2.0, 1.0],
+        })
+        y_test = pd.Series([0, 1, 1, 0, 1])
+
+        results = model.evaluate_with_confidence_threshold(
+            X_test, y_test, confidence_threshold=0.6, smoothing_window=3)
+
+        # raw accepted/rejected => [0, -1, 1, -1, 1]
+        # smoothing (unknown wins ties) => [0, -1, -1, -1, 1]
+        assert results['final_predictions'] == [0, -1, -1, -1, 1]
+        assert results['n_total'] == 5
+        assert results['n_accepted'] == 2
+        assert results['n_rejected'] == 3
+        assert results['rejection_rate'] == pytest.approx(0.6)
+        assert results['accepted_accuracy'] == pytest.approx(1.0)
+        assert results['deployment_accuracy'] == pytest.approx(0.4)
+
     def test_model_save_load(self, sample_data, tmp_path):
         """Test model saving and loading functionality."""
         data, labels = sample_data

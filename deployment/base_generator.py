@@ -796,7 +796,7 @@ int extract_frequency_features(float* signal, int samples, float sampling_rate,
 
     float spec_mean = mag_sum / (float)half_n;
     float spec_var = (sq_sum / (float)half_n) - (spec_mean * spec_mean);
-    float spec_std = sqrtf(spec_var > 0.0f ? spec_var : 0.0001f);
+    float spec_std = (spec_var > 0.0f) ? sqrtf(spec_var) : 0.0001f;
 
     float m3 = 0.0f, m4 = 0.0f;
     for (int k = 0; k < half_n; k++) {

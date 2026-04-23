@@ -383,8 +383,10 @@ class EdgeMLModel:
                 vote (default 1 = no smoothing, matches C++ SMOOTHING_WINDOW)
 
         Returns:
-            Dict with deployment_accuracy, rejection_rate, accepted_accuracy,
-            and per-class breakdown.
+            Dict with aggregate metrics:
+            standard_accuracy, deployment_accuracy, accepted_accuracy,
+            rejection_rate, sample counts, confidence summary, and
+            final_predictions (-1 means unknown).
         """
         if self.model is None:
             raise ValueError("Model must be trained before evaluation")
@@ -419,22 +421,30 @@ class EdgeMLModel:
 
         # Apply majority-vote smoothing (mirrors C++ temporal smoothing)
         smoothing_window = max(1, min(9, smoothing_window))
-        if smoothing_window > 1 and n_total >= smoothing_window:
+        if smoothing_window > 1 and n_total > 0:
             # Build per-window predictions: rejected → -1 (unknown)
             raw_preds = y_pred.copy()
             raw_preds[~accepted_mask] = -1
 
-            # Majority vote over sliding window of consecutive predictions
-            from collections import Counter
+            # Majority vote over sliding window (C++ parity):
+            # unknown votes are counted and unknown wins ties
             smoothed_preds = np.full(n_total, -1)
             for i in range(n_total):
                 start = max(0, i - smoothing_window + 1)
                 window_preds = raw_preds[start:i + 1]
-                # Count votes excluding unknown (-1)
-                votes = Counter(p for p in window_preds if p != -1)
-                if votes:
-                    smoothed_preds[i] = votes.most_common(1)[0][0]
-                # else stays -1 (unknown)
+                unknown_votes = int(np.sum(window_preds == -1))
+                best_class = -1
+                best_votes = unknown_votes
+
+                for cls in np.unique(window_preds):
+                    if cls < 0:
+                        continue
+                    cls_votes = int(np.sum(window_preds == cls))
+                    if cls_votes > best_votes:
+                        best_votes = cls_votes
+                        best_class = int(cls)
+
+                smoothed_preds[i] = best_class  # remains -1 if unknown wins/ties
 
             # Recalculate metrics with smoothed predictions
             smoothed_accepted = smoothed_preds != -1
@@ -466,6 +476,7 @@ class EdgeMLModel:
             'smoothing_window': smoothing_window,
             'mean_confidence': float(np.mean(max_confidences)),
             'min_confidence': float(np.min(max_confidences)),
+            'final_predictions': y_pred.tolist(),
         }
 
     def get_feature_importance(self) -> Optional[Dict[str, float]]:

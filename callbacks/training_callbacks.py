@@ -664,11 +664,11 @@ def register_callbacks(app):
                     ], style={'color': '#6c757d', 'font-size': '13px', 'margin-bottom': '10px'}),
                     html.Div([
                         html.Div([
-                            html.H6("On-Device Accuracy", style={
+                            html.H6("Deployment Accuracy", style={
                                     'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '11px'}),
-                            html.Div(f"{d['accepted_accuracy']:.1%}", style={
+                            html.Div(f"{d['deployment_accuracy']:.1%}", style={
                                      'font-size': '22px', 'font-weight': 'bold',
-                                     'color': '#28a745' if d['accepted_accuracy'] >= 0.85 else '#dc3545'})
+                                     'color': '#28a745' if d['deployment_accuracy'] >= 0.85 else '#dc3545'})
                         ], style={
                             'background-color': '#f8f9fa', 'padding': '12px',
                             'border-radius': '8px', 'text-align': 'center',
