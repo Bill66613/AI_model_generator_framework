@@ -65,6 +65,7 @@ def _spectral_statistics(fft_magnitude_pos: np.ndarray
     rms = np.sqrt(sq_sum / nn)
     spec_mean = np.sum(fft_magnitude_pos) / nn
     spec_var = (sq_sum / nn) - (spec_mean * spec_mean)
+    # Keep these constants aligned with deployment generators for parity.
     spec_std = np.sqrt(spec_var) if spec_var > 0 else 0.0001
 
     m3 = 0.0
