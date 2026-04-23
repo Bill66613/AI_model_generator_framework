@@ -35,26 +35,21 @@ from deployment import generate_deployment_code, analyze_resource_requirements, 
 
 
 def _get_fe_train_files(training_dir):
-    """Return only the *_train.csv files that belong to the latest Feature Engineering run.
+    """Return train files for the most recent Feature Engineering run.
 
-    When FE metadata files exist in training_dir we restrict to those datasets
-    instead of blindly globbing every ``*_train.csv`` (which may include stale
-    per-file splits from the preprocessing tab with a different feature set).
+    When FE metadata files exist in training_dir, select only the newest
+    ``*_fe_metadata.json`` dataset. This avoids mixing stale datasets from
+    previous FE runs (which can inflate class count in training/results).
     """
     fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
     if fe_meta_files:
-        # Only use datasets that have a corresponding _fe_metadata.json
-        fe_dataset_names = [
-            os.path.basename(f).replace('_fe_metadata.json', '')
-            for f in fe_meta_files
-        ]
-        train_files = []
-        for name in fe_dataset_names:
+        # Prefer the newest FE run, fallback to older FE runs if needed
+        fe_meta_files = sorted(fe_meta_files, key=os.path.getmtime, reverse=True)
+        for meta_file in fe_meta_files:
+            name = os.path.basename(meta_file).replace('_fe_metadata.json', '')
             candidate = os.path.join(training_dir, f'{name}_train.csv')
             if os.path.exists(candidate):
-                train_files.append(candidate)
-        if train_files:
-            return train_files
+                return [candidate]
 
     # Fallback: no FE metadata → load all (backward compat)
     return glob.glob(os.path.join(training_dir, '*_train.csv'))
@@ -650,6 +645,75 @@ def register_callbacks(app):
             # Overfitting Warning
             *overfitting_warning,
 
+            # Deployment-Realistic Accuracy (confidence threshold applied)
+            *(lambda: (
+                [html.Div([
+                    html.H5("🎯 Deployment Accuracy Estimate", style={
+                            'color': '#2E86AB', 'margin-top': '20px'}),
+                    html.P([
+                        "Simulates on-device behavior where predictions below ",
+                        html.Strong(f"{d['confidence_threshold']:.0%}"),
+                        " confidence are rejected as ",
+                        html.Code("unknown"),
+                        "."
+                    ], style={'color': '#6c757d', 'font-size': '13px', 'margin-bottom': '10px'}),
+                    html.Div([
+                        html.Div([
+                            html.H6("Deployment Accuracy", style={
+                                    'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '11px'}),
+                            html.Div(f"{d['deployment_accuracy']:.1%}", style={
+                                     'font-size': '22px', 'font-weight': 'bold',
+                                     'color': '#28a745' if d['deployment_accuracy'] >= 0.85 else '#dc3545'})
+                        ], style={
+                            'background-color': '#f8f9fa', 'padding': '12px',
+                            'border-radius': '8px', 'text-align': 'center',
+                            'border': '2px solid #6f42c1', 'width': '30%',
+                            'display': 'inline-block', 'margin-right': '2%'
+                        }),
+                        html.Div([
+                            html.H6("Rejection Rate", style={
+                                    'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '11px'}),
+                            html.Div(f"{d['rejection_rate']:.1%}", style={
+                                     'font-size': '22px', 'font-weight': 'bold',
+                                     'color': '#dc3545' if d['rejection_rate'] > 0.2 else '#28a745'})
+                        ], style={
+                            'background-color': '#f8f9fa', 'padding': '12px',
+                            'border-radius': '8px', 'text-align': 'center',
+                            'border': '2px solid #fd7e14', 'width': '30%',
+                            'display': 'inline-block', 'margin-right': '2%'
+                        }),
+                        html.Div([
+                            html.H6("Mean Confidence", style={
+                                    'color': '#6c757d', 'margin': '0 0 5px 0', 'font-size': '11px'}),
+                            html.Div(f"{d['mean_confidence']:.1%}", style={
+                                     'font-size': '22px', 'font-weight': 'bold', 'color': '#17a2b8'})
+                        ], style={
+                            'background-color': '#f8f9fa', 'padding': '12px',
+                            'border-radius': '8px', 'text-align': 'center',
+                            'border': '2px solid #17a2b8', 'width': '30%',
+                            'display': 'inline-block'
+                        }),
+                    ], style={'margin': '10px 0'}),
+                    *(
+                        [html.Div([
+                            html.Strong("⚠️ High rejection rate: ", style={'color': '#dc3545'}),
+                            html.Span(
+                                f"{d['n_rejected']}/{d['n_total']} test samples would be rejected on device. "
+                                "Model lacks confidence — consider more training data or simpler model."
+                            )
+                        ], style={
+                            'background-color': '#fff3cd', 'border-left': '4px solid #ffc107',
+                            'padding': '10px', 'margin-top': '10px', 'border-radius': '4px'
+                        })] if d['rejection_rate'] > 0.2 else []
+                    )
+                ], style={
+                    'background-color': '#f0f4ff', 'border-left': '4px solid #6f42c1',
+                    'padding': '15px', 'margin': '15px 0', 'border-radius': '4px'
+                })]
+                if (d := evaluation_results.get('deployment_eval'))
+                else []
+            ))(),
+
             # Early Stopping Info
             *early_stopping_info,
 
@@ -799,10 +863,13 @@ def register_callbacks(app):
             logger.debug(f"DEBUG: Auto-detected feature_opts: {feature_opts}")
 
             # Load FE metadata (window_size_ms, sampling_rate, etc.) if available
-            fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
-            if fe_meta_files:
+            if train_files:
                 try:
-                    with open(fe_meta_files[0], 'r') as f:
+                    active_dataset_name = os.path.basename(
+                        train_files[0]).replace('_train.csv', '')
+                    fe_meta_file = os.path.join(
+                        training_dir, f'{active_dataset_name}_fe_metadata.json')
+                    with open(fe_meta_file, 'r') as f:
                         fe_config = json.load(f)
                     logger.debug(f"Loaded FE metadata: window={fe_config.get('window_size_ms')}ms, "
                           f"rate={fe_config.get('sampling_rate')}Hz, "
@@ -950,13 +1017,16 @@ def register_callbacks(app):
             # For CNN: load raw windowed data instead of features
             if model_type == 'pytorch_cnn':
                 training_dir = os.path.join(base_dir, 'training')
-                # Prefer FE-matched raw files, fallback to all
-                fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
-                if fe_meta_files:
-                    fe_names = [os.path.basename(f).replace('_fe_metadata.json', '') for f in fe_meta_files]
-                    raw_train_files = [os.path.join(training_dir, f'{n}_raw_train.npy')
-                                       for n in fe_names
-                                       if os.path.exists(os.path.join(training_dir, f'{n}_raw_train.npy'))]
+                # Prefer raw files that match the active FE run
+                if train_files:
+                    fe_names = [os.path.basename(f).replace('_train.csv', '')
+                                for f in train_files]
+                    raw_train_files = [
+                        os.path.join(training_dir, f'{n}_raw_train.npy')
+                        for n in fe_names
+                        if os.path.exists(
+                            os.path.join(training_dir, f'{n}_raw_train.npy'))
+                    ]
                 else:
                     raw_train_files = glob.glob(os.path.join(training_dir, '*_raw_train.npy'))
                 if not raw_train_files:
@@ -1042,6 +1112,17 @@ def register_callbacks(app):
 
         # Evaluation on test set
         evaluation_results = model.evaluate(X_test, y_test)
+
+        # Deployment-realistic accuracy (with confidence threshold)
+        # Shows what accuracy to expect on-device where low-confidence
+        # predictions are rejected as "unknown"
+        try:
+            deploy_eval = model.evaluate_with_confidence_threshold(
+                X_test, y_test, confidence_threshold=0.6)
+            evaluation_results['deployment_eval'] = deploy_eval
+        except Exception:
+            logger.exception(
+                "Deployment-realistic evaluation failed; continuing with standard metrics.")
 
         training_time = time.time() - start_time
 

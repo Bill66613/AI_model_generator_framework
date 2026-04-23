@@ -78,14 +78,16 @@ def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
             if name in feature_set:
                 cpp_order.append(name)
     
-    # Frequency-domain features (DFT on magnitudes) - 7 features per signal
+    # Frequency-domain features (DFT on magnitudes) - 10 features per signal
     # Order matches C extract_frequency_features(): dominant_frequency,
     # dominant_frequency_magnitude, spectral_centroid, energy_low_freq,
-    # energy_mid_freq, energy_high_freq, spectral_rolloff
+    # energy_mid_freq, energy_high_freq, spectral_rolloff,
+    # spectral_rms, spectral_skewness, spectral_kurtosis
     freq_stats = [
         'dominant_frequency', 'dominant_frequency_magnitude',
         'spectral_centroid', 'energy_low_freq', 'energy_mid_freq',
-        'energy_high_freq', 'spectral_rolloff'
+        'energy_high_freq', 'spectral_rolloff',
+        'spectral_rms', 'spectral_skewness', 'spectral_kurtosis'
     ]
     has_acc_freq = any(f.startswith('acc_mag_dominant_') or f.startswith('acc_mag_spectral_') 
                        or f.startswith('acc_mag_energy_low') for f in feature_set)

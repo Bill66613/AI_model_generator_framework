@@ -7,7 +7,7 @@ orientation-invariant features from raw sensor data windows.
 
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Tuple
 import logging
 
 from config.config import (
@@ -15,6 +15,76 @@ from config.config import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _fft_with_windowing(data: np.ndarray, sampling_rate: float
+                        ) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute FFT with proper DSP preprocessing (DC removal + Hann window).
+
+    Follows Edge Impulse / standard DSP best practice:
+    1. Remove DC component (subtract mean) — eliminates 0 Hz bin.
+    2. Apply Hann window — reduces spectral leakage at bin boundaries.
+    3. Compute FFT and return only positive-frequency magnitudes.
+
+    Args:
+        data: 1-D signal array.
+        sampling_rate: Sampling rate in Hz.
+
+    Returns:
+        (fft_magnitude_pos, fft_freq_pos) — magnitudes and frequencies for
+        positive-frequency bins only (excluding DC).
+    """
+    n = len(data)
+    # Step 1: DC removal
+    data_centered = data - np.mean(data)
+    # Step 2: Hann window to reduce spectral leakage
+    window = np.hanning(n)
+    data_windowed = data_centered * window
+    # Step 3: FFT (rFFT keeps non-negative frequencies and includes Nyquist)
+    fft_vals = np.fft.rfft(data_windowed)
+    fft_magnitude = np.abs(fft_vals)
+    fft_freq = np.fft.rfftfreq(n, 1.0 / sampling_rate)
+    # Exclude DC bin only (keep Nyquist for parity with C++/MicroPython)
+    return fft_magnitude[1:], fft_freq[1:]
+
+
+def _spectral_statistics(fft_magnitude_pos: np.ndarray
+                         ) -> Tuple[float, float, float]:
+    """Compute RMS, skewness, and kurtosis of FFT magnitude bins.
+
+    These spectral-shape descriptors are used by Edge Impulse and capture
+    how the spectral energy is distributed across frequency bins.
+
+    Returns:
+        (spectral_rms, spectral_skewness, spectral_kurtosis)
+    """
+    if len(fft_magnitude_pos) == 0:
+        return 0.0, 0.0, 0.0
+    nn = len(fft_magnitude_pos)
+    sq_sum = np.sum(fft_magnitude_pos ** 2)
+    rms = np.sqrt(sq_sum / nn)
+    spec_mean = np.sum(fft_magnitude_pos) / nn
+    spec_var = (sq_sum / nn) - (spec_mean * spec_mean)
+    # Keep these constants aligned with deployment generators for parity.
+    spec_std = np.sqrt(spec_var) if spec_var > 0 else 0.0001
+
+    m3 = 0.0
+    m4 = 0.0
+    for mag in fft_magnitude_pos:
+        z = (mag - spec_mean) / (spec_std + 1e-7)
+        z2 = z * z
+        m3 += z2 * z
+        m4 += z2 * z2
+
+    skewness = 0.0
+    kurtosis = 0.0
+    if nn > 2:
+        skewness = (m3 / nn) * (nn * (nn + 1)) / ((nn - 1) * (nn - 2))
+    if nn > 3:
+        raw_kurt = m4 / nn
+        kurtosis = ((nn + 1) * raw_kurt - 3.0 * (nn - 1)) * (nn - 1) / ((nn - 2) * (nn - 3))
+
+    return float(rms), float(skewness), float(kurtosis)
 
 
 def _compute_centered_magnitude(df: pd.DataFrame, columns: List[str]) -> np.ndarray:
@@ -143,17 +213,9 @@ def extract_frequency_magnitude_features(
     gyro_mag = _compute_centered_magnitude(df, gyro_cols)
 
     for name, mag_data in [('acc_mag', acc_mag), ('gyro_mag', gyro_mag)]:
-        data = mag_data
-
-        # Compute FFT
-        fft_vals = np.fft.fft(data)
-        fft_magnitude = np.abs(fft_vals)
-        fft_freq = np.fft.fftfreq(len(data), 1 / sampling_rate)
-
-        # Only use positive frequencies
-        pos_mask = fft_freq > 0
-        fft_magnitude_pos = fft_magnitude[pos_mask]
-        fft_freq_pos = fft_freq[pos_mask]
+        # Proper DSP pipeline: DC removal → Hann window → FFT
+        fft_magnitude_pos, fft_freq_pos = _fft_with_windowing(
+            mag_data, sampling_rate)
 
         if len(fft_magnitude_pos) == 0:
             continue
@@ -175,7 +237,7 @@ def extract_frequency_magnitude_features(
         low_freq_mask = (fft_freq_pos >= 0) & (fft_freq_pos < 2)
         mid_freq_mask = (fft_freq_pos >= 2) & (fft_freq_pos < 5)
         high_freq_mask = (fft_freq_pos >= 5) & (
-            fft_freq_pos < sampling_rate / 2)
+            fft_freq_pos <= sampling_rate / 2)
 
         features[f'{name}_energy_low_freq'] = np.sum(
             fft_magnitude_pos[low_freq_mask] ** 2)
@@ -195,6 +257,12 @@ def extract_frequency_magnitude_features(
                 features[f'{name}_spectral_rolloff'] = fft_freq_pos[-1]
         else:
             features[f'{name}_spectral_rolloff'] = 0.0
+
+        # Spectral shape descriptors (EI-style: RMS, skewness, kurtosis of bins)
+        spec_rms, spec_skew, spec_kurt = _spectral_statistics(fft_magnitude_pos)
+        features[f'{name}_spectral_rms'] = spec_rms
+        features[f'{name}_spectral_skewness'] = spec_skew
+        features[f'{name}_spectral_kurtosis'] = spec_kurt
 
     return pd.DataFrame([features])
 
@@ -255,7 +323,9 @@ def extract_frequency_domain_features(
     sensor_cols: List[str],
     sampling_rate: float = 100,
 ) -> pd.DataFrame:
-    """Extract frequency-domain features using FFT.
+    """Extract frequency-domain features using FFT with proper DSP preprocessing.
+
+    Pipeline: DC removal → Hann window → FFT → feature extraction.
 
     Args:
         df: DataFrame with sensor data
@@ -263,9 +333,10 @@ def extract_frequency_domain_features(
         sampling_rate: Sampling rate in Hz
 
     Returns:
-        DataFrame with 8 features per column (spectral_centroid,
+        DataFrame with 11 features per column (spectral_centroid,
         spectral_rolloff, spectral_bandwidth, dominant_frequency,
-        dominant_frequency_magnitude, energy_low/mid/high_freq)
+        dominant_frequency_magnitude, energy_low/mid/high_freq,
+        spectral_rms, spectral_skewness, spectral_kurtosis)
     """
     features = {}
 
@@ -275,15 +346,9 @@ def extract_frequency_domain_features(
 
         data = df[col].values
 
-        # Compute FFT
-        fft_vals = np.fft.fft(data)
-        fft_magnitude = np.abs(fft_vals)
-        fft_freq = np.fft.fftfreq(len(data), 1 / sampling_rate)
-
-        # Only use positive frequencies
-        pos_mask = fft_freq > 0
-        fft_magnitude_pos = fft_magnitude[pos_mask]
-        fft_freq_pos = fft_freq[pos_mask]
+        # Proper DSP pipeline: DC removal → Hann window → FFT
+        fft_magnitude_pos, fft_freq_pos = _fft_with_windowing(
+            data, sampling_rate)
 
         if len(fft_magnitude_pos) == 0:
             continue
@@ -318,7 +383,7 @@ def extract_frequency_domain_features(
         low_freq_mask = (fft_freq_pos >= 0) & (fft_freq_pos < 5)
         mid_freq_mask = (fft_freq_pos >= 5) & (fft_freq_pos < 15)
         high_freq_mask = (fft_freq_pos >= 15) & (
-            fft_freq_pos < sampling_rate / 2)
+            fft_freq_pos <= sampling_rate / 2)
 
         features[f'{col}_energy_low_freq'] = np.sum(
             fft_magnitude_pos[low_freq_mask] ** 2)
@@ -326,6 +391,12 @@ def extract_frequency_domain_features(
             fft_magnitude_pos[mid_freq_mask] ** 2)
         features[f'{col}_energy_high_freq'] = np.sum(
             fft_magnitude_pos[high_freq_mask] ** 2)
+
+        # Spectral shape descriptors (EI-style)
+        spec_rms, spec_skew, spec_kurt = _spectral_statistics(fft_magnitude_pos)
+        features[f'{col}_spectral_rms'] = spec_rms
+        features[f'{col}_spectral_skewness'] = spec_skew
+        features[f'{col}_spectral_kurtosis'] = spec_kurt
 
     return pd.DataFrame([features])
 
@@ -352,9 +423,9 @@ def create_feature_vector(
         DataFrame with extracted features
 
     Feature Counts:
-        - Magnitude only (robust): 33 features (no FFT) or 47 features (with FFT)
-        - Per-axis only: 90 features (no FFT) or 138 features (with FFT)
-        - Both: ~123 features (no FFT) or ~185 features (with FFT)
+        - Magnitude only (robust): 33 features (no FFT) or 53 features (with FFT)
+        - Per-axis only: 90 features (no FFT) or 156 features (with FFT)
+        - Both: ~123 features (no FFT) or ~209 features (with FFT)
     """
     if sensor_cols is None:
         sensor_cols = list(SENSOR_COLUMNS)

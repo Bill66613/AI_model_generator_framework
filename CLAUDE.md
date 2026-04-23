@@ -55,11 +55,11 @@ uv sync --extra dev              # + dev tools
 
 | Mode | Count | Description |
 |------|-------|-------------|
-| `orientation_invariant_time_only` | 33 | acc_mag + gyro_mag + jerk × 11 stats |
-| `orientation_invariant` | 47 | above + DFT magnitude features |
+| `orientation_invariant_time_only` | 33 | acc_mag + gyro_mag (15 stats each) + jerk (3 stats: acc_jerk_mag_mean/std/max) |
+| `orientation_invariant` | 53 | above + DFT magnitude features (10 per signal) |
 | `time_domain` | 90 | 15 stats × 6 axes |
-| `all` | 138 | time + frequency per axis |
-| `frequency_domain` | 48 | frequency features |
+| `all` | 156 | time + frequency per axis (11 per axis) |
+| `frequency_domain` | 66 | frequency features (11 per axis) |
 | `raw` | 6 | raw sensor values |
 
 ## Sensor Columns

@@ -363,6 +363,125 @@ class EdgeMLModel:
 
         return evaluation_results
 
+    def evaluate_with_confidence_threshold(
+        self, X_test, y_test, confidence_threshold: float = 0.6,
+        smoothing_window: int = 1,
+    ) -> Dict[str, Any]:
+        """Evaluate model simulating on-device confidence rejection and smoothing.
+
+        This mirrors the C++ har_predict() behavior: predictions with
+        max probability < confidence_threshold are rejected as "unknown".
+        When smoothing_window > 1, applies majority voting over consecutive
+        predictions (matching the C++ temporal smoothing logic).
+
+        Args:
+            X_test: Test features
+            y_test: True labels
+            confidence_threshold: Min confidence to accept (default 0.6,
+                matches C++ CONFIDENCE_THRESHOLD)
+            smoothing_window: Number of consecutive predictions for majority
+                vote (default 1 = no smoothing, matches C++ SMOOTHING_WINDOW)
+
+        Returns:
+            Dict with aggregate metrics:
+            standard_accuracy, deployment_accuracy, accepted_accuracy,
+            rejection_rate, sample counts, confidence summary, and
+            final_predictions (-1 means unknown).
+        """
+        if self.model is None:
+            raise ValueError("Model must be trained before evaluation")
+
+        X_scaled, y_encoded = self.preprocess_data(X_test, y_test)
+
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+            y_pred = self._pytorch_trainer.predict(X_scaled)
+            y_pred_proba = self._pytorch_trainer.predict_proba(X_scaled)
+        else:
+            y_pred = self.model.predict(X_scaled)
+            y_pred_proba = (self.model.predict_proba(X_scaled)
+                            if hasattr(self.model, 'predict_proba') else None)
+
+        n_total = len(y_encoded)
+        y_pred_raw = y_pred.copy()  # Save before smoothing modifies it
+
+        if y_pred_proba is not None:
+            max_confidences = np.max(y_pred_proba, axis=1)
+            accepted_mask = max_confidences >= confidence_threshold
+        else:
+            # No probabilities available — accept all (no threshold filtering)
+            accepted_mask = np.ones(n_total, dtype=bool)
+            max_confidences = np.ones(n_total)
+
+        n_accepted = int(np.sum(accepted_mask))
+        n_rejected = n_total - n_accepted
+        rejection_rate = n_rejected / n_total if n_total > 0 else 0.0
+        thresholded_preds = y_pred.copy()
+        thresholded_preds[~accepted_mask] = -1
+
+        # Standard accuracy (no threshold, no smoothing) for comparison
+        standard_accuracy = float(accuracy_score(y_encoded, y_pred_raw))
+
+        # Apply majority-vote smoothing (mirrors C++ temporal smoothing)
+        smoothing_window = max(1, min(9, smoothing_window))
+        if smoothing_window > 1 and n_total > 0:
+            # Build per-window predictions: rejected → -1 (unknown)
+            raw_preds = thresholded_preds.copy()
+
+            # Majority vote over sliding window (C++ parity):
+            # unknown votes are counted and unknown wins ties
+            smoothed_preds = np.full(n_total, -1)
+            for i in range(n_total):
+                start = max(0, i - smoothing_window + 1)
+                window_preds = raw_preds[start:i + 1]
+                unknown_votes = int(np.sum(window_preds == -1))
+                best_class = -1
+                best_votes = unknown_votes
+
+                for cls in np.unique(window_preds):
+                    if cls < 0:
+                        continue
+                    cls_votes = int(np.sum(window_preds == cls))
+                    if cls_votes > best_votes:
+                        best_votes = cls_votes
+                        best_class = int(cls)
+
+                smoothed_preds[i] = best_class  # remains -1 if unknown wins/ties
+
+            # Recalculate metrics with smoothed predictions
+            smoothed_accepted = smoothed_preds != -1
+            n_accepted = int(np.sum(smoothed_accepted))
+            n_rejected = n_total - n_accepted
+            rejection_rate = n_rejected / n_total if n_total > 0 else 0.0
+            y_pred = smoothed_preds
+        else:
+            y_pred = thresholded_preds
+
+        # Accuracy on accepted predictions only
+        if n_accepted > 0:
+            accepted_accuracy = float(accuracy_score(
+                y_encoded[accepted_mask if smoothing_window <= 1 else smoothed_accepted],
+                y_pred[accepted_mask if smoothing_window <= 1 else smoothed_accepted]))
+        else:
+            accepted_accuracy = 0.0
+
+        # Deployment accuracy: rejected = wrong (device says "unknown")
+        deployment_accuracy = n_accepted * accepted_accuracy / n_total if n_total > 0 else 0.0
+
+        return {
+            'standard_accuracy': standard_accuracy,
+            'deployment_accuracy': deployment_accuracy,
+            'accepted_accuracy': accepted_accuracy,
+            'rejection_rate': rejection_rate,
+            'n_total': n_total,
+            'n_accepted': n_accepted,
+            'n_rejected': n_rejected,
+            'confidence_threshold': confidence_threshold,
+            'smoothing_window': smoothing_window,
+            'mean_confidence': float(np.mean(max_confidences)),
+            'min_confidence': float(np.min(max_confidences)),
+            'final_predictions': y_pred.tolist(),
+        }
+
     def get_feature_importance(self) -> Optional[Dict[str, float]]:
         """Get feature importance scores if available."""
         if self.model is None:

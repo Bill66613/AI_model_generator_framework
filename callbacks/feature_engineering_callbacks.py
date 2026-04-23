@@ -175,7 +175,7 @@ def register_callbacks(app):
         n_axes = n_accel + n_gyro
         n_mag_groups = (1 if n_accel > 0 else 0) + (1 if n_gyro > 0 else 0)
         jerk_feats = 3 if n_accel >= 2 else 0
-        freq_per_mag = 7  # DFT features per magnitude group
+        freq_per_mag = 10  # DFT features per magnitude group (7 spectral + 3 shape stats)
 
         feature_counts = {
             'orientation_invariant_time_only': (
@@ -196,14 +196,14 @@ def register_callbacks(app):
                 'Fully deployable to all targets.'
             ),
             'all': (
-                f'{15 * n_axes + 8 * n_axes} features',
-                f'Per-axis time-domain ({15 * n_axes}) + per-axis frequency-domain ({8 * n_axes}). '
+                f'{15 * n_axes + 11 * n_axes} features',
+                f'Per-axis time-domain ({15 * n_axes}) + per-axis frequency-domain ({11 * n_axes}). '
                 'Per-axis freq features are NOT deployable — only orientation-robust '
                 'DFT is implemented in code generators.'
             ),
             'frequency_domain': (
-                f'{8 * n_axes} features',
-                f'Per-axis frequency-domain only ({8 * n_axes} features). '
+                f'{11 * n_axes} features',
+                f'Per-axis frequency-domain only ({11 * n_axes} features). '
                 'Per-axis freq features are NOT deployable. '
                 'Use "Orientation Invariant" which includes deployable DFT on magnitudes.'
             ),
@@ -474,8 +474,9 @@ def register_callbacks(app):
                     )
                 elif feature_method == 'orientation_invariant':
                     # Orientation-robust magnitude features + FFT
-                    # 47 features (33 time + 14 freq)
-                    # WARNING: FFT features NOT supported in C++ deployment
+                    # 53 features (33 time + 20 freq)
+                    # Deployable in C++: orientation-robust magnitude FFT features
+                    # (per-axis FFT modes remain non-deployable)
                     feature_df = create_feature_vector(
                         df_window, sensor_cols, sampling_rate,
                         include_frequency=True,

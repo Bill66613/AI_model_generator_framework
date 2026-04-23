@@ -162,7 +162,71 @@ class TestModelTraining:
         # Test prediction
         predictions = model.predict(X.head(5))
         assert len(predictions) == 5
-    
+
+    def test_evaluate_with_confidence_threshold_metrics(self):
+        """Test confidence-threshold evaluation metrics on known probabilities."""
+        model = EdgeMLModel('random_forest')
+        mock_model = Mock()
+        mock_model.predict.return_value = np.array([0, 1, 1, 1, 0])
+        mock_model.predict_proba.return_value = np.array([
+            [0.80, 0.20],  # accepted, correct
+            [0.55, 0.45],  # rejected
+            [0.20, 0.80],  # accepted, correct
+            [0.45, 0.55],  # rejected
+            [0.70, 0.30],  # accepted, wrong
+        ])
+        model.model = mock_model
+
+        X_test = pd.DataFrame({
+            'f1': [1.0, 2.0, 3.0, 4.0, 5.0],
+            'f2': [5.0, 4.0, 3.0, 2.0, 1.0],
+        })
+        y_test = pd.Series([0, 0, 1, 1, 1])
+
+        results = model.evaluate_with_confidence_threshold(
+            X_test, y_test, confidence_threshold=0.6)
+
+        assert results['n_total'] == 5
+        assert results['n_accepted'] == 3
+        assert results['n_rejected'] == 2
+        assert results['rejection_rate'] == pytest.approx(0.4)
+        assert results['accepted_accuracy'] == pytest.approx(2 / 3)
+        assert results['deployment_accuracy'] == pytest.approx(0.4)
+        assert results['final_predictions'] == [0, -1, 1, -1, 0]
+
+    def test_evaluate_with_confidence_threshold_smoothing_unknown_tie(self):
+        """Smoothing should count unknown votes and let unknown win ties (C++ parity)."""
+        model = EdgeMLModel('random_forest')
+        mock_model = Mock()
+        mock_model.predict.return_value = np.array([0, 1, 1, 0, 1])
+        mock_model.predict_proba.return_value = np.array([
+            [0.90, 0.10],  # accepted -> 0
+            [0.55, 0.45],  # rejected -> -1
+            [0.10, 0.90],  # accepted -> 1
+            [0.52, 0.48],  # rejected -> -1
+            [0.05, 0.95],  # accepted -> 1
+        ])
+        model.model = mock_model
+
+        X_test = pd.DataFrame({
+            'f1': [1.0, 2.0, 3.0, 4.0, 5.0],
+            'f2': [5.0, 4.0, 3.0, 2.0, 1.0],
+        })
+        y_test = pd.Series([0, 1, 1, 0, 1])
+
+        results = model.evaluate_with_confidence_threshold(
+            X_test, y_test, confidence_threshold=0.6, smoothing_window=3)
+
+        # raw accepted/rejected => [0, -1, 1, -1, 1]
+        # smoothing (unknown wins ties) => [0, -1, -1, -1, 1]
+        assert results['final_predictions'] == [0, -1, -1, -1, 1]
+        assert results['n_total'] == 5
+        assert results['n_accepted'] == 2
+        assert results['n_rejected'] == 3
+        assert results['rejection_rate'] == pytest.approx(0.6)
+        assert results['accepted_accuracy'] == pytest.approx(1.0)
+        assert results['deployment_accuracy'] == pytest.approx(0.4)
+
     def test_model_save_load(self, sample_data, tmp_path):
         """Test model saving and loading functionality."""
         data, labels = sample_data
@@ -191,6 +255,42 @@ class TestModelTraining:
         # Test that loaded model can make predictions
         predictions = loaded_model.predict(X.head(3))
         assert len(predictions) == 3
+
+
+class TestTrainingCallbacks:
+    """Test training-callback helper behavior."""
+
+    def test_get_fe_train_files_uses_latest_fe_run(self, tmp_path):
+        """Only the latest FE dataset should be used for training."""
+        from callbacks.training_callbacks import _get_fe_train_files
+
+        training_dir = tmp_path / "training"
+        training_dir.mkdir()
+
+        old_name = "running_still_walking_downstairs_walking_upstairs"
+        new_name = "running_still_walking"
+
+        # Old FE run
+        (training_dir / f"{old_name}_fe_metadata.json").write_text("{}")
+        pd.DataFrame({"f1": [1.0], "label": ["running"]}).to_csv(
+            training_dir / f"{old_name}_train.csv", index=False
+        )
+
+        # New FE run
+        (training_dir / f"{new_name}_fe_metadata.json").write_text("{}")
+        pd.DataFrame({"f1": [2.0], "label": ["walking"]}).to_csv(
+            training_dir / f"{new_name}_train.csv", index=False
+        )
+
+        # Ensure deterministic "latest" ordering by mtime
+        old_meta = training_dir / f"{old_name}_fe_metadata.json"
+        new_meta = training_dir / f"{new_name}_fe_metadata.json"
+        os.utime(old_meta, (1, 1))
+        os.utime(new_meta, (2, 2))
+
+        train_files = _get_fe_train_files(str(training_dir))
+
+        assert train_files == [str(training_dir / f"{new_name}_train.csv")]
 
 
 class TestCallbacks:

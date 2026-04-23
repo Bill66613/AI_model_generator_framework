@@ -103,22 +103,31 @@ def _cpp_magnitude_stats(data: np.ndarray) -> dict:
 def _cpp_dft_features(data: np.ndarray, sampling_rate: float) -> dict:
     """Re-implementation of C++ DFT magnitude feature extraction.
 
-    Mirrors base_generator.py lines ~560-620.
+    Mirrors base_generator.py extract_frequency_features():
+    DC removal → Hann window → DFT → spectral stats.
     """
     n = len(data)
     half_n = n // 2
     freq_step = sampling_rate / n
 
-    # Direct DFT (k=1..half_n)
+    # Step 1: DC removal
+    sig_mean = np.mean(data)
+
+    # Step 2+3: Hann window + DFT (inline, matching C++ implementation)
+    pi_over_nm1 = math.pi / (n - 1)
     dft_mag = []
     dft_freq = []
     for k in range(1, half_n + 1):
         re = 0.0
         im = 0.0
+        angle_step = 2.0 * math.pi * k / n
         for i in range(n):
-            angle = 2.0 * math.pi * k * i / n
-            re += data[i] * math.cos(angle)
-            im -= data[i] * math.sin(angle)
+            # Hann window: 0.5 - 0.5*cos(2*PI*i/(N-1))
+            w = 0.5 - 0.5 * math.cos(2.0 * pi_over_nm1 * i)
+            val = (data[i] - sig_mean) * w  # DC-removed + windowed
+            angle = angle_step * i
+            re += val * math.cos(angle)
+            im -= val * math.sin(angle)
         mag = math.sqrt(re * re + im * im)
         dft_mag.append(mag)
         dft_freq.append(k * freq_step)
@@ -164,6 +173,30 @@ def _cpp_dft_features(data: np.ndarray, sampling_rate: float) -> dict:
             rolloff_freq = dft_freq[k]
             break
 
+    # Spectral shape descriptors (RMS, skewness, kurtosis of bins)
+    sq_sum = np.sum(dft_mag ** 2)
+    spec_rms = math.sqrt(sq_sum / half_n) if half_n > 0 else 0.0
+    spec_mean = mag_sum / half_n if half_n > 0 else 0.0
+    spec_var = (sq_sum / half_n - spec_mean * spec_mean) if half_n > 0 else 0.0
+    spec_std = math.sqrt(spec_var) if spec_var > 0 else 0.0001
+
+    m3 = 0.0
+    m4 = 0.0
+    for m in dft_mag:
+        z = (m - spec_mean) / (spec_std + 1e-7)
+        z2 = z * z
+        m3 += z2 * z
+        m4 += z2 * z2
+    nn = half_n
+    spec_skew = 0.0
+    spec_kurt = 0.0
+    if nn > 2:
+        spec_skew = (m3 / nn) * (nn * (nn + 1)) / ((nn - 1) * (nn - 2))
+    if nn > 3:
+        raw_kurt = m4 / nn
+        spec_kurt = ((nn + 1) * raw_kurt - 3.0 * (nn - 1)) * (nn - 1) / ((nn - 2) * (nn - 3))
+        # excess kurtosis (Fisher)
+
     return {
         'dominant_frequency': dominant_frequency,
         'dominant_frequency_magnitude': dominant_frequency_magnitude,
@@ -172,6 +205,9 @@ def _cpp_dft_features(data: np.ndarray, sampling_rate: float) -> dict:
         'energy_mid_freq': energy_mid,
         'energy_high_freq': energy_high,
         'spectral_rolloff': rolloff_freq,
+        'spectral_rms': spec_rms,
+        'spectral_skewness': spec_skew,
+        'spectral_kurtosis': spec_kurt,
     }
 
 
@@ -272,17 +308,7 @@ class TestTimeDomainParity:
 
 class TestFrequencyDomainParity:
     """Compare Python extract_frequency_magnitude_features() with C++ DFT.
-
-    Known difference: Python FFT with ``fft_freq > 0`` uses 74 bins (excludes
-    Nyquist at k=n/2 for even n), while C++ DFT loops ``k=1..n/2`` producing
-    75 bins (includes Nyquist).  This causes small differences in spectral
-    centroid, rolloff, and high-freq energy.  We use 5% tolerance for features
-    affected by this extra bin.
     """
-
-    # Features sensitive to the extra Nyquist bin
-    NYQUIST_SENSITIVE = {'spectral_centroid', 'spectral_rolloff',
-                         'energy_high_freq'}
 
     def _check_dft_features(self, py_feats, prefix, mag_data):
         cpp_dft = _cpp_dft_features(mag_data, 100.0)
@@ -291,12 +317,8 @@ class TestFrequencyDomainParity:
             assert py_col in py_feats.columns, f"Missing: {py_col}"
             py_val = py_feats[py_col].iloc[0]
 
-            if feat_name in self.NYQUIST_SENSITIVE:
-                # Wider tolerance: Nyquist bin causes ~1-3% drift
-                tol = max(1.0, 0.05 * abs(py_val))
-            else:
-                # Standard tolerance
-                tol = max(0.1, 0.01 * abs(py_val))
+            # Standard tolerance
+            tol = max(0.1, 0.01 * abs(py_val))
 
             assert abs(cpp_val - py_val) < tol, (
                 f"{py_col}: C++_DFT={cpp_val:.4f}, Python_FFT={py_val:.4f}")
@@ -326,11 +348,11 @@ class TestFeatureCounts:
             orientation_robust=True, include_per_axis=False)
         assert feats.shape[1] == 33, f"Expected 33, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
 
-    def test_orientation_invariant_47(self, synthetic_window):
+    def test_orientation_invariant_53(self, synthetic_window):
         feats = create_feature_vector(
             synthetic_window, include_frequency=True,
             orientation_robust=True, include_per_axis=False)
-        assert feats.shape[1] == 47, f"Expected 47, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
+        assert feats.shape[1] == 53, f"Expected 53, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
 
     def test_time_domain_90(self, synthetic_window):
         feats = create_feature_vector(
@@ -338,11 +360,11 @@ class TestFeatureCounts:
             orientation_robust=False, include_per_axis=True)
         assert feats.shape[1] == 90, f"Expected 90, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
 
-    def test_all_features_138(self, synthetic_window):
+    def test_all_features_156(self, synthetic_window):
         feats = create_feature_vector(
             synthetic_window, include_frequency=True,
             orientation_robust=False, include_per_axis=True)
-        assert feats.shape[1] == 138, f"Expected 138, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
+        assert feats.shape[1] == 156, f"Expected 156, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
 
 
 # ---------------------------------------------------------------------------
