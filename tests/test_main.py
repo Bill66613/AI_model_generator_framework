@@ -257,6 +257,42 @@ class TestModelTraining:
         assert len(predictions) == 3
 
 
+class TestTrainingCallbacks:
+    """Test training-callback helper behavior."""
+
+    def test_get_fe_train_files_uses_latest_fe_run(self, tmp_path):
+        """Only the latest FE dataset should be used for training."""
+        from callbacks.training_callbacks import _get_fe_train_files
+
+        training_dir = tmp_path / "training"
+        training_dir.mkdir()
+
+        old_name = "running_still_walking_downstairs_walking_upstairs"
+        new_name = "running_still_walking"
+
+        # Old FE run
+        (training_dir / f"{old_name}_fe_metadata.json").write_text("{}")
+        pd.DataFrame({"f1": [1.0], "label": ["running"]}).to_csv(
+            training_dir / f"{old_name}_train.csv", index=False
+        )
+
+        # New FE run
+        (training_dir / f"{new_name}_fe_metadata.json").write_text("{}")
+        pd.DataFrame({"f1": [2.0], "label": ["walking"]}).to_csv(
+            training_dir / f"{new_name}_train.csv", index=False
+        )
+
+        # Ensure deterministic "latest" ordering by mtime
+        old_meta = training_dir / f"{old_name}_fe_metadata.json"
+        new_meta = training_dir / f"{new_name}_fe_metadata.json"
+        os.utime(old_meta, (1, 1))
+        os.utime(new_meta, (2, 2))
+
+        train_files = _get_fe_train_files(str(training_dir))
+
+        assert train_files == [str(training_dir / f"{new_name}_train.csv")]
+
+
 class TestCallbacks:
     """Test Dash callback functions."""
     
