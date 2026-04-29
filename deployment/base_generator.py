@@ -1499,14 +1499,16 @@ void loop() {{
             int predicted_class = har_predict(features, &confidence);
 
             // Update persistent prediction
-            if (predicted_class >= 0) {{
+            if (predicted_class >= 0 && confidence >= CONFIDENCE_THRESHOLD) {{
                 last_activity = get_activity_name(predicted_class);
+            }} else {{
+                last_activity = "unknown";
             }}
 
             // Debug: log prediction details (lines starting with # are ignored by parser)
             Serial.print("# PRED: class="); Serial.print(predicted_class);
             Serial.print(" conf="); Serial.print(confidence, 4);
-            Serial.print(" name="); Serial.println(predicted_class >= 0 ? last_activity : "none");
+            Serial.print(" name="); Serial.println(predicted_class >= 0 ? get_activity_name(predicted_class) : "none");
 
             // Shift buffer for overlap: keep the last overlap portion
             int keep_samples = WINDOW_SIZE - (int)buffer_index_shift;

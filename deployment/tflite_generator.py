@@ -601,9 +601,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         sketch.append(f"        // Update persistent prediction")
         sketch.append(f"        if (predicted >= 0 && confidence >= CONFIDENCE_THRESHOLD) {{")
         sketch.append(f"            last_activity = get_activity_name(predicted);")
-        sketch.append(f"        }} else if (predicted >= 0) {{")
-        sketch.append(f"            // Below threshold — still update so Device Test tab shows something")
-        sketch.append(f"            last_activity = get_activity_name(predicted);")
+        sketch.append(f"        }} else {{")
+        sketch.append(f"            last_activity = \"unknown\";")
         sketch.append(f"        }}")
         sketch.append(f"")
 

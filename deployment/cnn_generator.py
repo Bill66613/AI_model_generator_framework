@@ -288,14 +288,16 @@ void loop() {{
         if (window_ready) {{
             float confidence = 0.0f;
             int prediction = har_predict_from_window(sensor_window, &confidence);
-            if (prediction >= 0) {{
+            if (prediction >= 0 && confidence >= CONFIDENCE_THRESHOLD) {{
                 last_activity = get_activity_name(prediction);
+            }} else {{
+                last_activity = "unknown";
             }}
 
             // Debug: log prediction (lines starting with # are ignored by parser)
             Serial.print("# PRED: class="); Serial.print(prediction);
             Serial.print(" conf="); Serial.print(confidence, 4);
-            Serial.print(" name="); Serial.println(prediction >= 0 ? last_activity : "none");
+            Serial.print(" name="); Serial.println(prediction >= 0 ? get_activity_name(prediction) : "none");
 
             window_ready = false;   // wait for next full window
         }}
