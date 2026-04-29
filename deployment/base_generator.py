@@ -556,9 +556,10 @@ const char* get_activity_name(int class_id) {{
             )
         else:
             # Arduino and Arduino-like (ESP32, Seeed XIAO, Teensy, ARM Cortex-M)
+            # Use snprintf to handle printf-style format args portably across all Arduino cores
             return (
                 '// Platform-portable logging (Arduino)\n'
-                '#define HAR_LOG(fmt, ...) do { Serial.println(fmt); } while(0)\n'
+                '#define HAR_LOG(fmt, ...) do { char _lbuf[128]; snprintf(_lbuf, sizeof(_lbuf), fmt, ##__VA_ARGS__); Serial.println(_lbuf); } while(0)\n'
                 '#define HAR_LOG_FLOAT(label, val) do { Serial.print(label); Serial.print(": "); Serial.println(val, 4); } while(0)'
             )
 
@@ -1490,14 +1491,22 @@ void loop() {{
         buffer_index++;
 
         // Check if buffer is full → run inference
-        const char* activity_name = NULL;
+        static const char* last_activity = NULL;
         if (buffer_index >= WINDOW_SIZE) {{
             // Extract features and predict BEFORE overlap copy
             extract_features(sensor_buffer, WINDOW_SIZE, features);
             float confidence = 0.0f;
             int predicted_class = har_predict(features, &confidence);
 
-{self._generate_smoothing_prediction_logic()}
+            // Update persistent prediction
+            if (predicted_class >= 0) {{
+                last_activity = get_activity_name(predicted_class);
+            }}
+
+            // Debug: log prediction details (lines starting with # are ignored by parser)
+            Serial.print("# PRED: class="); Serial.print(predicted_class);
+            Serial.print(" conf="); Serial.print(confidence, 4);
+            Serial.print(" name="); Serial.println(predicted_class >= 0 ? last_activity : "none");
 
             // Shift buffer for overlap: keep the last overlap portion
             int keep_samples = WINDOW_SIZE - (int)buffer_index_shift;
@@ -1510,16 +1519,16 @@ void loop() {{
         }}
 
         // Always output sensor CSV (for Device Test graph plotting)
-        // Append prediction only on inference cycles
+        // Append last prediction on every line so Device Test tab always has it
         Serial.print(aX, 4); Serial.print(",");
         Serial.print(aY, 4); Serial.print(",");
         Serial.print(aZ, 4); Serial.print(",");
         Serial.print(gX, 4); Serial.print(",");
         Serial.print(gY, 4); Serial.print(",");
         Serial.print(gZ, 4);
-        if (activity_name != NULL) {{
+        if (last_activity != NULL) {{
             Serial.print(",");
-            Serial.print(activity_name);
+            Serial.print(last_activity);
         }}
         Serial.println();
     }}

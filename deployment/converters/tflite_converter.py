@@ -169,16 +169,9 @@ class TFLiteConverter:
         model = tf.keras.Sequential()
         model.add(tf.keras.layers.InputLayer(input_shape=(n_features,)))
 
-        # Add scaler as a normalization layer if available
-        if hasattr(self.model_object, 'scaler') and self.model_object.scaler is not None:
-            scaler = self.model_object.scaler
-            mean = scaler.mean_.astype(np.float32)
-            std = scaler.scale_.astype(np.float32)
-            # Use Lambda or custom normalization
-            norm_layer = tf.keras.layers.Normalization(
-                mean=mean, variance=std**2
-            )
-            model.add(norm_layer)
+        # NOTE: Do NOT embed the scaler here as a Normalization layer.
+        # The C++ har_predict() wrapper applies StandardScaler before calling the model.
+        # Embedding the scaler would cause double-scaling (C++ scales, then TFLite scales again).
 
         # Hidden layers: Dense + ReLU
         for i, (w, b) in enumerate(zip(coefs[:-1], intercepts[:-1])):
@@ -428,7 +421,17 @@ class TFLiteConverter:
 
     def _apply_quantization(self, converter, quantization: str,
                             representative_data: Optional[np.ndarray] = None):
-        """Apply quantization settings to a TFLite converter."""
+        """Apply quantization settings to a TFLite converter.
+
+        TFLite Micro only supports two quantization modes:
+          - float32  (no quantization)
+          - Full INT8  (both weights AND activations in INT8, float32 I/O allowed)
+
+        Dynamic-range / hybrid quantization (weights INT8, activations float32) is
+        NOT supported by TFLite Micro and causes "Hybrid models are not supported"
+        at AllocateTensors() time.  We therefore always apply full INT8 by generating
+        synthetic representative data when real calibration data is unavailable.
+        """
         import tensorflow as tf
 
         if quantization == 'none':
@@ -437,31 +440,74 @@ class TFLiteConverter:
         if quantization == 'float16':
             converter.optimizations = [tf.lite.Optimize.DEFAULT]
             converter.target_spec.supported_types = [tf.float16]
+            return
 
-        elif quantization == 'int8':
+        if quantization in ('int8', 'int16'):
             converter.optimizations = [tf.lite.Optimize.DEFAULT]
-            if representative_data is not None:
+
+            # Determine input shape for representative data generation
+            n_features = len(self.feature_names)
+            window_size = self.model_params.get('window_size_samples', 150)
+            n_channels = self.model_params.get('n_channels', 6)
+            is_cnn = self.model_type == 'pytorch_cnn'
+
+            if representative_data is None:
+                # Generate synthetic representative data centred around 0
+                # (features are StandardScaler-normalised, so ~N(0,1) is realistic)
+                n_samples = 200
+                if is_cnn:
+                    representative_data = np.random.normal(
+                        0, 1, (n_samples, window_size, n_channels)
+                    ).astype(np.float32)
+                else:
+                    representative_data = np.random.normal(
+                        0, 1, (n_samples, n_features)
+                    ).astype(np.float32)
+                logger.warning(
+                    "No representative data for INT8 quantization — using synthetic "
+                    "N(0,1) samples.  For better accuracy, provide real calibration data."
+                )
+
+            if quantization == 'int8':
+                # Capture representative_data in closure (must be a stable reference)
+                _rep_data = representative_data
+
                 def representative_dataset():
-                    for i in range(min(100, len(representative_data))):
-                        yield [representative_data[i:i+1].astype(np.float32)]
+                    for i in range(min(200, len(_rep_data))):
+                        yield [_rep_data[i:i+1].astype(np.float32)]
+
                 converter.representative_dataset = representative_dataset
+                # Full INT8 for all ops — required by TFLite Micro.
+                # experimental_new_quantizer forces calibration-based (not dynamic-range) path.
+                converter.optimizations = [tf.lite.Optimize.DEFAULT]
                 converter.target_spec.supported_ops = [
                     tf.lite.OpsSet.TFLITE_BUILTINS_INT8
                 ]
-                converter.inference_input_type = tf.int8
-                converter.inference_output_type = tf.int8
-            else:
-                # Dynamic range quantization (weights only, no calibration needed)
-                logger.warning(
-                    "No representative data for INT8. Using dynamic range quantization "
-                    "(weights-only). Provide representative_data for full INT8."
-                )
+                # Keep I/O as float32 so the sketch feeds plain floats.
+                # TFLite Micro will insert dequantize/quantize ops at the boundary.
+                converter.inference_input_type = tf.float32
+                converter.inference_output_type = tf.float32
+                # Force calibration-based full integer quantization (avoids hybrid fallback)
+                try:
+                    converter.experimental_new_quantizer = True
+                except AttributeError:
+                    pass  # Older TF versions — try anyway without it
 
-        elif quantization == 'int16':
-            converter.optimizations = [tf.lite.Optimize.DEFAULT]
-            converter.target_spec.supported_ops = [
-                tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8
-            ]
+            elif quantization == 'int16':
+                _rep_data = representative_data
+
+                def representative_dataset():
+                    for i in range(min(200, len(_rep_data))):
+                        yield [_rep_data[i:i+1].astype(np.float32)]
+
+                converter.representative_dataset = representative_dataset
+                converter.target_spec.supported_ops = [
+                    tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8
+                ]
+                try:
+                    converter.experimental_new_quantizer = True
+                except AttributeError:
+                    pass
 
     def save(self, filepath: str) -> str:
         """Save the TFLite model to a file."""
@@ -522,3 +568,83 @@ class TFLiteConverter:
         lines.append(f"const unsigned int {variable_name}_len = {len(data)};")
 
         return '\n'.join(lines)
+
+    def enumerate_ops(self) -> List[str]:
+        """
+        Enumerate the unique TFLite builtin operators used in the model.
+
+        Returns a list of op names matching the MicroMutableOpResolver
+        method names, e.g. ['Quantize', 'Conv2D', 'Reshape', ...].
+
+        These are needed to build a MicroMutableOpResolver<N> with exactly
+        the ops the model requires.
+        """
+        if self._tflite_bytes is None:
+            self.convert()
+
+        data = self._tflite_bytes
+
+        # Map BuiltinOperator enum values to MicroMutableOpResolver method suffixes
+        BUILTIN_OP_NAMES = {
+            0: 'Add',               # ADD
+            1: 'AveragePool2D',     # AVERAGE_POOL_2D
+            2: 'Concatenation',     # CONCATENATION
+            3: 'Conv2D',            # CONV_2D
+            4: 'DepthwiseConv2D',   # DEPTHWISE_CONV_2D
+            6: 'Dequantize',        # DEQUANTIZE
+            9: 'FullyConnected',    # FULLY_CONNECTED
+            14: 'Logistic',         # LOGISTIC
+            17: 'MaxPool2D',        # MAX_POOL_2D
+            18: 'Mul',              # MUL
+            22: 'Reshape',          # RESHAPE
+            25: 'Softmax',          # SOFTMAX
+            27: 'Sub',              # SUB
+            29: 'Pad',              # PAD
+            40: 'Mean',             # MEAN
+            47: 'Maximum',          # MAXIMUM
+            54: 'ArgMax',           # ARG_MAX
+            56: 'TransposeConv',    # TRANSPOSE_CONV
+            70: 'ExpandDims',       # EXPAND_DIMS
+            80: 'Abs',              # ABS
+            87: 'Tanh',             # TANH
+            97: 'StridedSlice',     # STRIDED_SLICE
+            114: 'Quantize',        # QUANTIZE
+        }
+
+        # Parse the flatbuffer to extract operator codes
+        try:
+            from tensorflow.lite.python import schema_py_generated as schema_fb
+            buf = bytearray(data)
+            model_fb = schema_fb.ModelT.InitFromPackedBuf(buf, 0)
+
+            op_codes = model_fb.operatorCodes
+            subgraph = model_fb.subgraphs[0]
+
+            # Collect unique opcode indices used
+            used_opcode_indices = set()
+            for op in subgraph.operators:
+                used_opcode_indices.add(op.opcodeIndex)
+
+            # Map to builtin codes
+            unique_ops = set()
+            for idx in used_opcode_indices:
+                oc = op_codes[idx]
+                code = oc.builtinCode if oc.builtinCode != 0 else oc.deprecatedBuiltinCode
+                if code in BUILTIN_OP_NAMES:
+                    unique_ops.add(BUILTIN_OP_NAMES[code])
+                else:
+                    logger.warning(f"Unknown TFLite op code {code} — add it to the resolver manually")
+                    unique_ops.add(f'UnknownOp{code}')
+
+            result = sorted(unique_ops)
+            logger.info(f"TFLite model uses {len(result)} ops: {result}")
+            return result
+
+        except Exception as e:
+            logger.warning(f"Could not enumerate TFLite ops: {e}")
+            # Fallback: return common ops for the model type
+            if self.model_type == 'pytorch_cnn':
+                return ['Conv2D', 'Dequantize', 'ExpandDims', 'FullyConnected',
+                        'MaxPool2D', 'Mean', 'Quantize', 'Reshape', 'Softmax']
+            else:
+                return ['Dequantize', 'FullyConnected', 'Quantize', 'Softmax']

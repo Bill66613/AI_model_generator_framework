@@ -284,29 +284,33 @@ void loop() {{
         }}
 
         // Run inference when a full window is available
-        const char* activity_name = NULL;
+        static const char* last_activity = NULL;
         if (window_ready) {{
             float confidence = 0.0f;
             int prediction = har_predict_from_window(sensor_window, &confidence);
             if (prediction >= 0) {{
-                activity_name = get_activity_name(prediction);
-            }} else {{
-                activity_name = "unknown";
+                last_activity = get_activity_name(prediction);
             }}
+
+            // Debug: log prediction (lines starting with # are ignored by parser)
+            Serial.print("# PRED: class="); Serial.print(prediction);
+            Serial.print(" conf="); Serial.print(confidence, 4);
+            Serial.print(" name="); Serial.println(prediction >= 0 ? last_activity : "none");
+
             window_ready = false;   // wait for next full window
         }}
 
         // Always output sensor CSV (for Device Test graph plotting)
-        // Append prediction only on inference cycles
+        // Append last prediction on every line so Device Test tab always has it
         Serial.print(aX, 4); Serial.print(",");
         Serial.print(aY, 4); Serial.print(",");
         Serial.print(aZ, 4); Serial.print(",");
         Serial.print(gX, 4); Serial.print(",");
         Serial.print(gY, 4); Serial.print(",");
         Serial.print(gZ, 4);
-        if (activity_name != NULL) {{
+        if (last_activity != NULL) {{
             Serial.print(",");
-            Serial.print(activity_name);
+            Serial.print(last_activity);
         }}
         Serial.println();
     }}
@@ -757,128 +761,13 @@ static void dense(const float *input, float *output,
 
         return "\n".join(lines)
 
-    # ---- platform-specific IMU code (mirrors base_generator) ----
+    # ---- platform-specific IMU code (delegates to base_generator) ----
 
     def _get_platform_specific_code(self) -> dict:
-        """Get platform-specific code snippets, matching base_generator.
+        """Get platform-specific code snippets.
 
-        Returns the same dict structure as BaseCodeGenerator._get_platform_specific_code()
-        so the CNN Arduino sketch can use the identical IMU initialisation and
-        sensor-reading code that works for feature-based models.
+        Delegates to ``BaseCodeGenerator._get_platform_specific_code()`` so
+        that any future changes to IMU init, sensor reading, or conversion
+        constants automatically propagate here.
         """
-        if self.platform == 'seeed_xiao':
-            return {
-                'includes': """#include <LSM6DS3.h>
-#include <Wire.h>
-
-//Create a instance of class LSM6DS3
-LSM6DS3 myIMU(I2C_MODE, 0x6A);  //I2C device address 0x6A""",
-                'defines': """/* Constant defines -------------------------------------------------------- */
-#define CONVERT_G_TO_MS2 9.80665f
-#define MAX_ACCEPTED_RANGE 2.0f""",
-                'imu_init': """    // Initialize I2C bus first
-    Wire.begin();
-    delay(100);  // Give I2C time to stabilize
-
-    // Initialize IMU sensor
-    Serial.println("Initializing IMU sensor...");
-
-    // LSM6DS3 begin() returns 0 on SUCCESS, non-zero on failure
-    if (myIMU.begin() != 0) {
-        Serial.println("Failed to initialize IMU!");
-        Serial.println("Trying alternate I2C address 0x6B...");
-
-        LSM6DS3 myIMU_alt(I2C_MODE, 0x6B);
-        if (myIMU_alt.begin() != 0) {
-            Serial.println("IMU not found at 0x6A or 0x6B");
-            while (1) { delay(100); }
-        } else {
-            Serial.println("IMU found at address 0x6B!");
-        }
-    } else {
-        Serial.println("IMU initialized successfully at 0x6A!");
-    }""",
-                'sensor_read': """        // Read sensor data from IMU
-        float aX = myIMU.readFloatAccelX() * CONVERT_G_TO_MS2;
-        float aY = myIMU.readFloatAccelY() * CONVERT_G_TO_MS2;
-        float aZ = myIMU.readFloatAccelZ() * CONVERT_G_TO_MS2;
-        float gX = myIMU.readFloatGyroX();
-        float gY = myIMU.readFloatGyroY();
-        float gZ = myIMU.readFloatGyroZ();"""
-            }
-
-        elif self.platform == 'm5stack':
-            # M5StickC Plus2 with built-in IMU via M5Unified
-            return {
-                'includes': '#include "M5StickCPlus2.h"',
-                'defines': """#define CONVERT_G_TO_MS2 9.80665f""",
-                'imu_init': """    // Initialize M5StickC Plus2
-    auto cfg = M5.config();
-    StickCP2.begin(cfg);
-
-    Serial.println("M5StickC Plus2 initialized!");
-    StickCP2.Display.setRotation(1);
-    StickCP2.Display.setTextColor(GREEN);
-    StickCP2.Display.setTextDatum(middle_center);
-    StickCP2.Display.setFont(&fonts::FreeSansBold9pt7b);
-    StickCP2.Display.setTextSize(1);
-    StickCP2.Display.setCursor(0, 40);
-    StickCP2.Display.printf("HAR CNN Model Ready\\r\\n");""",
-                'sensor_read': """        // Read sensor data from M5StickC Plus2 IMU
-        float aX = 0, aY = 0, aZ = 0, gX = 0, gY = 0, gZ = 0;
-        if (StickCP2.Imu.update()) {
-            auto imu_data = StickCP2.Imu.getImuData();
-
-            // Convert accelerometer from G to m/s²
-            aX = imu_data.accel.x * CONVERT_G_TO_MS2;
-            aY = imu_data.accel.y * CONVERT_G_TO_MS2;
-            aZ = imu_data.accel.z * CONVERT_G_TO_MS2;
-
-            // Gyroscope in degrees/sec
-            gX = imu_data.gyro.x;
-            gY = imu_data.gyro.y;
-            gZ = imu_data.gyro.z;
-        }"""
-            }
-
-        elif self.platform == 'esp32':
-            return {
-                'includes': """#include <Wire.h>
-#include "MPU6886.h"
-
-MPU6886 IMU;""",
-                'defines': """#define CONVERT_G_TO_MS2 9.80665f""",
-                'imu_init': """    Wire.begin();
-    Serial.println("Initializing IMU sensor...");
-    if (IMU.Init() != 0) {
-        Serial.println("Failed to initialize IMU!");
-        while (1) delay(100);
-    }
-    Serial.println("IMU initialized successfully!");""",
-                'sensor_read': """        float aX, aY, aZ, gX, gY, gZ;
-        IMU.getAccelData(&aX, &aY, &aZ);
-        IMU.getGyroData(&gX, &gY, &gZ);
-        aX *= CONVERT_G_TO_MS2;
-        aY *= CONVERT_G_TO_MS2;
-        aZ *= CONVERT_G_TO_MS2;"""
-            }
-
-        else:  # Generic Arduino
-            return {
-                'includes': """// Include your IMU library here
-// #include <Adafruit_MPU6050.h>
-// #include <Adafruit_Sensor.h>
-#include <Wire.h>""",
-                'defines': """#define CONVERT_G_TO_MS2 9.80665f""",
-                'imu_init': """    Wire.begin();
-    Serial.println("Initializing IMU sensor...");
-    // Add your IMU initialization code here
-    Serial.println("IMU initialized!");""",
-                'sensor_read': """        // Read sensor data (replace with your IMU library calls)
-        float aX = 0.0f;  // Replace with actual accelerometer X
-        float aY = 0.0f;  // Replace with actual accelerometer Y
-        float aZ = 9.8f;  // Replace with actual accelerometer Z
-        float gX = 0.0f;  // Replace with actual gyroscope X
-        float gY = 0.0f;  // Replace with actual gyroscope Y
-        float gZ = 0.0f;  // Replace with actual gyroscope Z"""
-            }
+        return super()._get_platform_specific_code()
