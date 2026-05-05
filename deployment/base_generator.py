@@ -589,32 +589,39 @@ const char* get_activity_name(int class_id) {{
         lines = [
             f'// Kalman filter: constant-velocity model, Q_scale={q}, R={r}, fs={fs}Hz',
             f'// Causal (forward-only) — {parity_note}',
-            f'#define KALMAN_DT {self._float_literal(dt)}f',
+            f'#define KALMAN_DT {self._float_literal(dt)}',
             f'',
             f'// Per-channel Kalman state',
             f'static float kalman_x[N_CHANNELS][2];   // [position, velocity]',
             f'static float kalman_P[N_CHANNELS][2][2]; // error covariance',
+            f'static bool  kalman_initialized[N_CHANNELS]; // lazy-init flag',
             f'',
             f'// Process noise covariance (constant)',
             f'static const float kalman_Q[2][2] = {{',
-            f'    {{{self._float_literal(q00)}f, {self._float_literal(q01)}f}},',
-            f'    {{{self._float_literal(q01)}f, {self._float_literal(q11)}f}}',
+            f'    {{{self._float_literal(q00)}, {self._float_literal(q01)}}},',
+            f'    {{{self._float_literal(q01)}, {self._float_literal(q11)}}}',
             f'}};',
-            f'static const float kalman_R = {self._float_literal(r)}f;',
+            f'static const float kalman_R = {self._float_literal(r)};',
             f'',
             f'void kalman_filter_reset(void) {{',
             f'    for (int ch = 0; ch < N_CHANNELS; ch++) {{',
-            f'        kalman_x[ch][0] = 0.0f;',
-            f'        kalman_x[ch][1] = 0.0f;',
-            f'        kalman_P[ch][0][0] = kalman_R;',
-            f'        kalman_P[ch][0][1] = 0.0f;',
-            f'        kalman_P[ch][1][0] = 0.0f;',
-            f'        kalman_P[ch][1][1] = kalman_R;',
+            f'        kalman_initialized[ch] = false;',
             f'    }}',
             f'}}',
             f'',
             f'void kalman_filter_sample(float raw[N_CHANNELS]) {{',
             f'    for (int ch = 0; ch < N_CHANNELS; ch++) {{',
+            f'        // --- Lazy-init from first measurement (matches Python: x = [z[0], 0]) ---',
+            f'        if (!kalman_initialized[ch]) {{',
+            f'            kalman_x[ch][0] = raw[ch];',
+            f'            kalman_x[ch][1] = 0.0f;',
+            f'            kalman_P[ch][0][0] = kalman_R;',
+            f'            kalman_P[ch][0][1] = 0.0f;',
+            f'            kalman_P[ch][1][0] = 0.0f;',
+            f'            kalman_P[ch][1][1] = kalman_R;',
+            f'            kalman_initialized[ch] = true;',
+            f'        }}',
+            f'',
             f'        // --- Predict ---',
             f'        float x0 = kalman_x[ch][0] + KALMAN_DT * kalman_x[ch][1];',
             f'        float x1 = kalman_x[ch][1];',
@@ -675,6 +682,7 @@ const char* get_activity_name(int class_id) {{
             # Use snprintf to handle printf-style format args portably across all Arduino cores
             return (
                 '// Platform-portable logging (Arduino)\n'
+                '#include <stdio.h>\n'
                 '#define HAR_LOG(fmt, ...) do { char _lbuf[128]; snprintf(_lbuf, sizeof(_lbuf), fmt, ##__VA_ARGS__); Serial.println(_lbuf); } while(0)\n'
                 '#define HAR_LOG_FLOAT(label, val) do { Serial.print(label); Serial.print(": "); Serial.println(val, 4); } while(0)'
             )
@@ -1599,7 +1607,7 @@ void loop() {{
         }}
         #endif
 
-        // Apply on-device Kalman filter (exact parity with training)
+        // Apply on-device Kalman filter ({'exact parity with training' if self._has_kalman_parity() else 'device-only — model trained without Kalman'})
         #ifdef KALMAN_FILTER_ENABLED
         {{
             float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};
@@ -1627,12 +1635,10 @@ void loop() {{
             float confidence = 0.0f;
             int predicted_class = har_predict(features, &confidence);
 
-            // Update persistent prediction
-            if (predicted_class >= 0 && confidence >= CONFIDENCE_THRESHOLD) {{
-                last_activity = get_activity_name(predicted_class);
-            }} else {{
-                last_activity = "unknown";
-            }}
+            const char* activity_name = NULL;
+{self._generate_smoothing_prediction_logic()}
+            // Update persistent last_activity (keeps last known label between inference cycles)
+            if (activity_name != NULL) last_activity = activity_name;
 
             // Debug: log prediction details (lines starting with # are ignored by parser)
             Serial.print("# PRED: class="); Serial.print(predicted_class);

@@ -108,6 +108,10 @@ def kalman_filter(data, process_noise=1e-3, measurement_noise=1e-1, fs=None):
         z = data[col].values.astype(np.float64)
         n = len(z)
 
+        if n == 0:
+            result[col] = z
+            continue
+
         # Initialize state with first measurement
         x = np.array([z[0], 0.0], dtype=np.float64)
         P = np.eye(2, dtype=np.float64) * measurement_noise

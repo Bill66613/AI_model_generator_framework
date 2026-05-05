@@ -100,8 +100,13 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         n_features = len(self.feature_names)
         n_classes = len(self.classes)
         is_quantized = self.tflite_quantization in ('int8', 'int16')
-        # Bytes per value: 1 for INT8 internal tensors, 4 for float32
-        bpv = 1 if is_quantized else 4
+        # Bytes per value: 1 for INT8 internal tensors, 2 for INT16, 4 for float32
+        if self.tflite_quantization == 'int16':
+            bpv = 2
+        elif self.tflite_quantization == 'int8':
+            bpv = 1
+        else:
+            bpv = 4
 
         if self.model_type == 'pytorch_cnn':
             window_size = self.model_data.get('model_params', {}).get(
@@ -220,7 +225,6 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
             lines.append("bool tflite_init();")
             lines.append("void tflite_print_info();")
             lines.append(f"int tflite_predict_window(float sensor_data[WINDOW_SIZE][N_CHANNELS], float probabilities[NUM_CLASSES]);")
-            lines.append(f"int har_predict_from_window(float sensor_data[WINDOW_SIZE][N_CHANNELS], float* confidence);")
         else:
             lines.append("// TFLite Micro inference function")
             lines.append("bool tflite_init();")

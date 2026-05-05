@@ -889,8 +889,12 @@ class TFLiteConverter:
                 if code in BUILTIN_OP_NAMES:
                     unique_ops.add(BUILTIN_OP_NAMES[code])
                 else:
-                    logger.warning(f"Unknown TFLite op code {code} — add it to the resolver manually")
-                    unique_ops.add(f'UnknownOp{code}')
+                    logger.warning(
+                        f"Unknown TFLite op code {code} — skipping; add it to "
+                        f"BUILTIN_OP_NAMES in tflite_converter.py and re-generate."
+                    )
+                    # Do not add a placeholder — UnknownOp{code} does not exist
+                    # in MicroMutableOpResolver and would break compilation.
 
             result = sorted(unique_ops)
             logger.info(f"TFLite model uses {len(result)} ops: {result}")
