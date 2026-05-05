@@ -1,11 +1,11 @@
-# HƯỚNG DẪN HOÀN THIỆN BÁO CÁO LUẬN VĂN
+# THESIS REPORT INSTRUCTIONS (Agent Working Notes)
 
 **Last updated:** 2026-05-05  
-**Version:** 5.2 (sync upcoming PR#3: TFLite deployment scope + Kalman preprocessing + CNN metadata fix)  
-**Sinh viên:** Nguyễn Trường Minh Hoàng (MSSV: 2270757)  
-**Đề tài:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người  
-**GVHD:** TS. Lê Trọng Nhân  
-**Yêu cầu ngôn ngữ:** Tiếng Việt (theo quy định chương trình Thạc sĩ)
+**Version:** 5.3 (English-only instruction file for agent; thesis content stays Vietnamese)  
+**Student:** Nguyễn Trương Minh Hoàng (MSSV: 2270757)  
+**Thesis topic:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người  
+**Supervisor:** TS. Lê Trọng Nhân  
+**Thesis language requirement:** Vietnamese (per program requirements)
 
 ---
 
@@ -13,7 +13,7 @@
 
 **What is this file?** Master checklist and guide for completing the Vietnamese thesis report. Tracks what's done, what's pending, and provides LaTeX snippets ready to paste.
 
-**Current blocking action:** Chạy lại huấn luyện và đo kiểm triển khai sau các thay đổi mới (PR\#3): (1) bật Kalman filter (tiền xử lý causal), (2) kiểm chứng luồng TFLite cho NN/CNN, và (3) thu thập số liệu độ chính xác/độ trễ thực tế để thay thế các con số placeholder ở Ch.4.
+**Current blocking action:** Retrain + re-measure after PR\#3: (1) validate Kalman (causal) preprocessing, (2) validate TFLite flow for NN/CNN, and (3) collect real accuracy/latency numbers to replace placeholders in Ch.4.
 
 **Narrative direction:** Thesis now emphasizes **multi-device deployment capability**. Seeed XIAO nRF52840 is the **reference benchmark platform**, not the sole target device.
 
@@ -32,22 +32,22 @@
 
 ### Key Technical Findings (detail in TECHNICAL_FINDINGS.md)
 
-Các phát hiện kỹ thuật quan trọng cần phản ánh trong báo cáo:
-1. **Zero-padding artifact** → FIXED → edge-value replication (CRITICAL for defense)
-2. **Kurtosis formula mismatch** → FIXED → population std in all generators
-3. **NN bias default prediction** → DOCUMENTED → explains "always predicts walking_downstairs"
-4. **FFT precision gap** → RESOLVED → time-domain only features
-5. **Edge-replication distortion + tiny dataset** → DATA QUALITY → need longer recordings
-6. **Double standardization** → FIXED → FE tab no longer scales; training pipeline scales once
-7. **Feature order mismatch** → FIXED → reorder remapping at code-gen time
-8. **Double extraction** → FIXED → `extract_real_model_parameters()` called once, not twice
-9. **CNN validation false positives** → FIXED → Validator now architecture-aware (CNN vs feature-based)
-10. **Confidence threshold for unknown activity rejection** → IMPLEMENTED → safer real-world deployment
-11. **Class-aware data augmentation** → IMPLEMENTED → protects static activities from class confusion
-12. **Multi-device deployment matrix already implemented in codebase** → DOCUMENTED → thesis should frame XIAO as reference platform, not sole target
-13. **(PR#3) CNN metadata mismatch** → FIXED → tránh hiển thị sai số lượng đặc trưng/kênh khi code-gen
-14. **(PR#3) Kalman filter causal + parity** → IMPLEMENTED → lọc nhiễu có thể triển khai đồng nhất Python⟷C++
-15. **(PR#3) TFLite deployment scope** → CLARIFIED → RF/SVM không khả dụng do hạn chế onnx2tf/ONNX-ML
+Key technical findings to reflect in the thesis (see `TECHNICAL_FINDINGS.md` for evidence):
+1. **Zero-padding artifact** → FIXED → edge-value replication (critical defense point)
+2. **Kurtosis/skewness formula mismatch** → FIXED → population std for z-scores in all generators
+3. **NN bias / default prediction behavior** → DOCUMENTED (explains “always predicts walking_downstairs” under distribution shift)
+4. **FFT precision gap** → RESOLVED via design choice (time-domain only features for exact parity)
+5. **Edge-replication still distorts if dataset is tiny** → DATA QUALITY issue (needs longer recordings)
+6. **Double standardization** → FIXED (scale once in training pipeline)
+7. **Feature order mismatch (Python alphabet vs C++ compute order)** → FIXED (reorder at code-gen)
+8. **Double extraction bug undoing reorder** → FIXED
+9. **CNN validation false positives** → FIXED (architecture-aware validator)
+10. **Confidence threshold for unknown rejection** → IMPLEMENTED (deployment safety)
+11. **Class-aware data augmentation protection** → IMPLEMENTED
+12. **Multi-device deployment matrix is already implemented** → DOCUMENTED (XIAO is reference, not sole target)
+13. **(PR#3) CNN metadata mismatch** → FIXED (consistent feature/channel count in UI/code-gen)
+14. **(PR#3) Kalman filter (causal) + parity** → IMPLEMENTED
+15. **(PR#3) TFLite deployment scope** → CLARIFIED (RF/SVM not convertible via onnx2tf/ONNX-ML)
 
 ---
 
@@ -68,50 +68,50 @@ Các phát hiện kỹ thuật quan trọng cần phản ánh trong báo cáo:
 
 ---
 
-## 🔁 CẬP NHẬT THEO PR\#3 (SẼ MERGE)
+## PR\#3 NOTES (Upcoming Merge)
 
-### Nội dung mới cần đồng bộ vào luận văn
-1. **Triển khai TFLite/TFLite Micro**: Chỉ áp dụng cho các mô hình NN/CNN; RF/SVM không chuyển đổi được vì các toán tử ONNX-ML (TreeEnsembleClassifier) không có tương đương trong TensorFlow (onnx2tf không hỗ trợ).
-2. **Tiền xử lý Kalman filter**: Bổ sung tùy chọn lọc nhiễu causal (forward-only) để tránh chênh lệch so với các bộ lọc kiểu \texttt{filtfilt} (không causal) và bảo đảm training-deployment parity.
-3. **Sửa mismatch metadata CNN**: Đồng bộ lại logic hiển thị/suy luận số chiều đặc trưng/kênh đối với mô hình CNN để tránh nhầm lẫn ở UI và thư mục code-gen.
+### What changes matter for the thesis narrative
+1. **TFLite/TFLite Micro deployment**: only NN/CNN are applicable; RF/SVM cannot be converted because they rely on ONNX-ML operators (TreeEnsembleClassifier) that onnx2tf does not support.
+2. **Kalman preprocessing**: add a causal (forward-only) denoising option to avoid the parity gap of filtfilt-style filters.
+3. **CNN metadata mismatch**: fix inconsistent feature/channel reporting between training artifacts, UI, and code-gen naming.
 
-### Các điểm cần viết ngắn gọn nhưng “đủ ý”
-- Ch.3: thêm một tiểu mục ngắn mô tả Kalman (mục tiêu, tính causal, tham số chính).
-- Ch.3/Ch.5: làm rõ phạm vi TFLite (NN/CNN) và lý do kỹ thuật RF/SVM không phù hợp.
-- Ch.4: thêm bảng/đoạn báo cáo ảnh hưởng Kalman (nếu có số liệu) và so sánh độ trễ/độ chính xác giữa C++ thuần vs TFLite (nếu đo được).
+### Where to update in LaTeX (keep it concise)
+- Ch.3: add a short subsection on Kalman (goal, causal property, key parameters).
+- Ch.3/Ch.5: clarify the TFLite scope (NN/CNN) and why RF/SVM are not applicable.
+- Ch.4: add a table/paragraph for Kalman impact (if numbers available) and compare latency/accuracy between native C++ vs TFLite (if measured).
 
 ---
 
-## ✅ DANH SÁCH THỨ CẦN BẠN (USER) HỖ TRỢ/ CUNG CẤP
+## ✅ WHAT I NEED FROM YOU (To Replace Placeholders)
 
-> Mục tiêu: thay placeholder bằng số liệu thật + ảnh minh họa.
+Goal: replace placeholders with real numbers + figures.
 
-1. **Ảnh chụp UI (PNG)**
-   - Tab Data (upload + preview)
-   - Tab Preprocess (cửa sổ kéo thả + tuỳ chọn lọc, nếu có)
-   - Tab Feature Engineering (chọn feature set + augmentation)
-   - Tab Train (kết quả train + confusion matrix)
-   - Tab Code Gen (chọn platform/backend + file output)
-   - Tab Device Test (serial output / live inference)
+1. **UI screenshots (PNG)**
+   - Data tab (upload + preview)
+   - Preprocess tab (draggable windows + filter toggle if present)
+   - Feature Engineering tab (feature mode + augmentation)
+   - Train tab (training results + confusion matrix)
+   - Code Gen tab (platform/backend selection + output files)
+   - Device Test tab (serial output / live inference)
 
-2. **Kết quả huấn luyện sau thay đổi mới**
-   - Accuracy + macro F1 trên test set (ít nhất cho NN và RF/SVM nếu còn dùng)
-   - Confusion matrix hình ảnh
-   - Thông tin cấu hình: window size, stride, feature mode, augmentation on/off, Kalman on/off
+2. **Training results after the latest changes**
+   - Accuracy + macro F1 on test set (at least NN; include RF/SVM if still used)
+   - Confusion matrix image
+   - Config: window size, stride, feature mode, augmentation on/off, Kalman on/off
 
-3. **Kết quả triển khai thiết bị thực (reference platform: XIAO)**
-   - Thời gian suy luận (ms): tách phần trích xuất đặc trưng và phần dự đoán
-   - Nhận xét về ổn định dự đoán (có/không dùng smoothing + confidence threshold)
-   - Nếu có: log/CSV vài phiên test (để trích số liệu và dẫn chứng)
+3. **Real-device deployment results (reference platform: XIAO)**
+   - Latency (ms): separate feature extraction vs prediction
+   - Notes on prediction stability (with/without smoothing + confidence threshold)
+   - If available: a short log/CSV from a few test sessions
 
-4. **Kết quả triển khai TFLite/TFLite Micro (nếu áp dụng)**
-   - Bạn đang chạy trên mục tiêu nào (PC / MCU / simulator)
-   - Độ trễ và độ chính xác so với C++ thuần
-   - Ghi chú: xác nhận RF/SVM không chuyển đổi được (log lỗi onnx2tf) để trích dẫn minh chứng
+4. **TFLite/TFLite Micro results (if applicable)**
+   - Target (PC / MCU / simulator)
+   - Latency and accuracy vs native C++
+   - Evidence logs: RF/SVM conversion failure output from onnx2tf (for citation)
 
-5. **Vấn đề “khác orientation/mounting”**
-   - Mô tả 2–3 kịch bản gắn thiết bị (ảnh hoặc mô tả)
-   - 1–2 đoạn dữ liệu ngắn cho mỗi kịch bản (CSV) để minh họa mức suy giảm
+5. **Orientation/mounting mismatch problem**
+   - Describe 2–3 mounting orientations (photo or short description)
+   - Provide 1–2 short CSV segments per orientation to quantify degradation
 
 
 ---
