@@ -94,9 +94,8 @@ def kalman_filter(data, process_noise=1e-3, measurement_noise=1e-1, fs=None):
     # State transition matrix: [pos, vel] -> [pos + vel*dt, vel]
     F = np.array([[1, dt],
                   [0, 1]], dtype=np.float64)
-    # Measurement matrix: we observe position only
-    H = np.array([[1, 0]], dtype=np.float64)
     # Process noise covariance
+    # (Measurement matrix H = [1, 0] is implicit in the scalar update below)
     Q = process_noise * np.array([[dt**3 / 3, dt**2 / 2],
                                   [dt**2 / 2, dt]], dtype=np.float64)
     # Measurement noise covariance

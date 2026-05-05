@@ -915,11 +915,14 @@ class TFLiteConverter:
                     unique_ops.add(BUILTIN_OP_NAMES[code])
                 else:
                     logger.warning(
-                        f"Unknown TFLite op code {code} — skipping; add it to "
-                        f"BUILTIN_OP_NAMES in tflite_converter.py and re-generate."
+                        f"Unknown TFLite op code {code} encountered. "
+                        f"Falling back to AllOpsResolver for safe compilation. "
+                        f"To use MicroMutableOpResolver (smaller binary), add op code {code} "
+                        f"to BUILTIN_OP_NAMES in tflite_converter.py and re-generate."
                     )
-                    # Do not add a placeholder — UnknownOp{code} does not exist
-                    # in MicroMutableOpResolver and would break compilation.
+                    # Return None so the generator falls back to AllOpsResolver.
+                    # An incomplete MicroMutableOpResolver would compile but fail at runtime.
+                    return None
 
             result = sorted(unique_ops)
             logger.info(f"TFLite model uses {len(result)} ops: {result}")

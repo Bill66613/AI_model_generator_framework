@@ -339,8 +339,25 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         return '\n'.join(lines)
 
     def _generate_resolver_code(self) -> list:
-        """Generate MicroMutableOpResolver registration code based on actual model ops."""
+        """Generate MicroMutableOpResolver registration code based on actual model ops.
+
+        If the model uses an op that isn't yet in BUILTIN_OP_NAMES (enumerate_ops
+        returns None), we fall back to AllOpsResolver for safe compilation.
+        AllOpsResolver is larger but guarantees no missing-op runtime failures.
+        """
         ops = self._tflite_ops
+        # None means convert_model() was not called, OR enumerate_ops() hit an unknown op.
+        # Distinguish by checking whether conversion has happened.
+        if ops is None and self._tflite_bytes is not None:
+            # enumerate_ops() returned None due to an unknown op — use AllOpsResolver
+            lines = []
+            lines.append("    // WARNING: model contains an unrecognized op code.")
+            lines.append("    // Using AllOpsResolver for safe compilation; for a smaller binary,")
+            lines.append("    // add the missing op to BUILTIN_OP_NAMES in tflite_converter.py.")
+            lines.append("    #include \"tensorflow/lite/micro/all_ops_resolver.h\"")
+            lines.append("    static tflite::AllOpsResolver resolver;")
+            return lines
+
         if not ops:
             # Fallback if convert_model() wasn't called yet
             if self.model_type == 'pytorch_cnn':
