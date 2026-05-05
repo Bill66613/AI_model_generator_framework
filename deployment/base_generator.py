@@ -537,20 +537,27 @@ const char* get_activity_name(int class_id) {{
     def _has_kalman_filter(self) -> bool:
         """Check if on-device Kalman filter should be generated.
 
-        Enabled when the user opts in via the deployment UI AND
-        Kalman filtering was applied during training preprocessing.
+        Enabled when the user opts in via the deployment UI.
         Unlike IIR (filtfilt vs lfilter), the Kalman filter is inherently
-        causal — training and deployment produce identical results.
+        causal — so it's safe to add at deployment even if training
+        didn't use it (model receives cleaner input, generally beneficial).
         """
-        return (self.enable_kalman_filter
-                and bool(self.preprocessing.get('kalman_filter')))
+        return self.enable_kalman_filter
+
+    def _has_kalman_parity(self) -> bool:
+        """Return True if Kalman was also used during training (exact parity)."""
+        return bool(self.preprocessing.get('kalman_filter'))
 
     def _generate_kalman_filter_declarations(self) -> str:
         """Generate Kalman filter function declarations for the header."""
         if not self._has_kalman_filter():
             return ''
+        if self._has_kalman_parity():
+            comment = '// On-device Kalman filter (exact parity with training preprocessing)'
+        else:
+            comment = '// On-device Kalman filter (device-only — training did not use Kalman)'
         return (
-            '\n// On-device Kalman filter (exact parity with training preprocessing)\n'
+            f'\n{comment}\n'
             '#define KALMAN_FILTER_ENABLED 1\n'
             'void kalman_filter_sample(float raw[N_CHANNELS]);\n'
             'void kalman_filter_reset(void);\n'
@@ -576,9 +583,12 @@ const char* get_activity_name(int class_id) {{
         q01 = q * (dt ** 2) / 2.0
         q11 = q * dt
 
+        parity_note = ('identical to Python training pipeline'
+                       if self._has_kalman_parity()
+                       else 'device-only — model trained without Kalman')
         lines = [
             f'// Kalman filter: constant-velocity model, Q_scale={q}, R={r}, fs={fs}Hz',
-            f'// Causal (forward-only) — identical to Python training pipeline',
+            f'// Causal (forward-only) — {parity_note}',
             f'#define KALMAN_DT {self._float_literal(dt)}f',
             f'',
             f'// Per-channel Kalman state',

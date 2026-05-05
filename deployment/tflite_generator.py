@@ -203,10 +203,7 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         """TFLite-specific header declarations."""
         # Trigger lazy conversion so _tflite_bytes and _arena_size are populated
         if self._tflite_bytes is None:
-            try:
-                self.convert_model()
-            except Exception:
-                pass  # Will use fallback values below
+            self.convert_model()  # Let exceptions propagate
 
         lines = []
         lines.append("")
@@ -232,13 +229,12 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         return '\n'.join(lines)
 
     def _generate_model_specific_implementation(self) -> str:
-        """Generate the TFLite model C byte array."""
+        """Generate the TFLite model C byte array.
+
+        Raises ImportError/ValueError if conversion fails — caller must handle.
+        """
         if self._tflite_c_array is None:
-            try:
-                self.convert_model()
-            except (ImportError, ValueError) as e:
-                # Generate placeholder if TF not available or model_object missing
-                return self._generate_placeholder_model(str(e))
+            self.convert_model()  # Let exceptions propagate — UI will show failure
 
         return self._tflite_c_array
 

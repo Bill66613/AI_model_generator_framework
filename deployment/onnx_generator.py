@@ -101,12 +101,12 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         return '\n'.join(lines)
 
     def _generate_model_specific_implementation(self) -> str:
-        """Generate the ONNX model as embedded C byte array."""
+        """Generate the ONNX model as embedded C byte array.
+
+        Raises ImportError/ValueError if conversion fails — caller must handle.
+        """
         if self._onnx_bytes is None:
-            try:
-                self.convert_model()
-            except (ImportError, ValueError) as e:
-                return self._generate_placeholder_model(str(e))
+            self.convert_model()  # Let exceptions propagate — UI will show failure
 
         return self._generate_onnx_c_array()
 

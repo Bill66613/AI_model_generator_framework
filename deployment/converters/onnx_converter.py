@@ -73,12 +73,15 @@ class ONNXConverter:
         self._onnx_model = None
         self._onnx_bytes = None
 
-    def convert(self, opset_version: int = 13) -> bytes:
+    def convert(self, opset_version: int = 13, include_scaler: bool = True) -> bytes:
         """
         Convert the model to ONNX format.
 
         Args:
             opset_version: ONNX opset version (default: 13, good compatibility)
+            include_scaler: Whether to include the StandardScaler in the ONNX
+                graph as a Pipeline. Set False when the target runtime (e.g.
+                onnx2tf) doesn't support the 'Scaler' ONNX op.
 
         Returns:
             ONNX model as bytes
@@ -90,11 +93,11 @@ class ONNXConverter:
         if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
             return self._convert_pytorch(opset_version)
         elif self.model_type in ('random_forest', 'neural_network', 'svm'):
-            return self._convert_sklearn(opset_version)
+            return self._convert_sklearn(opset_version, include_scaler=include_scaler)
         else:
             raise ValueError(f"Unsupported model type for ONNX conversion: {self.model_type}")
 
-    def _convert_sklearn(self, opset_version: int) -> bytes:
+    def _convert_sklearn(self, opset_version: int, include_scaler: bool = True) -> bytes:
         """Convert sklearn model (RF, SVM, MLP) to ONNX via skl2onnx."""
         try:
             import onnx
@@ -111,8 +114,12 @@ class ONNXConverter:
         n_features = len(self.feature_names)
 
         # Build the sklearn pipeline (scaler + model) if scaler exists
+        # Note: onnx2tf doesn't support the 'Scaler' ONNX op, so when
+        # include_scaler=False we export the raw model only (expects pre-scaled input)
         from sklearn.pipeline import Pipeline
-        if hasattr(self.model_object, 'scaler') and self.model_object.scaler is not None:
+        if (include_scaler and
+                hasattr(self.model_object, 'scaler') and
+                self.model_object.scaler is not None):
             pipeline = Pipeline([
                 ('scaler', self.model_object.scaler),
                 ('model', sklearn_model)
