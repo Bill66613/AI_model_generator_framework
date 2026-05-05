@@ -468,55 +468,6 @@ class TFLiteConverter:
         self._conversion_info['surrogate_agreement'] = float(agreement)
         return model
 
-    def _check_onnx_tf_deps(self):
-        """Pre-check all dependencies needed for RF/SVM → TFLite conversion.
-
-        Raises ImportError with a clear actionable message if any dep is missing.
-        """
-        missing = []
-        try:
-            import onnx  # noqa: F401
-        except ImportError:
-            missing.append('onnx')
-        try:
-            import skl2onnx  # noqa: F401
-        except ImportError:
-            missing.append('skl2onnx')
-
-        # Need either onnx_tf or onnx2tf for ONNX → TF SavedModel
-        # Both have fragile dependency chains, so we try a FULL import
-        bridge_errors = []
-        has_bridge = False
-        try:
-            from onnx_tf.backend import prepare  # noqa: F401
-            has_bridge = True
-        except Exception as e:
-            bridge_errors.append(f"onnx-tf: {e}")
-        if not has_bridge:
-            try:
-                from onnx2tf import convert  # noqa: F401
-                has_bridge = True
-            except Exception as e:
-                bridge_errors.append(f"onnx2tf: {e}")
-
-        if not has_bridge:
-            missing.append('ONNX→TF bridge')
-
-        if missing:
-            detail = ""
-            if bridge_errors:
-                detail = "\n\nBridge import errors:\n  " + "\n  ".join(bridge_errors)
-            raise ImportError(
-                f"TFLite conversion for {self.model_type} requires a working ONNX→TF bridge.\n"
-                f"Missing components: {', '.join(missing)}.{detail}\n\n"
-                f"Install with:\n"
-                f"  pip install onnx skl2onnx onnx2tf tf_keras onnx_graphsurgeon psutil\n\n"
-                f"💡 RECOMMENDED ALTERNATIVE: Use 'Direct C/C++ Code Generation' instead.\n"
-                f"   For Random Forest and SVM, direct code generation produces standalone C++\n"
-                f"   with no runtime dependency — smaller binary, faster inference, and no\n"
-                f"   extra packages needed. TFLite Micro is mainly beneficial for Neural Networks."
-            )
-
     def _try_convert_via_onnx(self, quantization: str,
                               representative_data: Optional[np.ndarray]) -> Optional[bytes]:
         """Attempt ONNX → TFLite conversion; return None if deps unavailable.
