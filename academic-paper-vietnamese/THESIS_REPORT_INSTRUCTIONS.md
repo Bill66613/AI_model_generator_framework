@@ -1,25 +1,25 @@
 # HƯỚNG DẪN HOÀN THIỆN BÁO CÁO LUẬN VĂN
 
-**Last updated:** 2026-05-05  
-**Version:** 5.2 (sync upcoming PR#3: TFLite deployment scope + Kalman preprocessing + CNN metadata fix)  
-**Sinh viên:** Nguyễn Trường Minh Hoàng (MSSV: 2270757)  
+**Cập nhật lần cuối:** 2026-05-05  
+**Phiên bản:** 5.2 (đồng bộ nội dung dự kiến merge từ PR\#3: phạm vi TFLite, tiền xử lý Kalman, và sửa metadata CNN)  
+**Sinh viên:** Nguyễn Trương Minh Hoàng (MSSV: 2270757)  
 **Đề tài:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người  
 **GVHD:** TS. Lê Trọng Nhân  
 **Yêu cầu ngôn ngữ:** Tiếng Việt (theo quy định chương trình Thạc sĩ)
 
 ---
 
-## QUICK CONTEXT (Read this first in any new session)
+## TÓM TẮT NHANH (đọc trước khi làm việc)
 
-**What is this file?** Master checklist and guide for completing the Vietnamese thesis report. Tracks what's done, what's pending, and provides LaTeX snippets ready to paste.
+**Mục đích của tệp này:** Danh sách công việc trọng tâm và hướng dẫn để hoàn thiện báo cáo luận văn (tiếng Việt). Tệp theo dõi trạng thái các chương, các việc còn thiếu, và cung cấp các đoạn LaTeX có thể chèn trực tiếp.
 
 **Current blocking action:** Chạy lại huấn luyện và đo kiểm triển khai sau các thay đổi mới (PR\#3): (1) bật Kalman filter (tiền xử lý causal), (2) kiểm chứng luồng TFLite cho NN/CNN, và (3) thu thập số liệu độ chính xác/độ trễ thực tế để thay thế các con số placeholder ở Ch.4.
 
-**Narrative direction:** Thesis now emphasizes **multi-device deployment capability**. Seeed XIAO nRF52840 is the **reference benchmark platform**, not the sole target device.
+**Hướng trình bày:** Báo cáo nhấn mạnh **khả năng triển khai đa thiết bị**. Seeed XIAO nRF52840 là **nền tảng benchmark tham chiếu**, không phải đích duy nhất.
 
-### Report Completion Status
+### Trạng thái hoàn thiện báo cáo
 
-| Chapter | File | Status | Blocking Issue |
+| Chương | Tệp | Trạng thái | Vướng mắc |
 |---------|------|--------|---------------|
 | Ch.1 Giới thiệu | `chapters/main/introduction.tex` | ✅ Reframed for multi-device deployment | Collect more cross-device benchmark evidence if available |
 | Ch.2 Công trình liên quan | `chapters/main/relatedwork.tex` | ✅ Written in Vietnamese | — |
@@ -30,49 +30,49 @@
 | References | `references.bib` | ✅ Updated | Added 11 new refs (augmentation, confidence, parity, calibration) |
 | Figures | `figures/` | ❌ Missing | Need confusion matrix, architecture, UI screenshots |
 
-### Key Technical Findings (detail in TECHNICAL_FINDINGS.md)
+### Các phát hiện kỹ thuật quan trọng (chi tiết trong `TECHNICAL_FINDINGS.md`)
 
 Các phát hiện kỹ thuật quan trọng cần phản ánh trong báo cáo:
-1. **Zero-padding artifact** → FIXED → edge-value replication (CRITICAL for defense)
-2. **Kurtosis formula mismatch** → FIXED → population std in all generators
-3. **NN bias default prediction** → DOCUMENTED → explains "always predicts walking_downstairs"
-4. **FFT precision gap** → RESOLVED → time-domain only features
-5. **Edge-replication distortion + tiny dataset** → DATA QUALITY → need longer recordings
-6. **Double standardization** → FIXED → FE tab no longer scales; training pipeline scales once
-7. **Feature order mismatch** → FIXED → reorder remapping at code-gen time
-8. **Double extraction** → FIXED → `extract_real_model_parameters()` called once, not twice
-9. **CNN validation false positives** → FIXED → Validator now architecture-aware (CNN vs feature-based)
-10. **Confidence threshold for unknown activity rejection** → IMPLEMENTED → safer real-world deployment
-11. **Class-aware data augmentation** → IMPLEMENTED → protects static activities from class confusion
-12. **Multi-device deployment matrix already implemented in codebase** → DOCUMENTED → thesis should frame XIAO as reference platform, not sole target
-13. **(PR#3) CNN metadata mismatch** → FIXED → tránh hiển thị sai số lượng đặc trưng/kênh khi code-gen
-14. **(PR#3) Kalman filter causal + parity** → IMPLEMENTED → lọc nhiễu có thể triển khai đồng nhất Python⟷C++
-15. **(PR#3) TFLite deployment scope** → CLARIFIED → RF/SVM không khả dụng do hạn chế onnx2tf/ONNX-ML
+1. **Lỗi đệm số không (zero-padding)** → ĐÃ SỬA → lặp giá trị biên (edge-value replication)
+2. **Sai khác công thức kurtosis/skewness** → ĐÃ SỬA → dùng độ lệch chuẩn quần thể (population std) đồng nhất giữa các generator
+3. **Thiên lệch dự đoán mặc định của NN** → ĐÃ GHI NHẬN → giải thích hành vi “luôn đoán walking\_downstairs” khi lệch phân phối
+4. **Sai khác độ chính xác FFT giữa Python và C++** → QUYẾT ĐỊNH THIẾT KẾ → ưu tiên đặc trưng miền thời gian để bảo đảm tương đồng
+5. **Dữ liệu ít + méo do padding dù đã edge-replication** → CHẤT LƯỢNG DỮ LIỆU → cần thu thập dài hơn
+6. **Chuẩn hoá kép (double standardization)** → ĐÃ SỬA → chỉ chuẩn hoá một lần trong pipeline huấn luyện
+7. **Sai thứ tự đặc trưng giữa Python (alphabet) và C++ (thứ tự tính)** → ĐÃ SỬA → remap khi code-gen
+8. **Trích xuất tham số kép làm mất tác dụng reorder** → ĐÃ SỬA → chỉ trích xuất một lần
+9. **Bộ kiểm tra CNN báo sai (validator không phân biệt kiến trúc)** → ĐÃ SỬA → nhánh kiểm tra theo kiến trúc
+10. **Ngưỡng tin cậy để từ chối hoạt động “không biết”** → ĐÃ HIỆN THỰC → tăng độ an toàn triển khai
+11. **Tăng cường dữ liệu có bảo vệ theo lớp** → ĐÃ HIỆN THỰC → giảm nhầm lẫn cho hoạt động tĩnh
+12. **Ma trận triển khai đa thiết bị đã có trong mã nguồn** → ĐÃ TÀI LIỆU HOÁ → viết luận văn theo hướng đa thiết bị, XIAO là tham chiếu
+13. **(PR#3) Sai metadata CNN** → ĐÃ SỬA → tránh hiển thị sai số lượng đặc trưng/kênh khi code-gen
+14. **(PR#3) Lọc Kalman (causal) và tương đồng triển khai** → ĐÃ HIỆN THỰC → lọc nhiễu có thể triển khai đồng nhất Python⟷C++
+15. **(PR#3) Phạm vi TFLite** → LÀM RÕ → RF/SVM không chuyển đổi được do hạn chế onnx2tf/ONNX-ML
 
 ---
 
-## SESSION LOG
+## NHẬT KÝ CẬP NHẬT
 
-| Date | Session | Changes Made |
+| Ngày | Phiên | Nội dung |
 |------|---------|-------------|
-| 2025-02-27 | Initial creation | Created with full TODO, LaTeX snippets, defense prep, glossary |
-| 2025-02-27 | Restructure v2.0 | Added Quick Context, Session Log, structured for cross-session AI use |
-| 2026-03-01 | Findings 6-8 | Added double standardization, feature order mismatch, double extraction to findings list |
-| 2026-03-05 | Finding 9 | Added CNN validation false positives — validator now architecture-aware |
-| 2026-03-25 | Consistency fixes | Fixed: 5/6 class count, 90/138 feature count, 75/150 window size, NN arch 90→100→5, added 6th objective to intro, removed duplicate BibTeX, added kurtosis verification to code gen, added power estimate disclaimer |
-| 2026-03-26 | Round 2 consistency | Fixed: per-class Support 1078→30 (match test set), NN "two hidden layers"→"one", SensiML pricing unified \$99-500/month across all chapters |
-| 2026-04-08 | Multi-device redirect | Reframed Ch.1/3/4/5/6 so thesis emphasizes multi-device deployment capability; XIAO now treated as reference benchmark platform |
-| 2026-05-05 | Sync PR\#3 | Added TODOs/placeholders for TFLite scope, Kalman preprocessing parity, and CNN metadata fix; updated requested evidence list |
+| 2025-02-27 | Khởi tạo | Tạo danh sách công việc, đoạn LaTeX mẫu, checklist bảo vệ, bảng thuật ngữ |
+| 2025-02-27 | Tái cấu trúc v2.0 | Thêm “Tóm tắt nhanh”, nhật ký cập nhật, tối ưu cho làm việc nhiều phiên |
+| 2026-03-01 | Bổ sung phát hiện 6–8 | Ghi nhận: chuẩn hoá kép, sai thứ tự đặc trưng, trích xuất tham số kép |
+| 2026-03-05 | Bổ sung phát hiện 9 | Ghi nhận lỗi validator CNN và hướng khắc phục |
+| 2026-03-25 | Sửa nhất quán | Đồng bộ số lớp, số đặc trưng, window/stride, kiến trúc NN; loại trùng BibTeX; bổ sung ghi chú ước tính điện năng |
+| 2026-03-26 | Sửa nhất quán vòng 2 | Đồng bộ Support theo test set; chỉnh mô tả kiến trúc NN; thống nhất giá SensiML |
+| 2026-04-08 | Chuyển trọng tâm “đa thiết bị” | Điều chỉnh Ch.1/3/4/5/6 để nhấn mạnh đa thiết bị; XIAO là nền tảng tham chiếu |
+| 2026-05-05 | Đồng bộ PR\#3 | Thêm TODO/placeholder cho TFLite, Kalman parity, và sửa metadata CNN; cập nhật danh sách số liệu cần bổ sung |
 
 *Add a row here each time this file is updated.*
 
 ---
 
-## 🔁 CẬP NHẬT THEO PR\#3 (SẼ MERGE)
+## 🔁 CẬP NHẬT THEO PR\#3 (DỰ KIẾN MERGE)
 
 ### Nội dung mới cần đồng bộ vào luận văn
-1. **Triển khai TFLite/TFLite Micro**: Chỉ áp dụng cho các mô hình NN/CNN; RF/SVM không chuyển đổi được vì các toán tử ONNX-ML (TreeEnsembleClassifier) không có tương đương trong TensorFlow (onnx2tf không hỗ trợ).
-2. **Tiền xử lý Kalman filter**: Bổ sung tùy chọn lọc nhiễu causal (forward-only) để tránh chênh lệch so với các bộ lọc kiểu \texttt{filtfilt} (không causal) và bảo đảm training-deployment parity.
+1. **Triển khai TFLite/TFLite Micro**: Chỉ áp dụng cho các mô hình NN/CNN; RF/SVM không chuyển đổi được vì các toán tử ONNX-ML (\texttt{TreeEnsembleClassifier}) không có tương đương trong TensorFlow (onnx2tf không hỗ trợ).
+2. **Tiền xử lý Kalman**: Bổ sung tùy chọn lọc nhiễu causal (chạy một chiều theo thời gian) để tránh chênh lệch so với bộ lọc kiểu \texttt{filtfilt} (không causal) và bảo đảm tương đồng huấn luyện–triển khai.
 3. **Sửa mismatch metadata CNN**: Đồng bộ lại logic hiển thị/suy luận số chiều đặc trưng/kênh đối với mô hình CNN để tránh nhầm lẫn ở UI và thư mục code-gen.
 
 ### Các điểm cần viết ngắn gọn nhưng “đủ ý”
@@ -82,7 +82,7 @@ Các phát hiện kỹ thuật quan trọng cần phản ánh trong báo cáo:
 
 ---
 
-## ✅ DANH SÁCH THỨ CẦN BẠN (USER) HỖ TRỢ/ CUNG CẤP
+## ✅ DANH SÁCH THÔNG TIN CẦN BẠN HỖ TRỢ/ CUNG CẤP
 
 > Mục tiêu: thay placeholder bằng số liệu thật + ảnh minh họa.
 
@@ -470,18 +470,17 @@ academic-paper-vietnamese/
 
 ---
 
-## DOCUMENT MAINTENANCE
+## HƯỚNG DẪN DUY TRÌ TÀI LIỆU
 
-### How to use this file across sessions
-1. **New session?** Read **QUICK CONTEXT** at the top — it shows report status and blocking actions in 10 seconds.
-2. **Completed a TODO?** Check the box `[x]` in the relevant priority section AND update the Report Completion Status table.
-3. **Found a new technical issue?** Document it in `TECHNICAL_FINDINGS.md` first, then add a summary + chapter-mapping entry to §"PHÁT HIỆN KỸ THUẬT" section of this file.
-4. **Updated a chapter?** Update the status table in Quick Context AND add a Session Log entry.
-5. **Working on defense prep?** See §"GHI NHỚ CHO BUỔI BẢO VỆ" for narrative, key slides, and Q&A prep.
+### Cách dùng tệp này qua nhiều phiên làm việc
+1. Đầu mỗi phiên: đọc mục **TÓM TẮT NHANH** ở đầu tệp để nắm trạng thái và việc đang bị chặn.
+2. Hoàn thành một việc: đánh dấu `[x]` ở đúng checklist và cập nhật bảng **Trạng thái hoàn thiện báo cáo**.
+3. Phát hiện lỗi/kết quả kỹ thuật mới: ghi chi tiết vào `TECHNICAL_FINDINGS.md`, sau đó bổ sung tóm tắt + chương liên quan vào mục **Các phát hiện kỹ thuật quan trọng** của tệp này.
+4. Cập nhật chương: thêm một dòng vào mục **NHẬT KÝ CẬP NHẬT**.
+5. Chuẩn bị bảo vệ: xem mục “GHI NHỚ CHO BUỔI BẢO VỆ” để tổng hợp lập luận, slide, và Q\&A.
 
-### Relationship between documentation files
-- **`.github/copilot-instructions.md`** — Technical instructions for AI coding agents (architecture, patterns, pitfalls). Points to this file and TECHNICAL_FINDINGS.md.
-- **`THESIS_REPORT_INSTRUCTIONS.md`** (this file) — Report completion roadmap: what chapters need what updates, LaTeX snippets, defense preparation.
-- **`TECHNICAL_FINDINGS.md`** — Detailed evidence for each finding (code, data, math). This file summarizes them; that file has the full evidence.
+### Quan hệ giữa các tệp tài liệu
+- `THESIS_REPORT_INSTRUCTIONS.md` (tệp này): lộ trình hoàn thiện báo cáo, checklist, đoạn LaTeX mẫu, và chuẩn bị bảo vệ.
+- `TECHNICAL_FINDINGS.md`: bằng chứng chi tiết cho từng phát hiện (mã nguồn, dữ liệu, công thức, ảnh hưởng).
 
-**Lưu ý cuối cùng:** Mỗi lần AI assistant tiếp tục làm việc trên báo cáo, hãy đọc **QUICK CONTEXT** section ở đầu file TRƯỚC để nắm bắt context và biết công việc nào cần làm.
+**Lưu ý:** Khi tiếp tục làm việc trên báo cáo, luôn đọc mục **TÓM TẮT NHANH** trước.
