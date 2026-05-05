@@ -1,74 +1,193 @@
-# KẾ HOẠCH CẬP NHẬT LUẬN VĂN - THESIS UPDATE PLAN
+# THESIS UPDATE PLAN — Comprehensive Session Plan
 
-**Ngày tạo:** 2026-05-05  
-**Phiên bản:** 1.0  
+**Date**: 2026-05-05  
+**Status**: Merged plan (our branch + develop branch)  
+**PR Context**: PR #3 (bugfix/tflite_deployment) will be merged — 21 files changed, 2 new findings, TFLite improvements  
 **Sinh viên:** Nguyễn Trường Minh Hoàng (MSSV: 2270757)  
 **Đề tài:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người
 
 ---
 
-## 📊 TÌNH TRẠNG HIỆN TẠI
+## EXECUTIVE SUMMARY
+
+The thesis is ~80% complete with most chapters written in Vietnamese. The main gaps are:
+
+1. **Technical Content**: Need to incorporate 2 new findings from PR #3 (Kalman filter, CNN metadata fix) + existing 14 findings
+2. **Data Collection**: Placeholder numbers in Chapter 4 need real experimental results
+3. **User Assets**: Missing UI screenshots, confusion matrices, deployment accuracy data
+4. **Structure**: Good overall narrative; needs polish and consistency checks
+
+---
+
+## 📊 FRAMEWORK STATUS
 
 ### Framework Code Status
 - ✅ **11+ Code Generators** hoàn thiện (RF, SVM, NN, CNN, ARM Cortex-M, MicroPython, Zephyr, etc.)
-- ✅ **14 Technical Findings** đã được ghi nhận và sửa chữa
+- ✅ **16 Technical Findings** đã được ghi nhận và sửa chữa (14 original + 2 from PR #3)
 - ✅ **6-tab End-to-End Workflow** từ dữ liệu thô đến triển khai thiết bị
 - ✅ **Multi-device Deployment Matrix** hỗ trợ 8+ vi xử lý
 - ✅ **Production-ready** với ~15,000+ dòng code Python
 
 ### Thesis Status Gap Analysis
-| Vietnamese Thesis (Official) | English Draft | Framework Reality |
-|-----|-----|-----|
-| ⚠️ Cần cập nhật từ v5.1 | ✅ Complete (~15,500 words) | ✅ Production-ready |
-| ❌ Thiếu 14 technical findings | ✅ Has comprehensive results | ✅ Has all 14 findings documented |
-| ❌ Thiếu figures/screenshots | ❌ Placeholder figures | ✅ Framework can generate figures |
-| ⚠️ Placeholder numbers | ❌ Needs real data | ✅ Can collect real experimental data |
+| Vietnamese Thesis (Official) | Framework Reality |
+|-----|-----|
+| ⚠️ Cần cập nhật | ✅ Production-ready |
+| ❌ Thiếu 16 technical findings | ✅ Has all findings documented |
+| ❌ Thiếu figures/screenshots | ✅ Framework can generate figures |
+| ⚠️ Placeholder numbers | ✅ Can collect real experimental data |
 
 ---
 
-## 🎯 MỤC TIÊU CẬP NHẬT
+## NEW TECHNICAL FINDINGS FROM PR #3
 
-### Primary Goals
-1. **Sync Vietnamese thesis with English draft quality**
-2. **Incorporate all 14 technical findings into thesis chapters**
-3. **Generate missing figures, screenshots, and experimental data**
-4. **Emphasize multi-device deployment capability (not just XIAO)**
-5. **Create reproducible experimental results section**
+### Finding 15: CNN Code Generation Metadata Mismatch ✅ FIXED
 
-### Success Metrics
-- Vietnamese thesis quality matches English draft (95% complete → 100%)
-- All placeholder values replaced with real experimental data
-- All figures generated and integrated
-- Technical findings properly positioned in relevant chapters
-- Thesis ready for defense with concrete evidence
+**Problem**: CNN models showed wrong feature count in filenames (`f33` instead of `f6`) and confusing UI display mixing raw windows with FE method labels.
+
+**Root Cause**: Fallback logic loaded FE metadata from wrong session; CNN models don't use extracted features but system treated them as if they did.
+
+**Solution**:
+- Code generation callback now detects CNN models and uses channel placeholders (`ch0-ch5`)
+- Filename correctly shows `f6` (6 input channels per timestep)
+- UI distinguishes "raw windows" from "extracted features"
+
+**Thesis Impact**:
+- Ch.3 §Code Generation: Add note about multi-architecture support (CNN vs feature-based)
+- Ch.5 §Pipeline Correctness: Example of metadata consistency across architectures
+
+### Finding 16: Kalman Filter with Exact Deployment Parity ✅ IMPLEMENTED
+
+**Problem**: Existing IIR filter had parity gap (Python `filtfilt` = non-causal, C++ `lfilter` = causal) causing phase shifts in features.
+
+**Solution**:
+- Implemented constant-velocity Kalman filter per channel
+- Kalman is inherently causal → Python and C++ produce **identical results**
+- Tunable Q (process noise) and R (measurement noise) parameters
+- Generated C++ code has exact same math as Python training
+
+**Thesis Impact**:
+- Ch.3 §Preprocessing: Add new subsection on Kalman filter (first zero-parity-gap preprocessing)
+- Ch.5 §Training-Deployment Parity: Highlight this as parity breakthrough (no filtfilt vs lfilter gap)
+- Differentiate from Edge Impulse (they don't offer Kalman filtering)
+
+### Other PR #3 Improvements
+
+- **TFLite for RF/SVM**: Keras surrogate via knowledge distillation when ONNX→TF fails
+- **Quantization robustness**: Synthetic calibration data when representative data unavailable
+- **ONNX deployment**: Reuses base class platform-specific IMU code for consistency
+- **Device Test**: Better prediction persistence (last_activity label on every line)
 
 ---
 
-## 📝 DANH SÁCH CẬP NHẬT CHI TIẾT
+## CHAPTER-BY-CHAPTER UPDATE PLAN
 
-### A. CHƯƠNG TRÌNH CẬP NHẬT CÁC CHƯƠNG
+### Chapter 1: Giới thiệu (Introduction) — STATUS: ✅ 95% COMPLETE
 
-#### Chapter 1: Giới thiệu (Introduction) 
-**Status:** ✅ Reframed for multi-device deployment
+**Current State**: Reframed for multi-device deployment; XIAO as reference platform; 6 objectives listed
 
-**Required Updates:**
+**Updates Needed**:
 - [ ] Verify 6 research objectives reflect framework reality
-- [ ] Update problem statement with specific competitive advantages vs Edge Impulse/SensiML
 - [ ] Add concrete statistics (11 generators, 156 features, 8+ MCUs supported)
+- Consider mentioning Kalman filter as 7th objective if it's a major contribution
 
-#### Chapter 3: Phương pháp luận (Methodology)
-**Status:** ✅ Reframed + multi-device generator matrix
+**User Support Needed**: None
 
-**Required Updates:**  
-- [ ] Add detailed 14 technical findings integration
-- [ ] Update feature extraction section with 6 modes (33-156 features)
-- [ ] Add training-deployment parity validation methodology
-- [ ] Include code generation factory pattern explanation
+---
 
-#### Chapter 4: Kết quả (Results)
-**Status:** ⚠️ Reframed + placeholder numbers
+### Chapter 2: Công trình liên quan (Related Work) — STATUS: ✅ 100% COMPLETE
 
-**Critical Missing Data:**
+**Current State**: Written in Vietnamese, 11 new refs added (augmentation, confidence, parity)
+
+**Updates Needed**:
+- ✅ No changes required (already comprehensive)
+- Optional: Add reference to Kalman filtering in IMU preprocessing if available
+
+**User Support Needed**: None
+
+---
+
+### Chapter 3: Phương pháp luận (Methodology) — STATUS: ⚠️ 85% COMPLETE
+
+**Current State**:
+- Reframed for multi-device
+- Has sections on FE, padding strategy, augmentation, confidence threshold
+- Multi-device generator matrix added
+
+**Updates Needed**:
+
+1. **NEW SECTION: §3.X Bộ lọc Kalman cho Tiền xử lý Tín hiệu (Kalman Filter for Signal Preprocessing)**
+   - Mô tả constant-velocity model: state [position, velocity], observation [position]
+   - Công thức toán học: F, H, Q, R matrices
+   - Parameters: process_noise (Q), measurement_noise (R), sampling rate
+   - **Key selling point**: Causal (forward-only) → ZERO parity gap vs Python training
+   - So sánh với IIR: filtfilt (non-causal) vs lfilter (causal) has phase shift; Kalman không có
+
+2. **UPDATE: §3.Y Tạo mã triển khai (Code Generation)**
+   - Add note: framework hỗ trợ hai kiến trúc (feature-based: NN/RF/SVM và end-to-end: CNN)
+   - CNN: raw window input (150×6), không FE, không scaling
+   - Feature-based: FE → scaling → model weights
+   - Validator phải architecture-aware (Finding 9 + Finding 15)
+   - Update feature extraction section with 6 modes (33-156 features)
+   - Add training-deployment parity validation methodology
+   - Include code generation factory pattern explanation
+
+3. **UPDATE: §3.Z Triển khai TFLite Micro**
+   - For RF/SVM: ONNX→TF pipeline hoặc Keras surrogate via knowledge distillation
+   - TreeEnsembleClassifier (RF) không được hỗ trợ bởi onnx2tf → fallback to surrogate
+   - Surrogate: small Keras MLP trained on RF/SVM's soft predictions
+
+4. **ADD: §3.W Đảm bảo Tương đồng Huấn luyện-Triển khai**
+   - Subsection: Zero-padding vs Edge-replication (Finding 1)
+   - Subsection: Statistical Formula Parity (Finding 2)
+   - Subsection: Feature Order Consistency (Finding 7)
+   - Subsection: Automated Validation Pipeline
+
+**User Support Needed**:
+- [ ] Kalman filter before/after signal plots (show noise reduction + parity)
+- [ ] Diagram: Python Kalman vs C++ Kalman (identical output)
+
+---
+
+### Chapter 4: Kết quả (Results) — STATUS: ⚠️ 60% COMPLETE (PLACEHOLDER NUMBERS)
+
+**Current State**:
+- Has structure for results
+- Multi-device deployment matrix table
+- **CRITICAL**: Placeholder accuracy numbers, no real data
+
+**Updates Needed**:
+
+1. **RETRAIN ALL MODELS** with fixed pipeline:
+   - Use edge-value replication (not zero-padding) ✅ Already fixed
+   - Use longer recordings (≥1.5s per window)
+   - Use sliding window to generate 50+ windows/class
+   - Include Kalman filter preprocessing
+
+2. **NEW TABLE: §4.X Tác động của Bộ lọc Kalman**
+   | Model | Without Kalman | With Kalman | Improvement |
+   |-------|----------------|-------------|-------------|
+   | NN    | [PLACEHOLDER] % | [PLACEHOLDER] % | [PLACEHOLDER] % |
+   | RF    | [PLACEHOLDER] % | [PLACEHOLDER] % | [PLACEHOLDER] % |
+   | SVM   | [PLACEHOLDER] % | [PLACEHOLDER] % | [PLACEHOLDER] % |
+
+3. **NEW TABLE: §4.Y So sánh Triển khai TFLite**
+   | Model Type | Direct C++ | TFLite (ONNX) | TFLite (Surrogate) |
+   |------------|-----------|---------------|-------------------|
+   | NN/MLP     | ✅ | ✅ | N/A |
+   | CNN        | ✅ | ✅ | N/A |
+   | RF         | ✅ | ❌ (onnx2tf không hỗ trợ) | ✅ (80-90% agreement) |
+   | SVM        | ✅ | ❌ | ✅ |
+
+4. **UPDATE: Device Test Results**
+   - On-device accuracy với/không Kalman
+   - Inference time với Kalman overhead
+   - Confusion matrix (actual data, not placeholder)
+
+5. **UPDATE: Before/After Accuracy for Technical Fixes**
+   - Zero-padding → edge-replication improvement
+   - Training-deployment parity fix impact
+
+**Critical Missing Data**:
 - [ ] Real accuracy numbers (placeholder: RF 94.5%, NN 96.2%, SVM 93.8%)
 - [ ] Real inference timing (placeholder: 12-18ms on ARM Cortex-M4)
 - [ ] Real memory footprint (placeholder: 95-182KB flash)
@@ -76,233 +195,310 @@
 - [ ] Confusion matrix from trained models
 - [ ] Before/after accuracy comparison for zero-padding fix
 
-#### Chapter 5: Thảo luận (Discussion) 
-**Status:** ✅ Reframed
+**User Support Needed**:
+- [ ] **CRITICAL**: Retrain models with new pipeline
+- [ ] **CRITICAL**: Collect device test data (XIAO + optional ESP32/M5Stack)
+- [ ] Generate confusion matrices from test set
+- [ ] Measure inference time with Kalman filter enabled
+- [ ] CSV export from Device Test tab (for plotting)
 
-**Required Updates:**
-- [ ] Add section "Training-Deployment Parity Analysis" incorporating Finding 1,2,6,7,8
-- [ ] Add section "Multi-Algorithm Code Generation" showcasing 11 generators
-- [ ] Add competitive analysis vs Edge Impulse with concrete numbers
+---
 
-#### Chapter 6: Kết luận (Conclusion)
-**Status:** ✅ Reframed
+### Chapter 5: Thảo luận (Discussion) — STATUS: ✅ 90% COMPLETE
 
-**Required Updates:**
-- [ ] Update contributions to emphasize 14 technical findings
-- [ ] Add future work based on framework's extensible architecture
+**Current State**:
+- Has section on training-deployment parity
+- Has section on augmentation design
+- Has section on confidence threshold
+- Separated architectural multi-device support from single-platform benchmark
 
-### B. FIGURES VÀ VISUALIZATIONS CẦN TẠO
+**Updates Needed**:
 
-#### High Priority Figures
-1. **System Architecture Diagram**
+1. **NEW SUBSECTION: §5.X Đột phá Tương đồng Tiền xử lý: Bộ lọc Kalman**
+   - Giải thích tại sao IIR có parity gap (filtfilt ≠ lfilter)
+   - Kalman là bộ lọc đầu tiên với zero parity gap
+   - So sánh với Edge Impulse (họ không có Kalman filtering)
+   - Ý nghĩa: causal preprocessing + exact parity → reliable deployment
+
+2. **UPDATE: §5.Y Kiến trúc Đa mô hình (Multi-Architecture Support)**
+   - CNN vs feature-based models: khác nhau về input, processing, validation
+   - Finding 15 as case study: metadata consistency across architectures
+   - So sánh với EI: họ có separate "processing blocks", chúng tôi có unified pipeline
+
+3. **UPDATE: §5.Z Triển khai TFLite cho RF/SVM**
+   - ONNX→TF pipeline fragile (10+ undeclared deps, onnx2tf doesn't support tree ops)
+   - Keras surrogate as pragmatic fallback
+   - Direct C++ generation vẫn là recommended path (faithful, no approximation, smaller binary)
+   - Agreement metric (80-90%) shows surrogate quality
+
+4. **ADD: §5.W Competitive Advantage vs Commercial Platforms**
+   - Edge Impulse: $20+/month vs free; black box vs transparent; no Kalman filter
+   - SensiML: Enterprise pricing; vendor lock-in vs open source
+   - Framework: Full transparency, multi-platform, 16 documented findings
+
+**User Support Needed**: None (analysis of existing data)
+
+---
+
+### Chapter 6: Kết luận (Conclusion) — STATUS: ✅ 95% COMPLETE
+
+**Current State**:
+- 7 contributions listed (including augmentation, confidence, multi-device)
+- Future work section
+- Multi-device contribution explicit
+
+**Updates Needed**:
+
+1. **ADD to contributions list**:
+   - **#8**: Kalman filter with exact deployment parity — first zero-gap preprocessing filter
+   - **#9** (optional): Multi-architecture code generation (CNN + feature-based in unified pipeline)
+   - Update to emphasize all 16 technical findings
+
+2. **UPDATE: Future work**:
+   - Cross-device benchmark (currently only XIAO quantified)
+   - Multi-subject dataset validation (UCI HAR, WISDM)
+   - Temperature scaling for confidence calibration
+   - Additional preprocessing: Savitzky-Golay with causal implementation
+
+**User Support Needed**: None
+
+---
+
+## FIGURES AND VISUALIZATIONS NEEDED
+
+### HIGH PRIORITY (Required for defense)
+
+1. **`figures/system_architecture.png`**
    - 6-tab workflow: Data → Preprocess → Feature Engineering → Training → Code Gen → Device Test
    - Multi-platform deployment matrix
-   - File: `academic-paper-vietnamese/figures/system_architecture.png`
 
-2. **Confusion Matrix** 
-   - From actual trained Neural Network model (96.2% accuracy)
-   - 6x6 matrix for HAR activities
-   - File: `academic-paper-vietnamese/figures/confusion_matrix_nn.png`
+2. **`figures/kalman_signal_comparison.png`**
+   - 3 subplots: Raw signal, IIR filtered, Kalman filtered
+   - Show noise reduction + phase preservation
+   - Caption: "So sánh các phương pháp lọc tín hiệu IMU"
 
-3. **Training-Deployment Parity Flowchart**
-   - Shows Python feature extraction → C++ code generation → validation
-   - Highlights Finding 1,2,6,7,8 fixes
-   - File: `academic-paper-vietnamese/figures/parity_validation.png`
+3. **`figures/kalman_parity_verification.png`**
+   - Python vs C++ Kalman output (overlapping lines → identical)
+   - Caption: "Xác minh tương đồng hoàn toàn giữa Python và C++ Kalman filter"
 
-4. **Multi-Device Deployment Matrix**
-   - Table/chart showing 11 generators × 8+ MCUs
-   - Memory/performance characteristics per platform
-   - File: `academic-paper-vietnamese/figures/deployment_matrix.png`
+4. **`figures/confusion_matrix_nn.png`**
+   - From retrained NN model (after Kalman + edge-replication fixes)
 
-#### Medium Priority Figures  
-5. **Feature Extraction Modes Comparison**
+5. **`figures/ui_kalman_settings.png`**
+   - Screenshot of Preprocessing tab with Kalman filter settings
+   - Shows Q, R parameter inputs
+
+### MEDIUM PRIORITY (Nice to have)
+
+6. **`figures/cnn_vs_feature_pipeline.png`**
+   - Diagram: CNN (raw window → Conv → predict) vs Feature-based (window → FE → scale → predict)
+
+7. **`figures/tflite_deployment_strategies.png`**
+   - Flowchart: Model type → Deployment path (Direct C++, TFLite ONNX, TFLite Surrogate)
+
+8. **`figures/deployment_accuracy.png`**
+   - Bar chart: accuracy before/after fixes (zero-padding, Kalman, double-scaling)
+
+9. **`figures/feature_modes_comparison.png`**
    - Bar chart: 6 modes with feature counts (33, 53, 90, 156, 66, 6)
-   - File: `academic-paper-vietnamese/figures/feature_modes.png`
 
-6. **Power Consumption Profile**
-   - Bar chart: Idle, Sampling, Feature Extraction, Prediction phases
-   - File: `academic-paper-vietnamese/figures/power_profile.png`
+10. **`figures/ui_preprocessing_draggable.png`**
+    - Screenshot showing draggable window selection (UNIQUE FEATURE vs Edge Impulse)
 
-7. **Dash UI Screenshots**
-   - Screenshots of all 6 tabs showing interactive preprocessing
-   - File: `academic-paper-vietnamese/figures/ui_screenshots/`
+### EXISTING FIGURES (Already in TODO)
 
-### C. EXPERIMENTAL DATA CẦN THU THẬP
-
-#### Critical Real Data Needed
-
-1. **Model Training Performance**
-   ```
-   REQUIRED: Run full training pipeline and collect:
-   - Actual accuracy: RF, SVM, NN for 6-class HAR
-   - Training time: seconds per algorithm  
-   - Model size: KB after serialization
-   - Per-class precision/recall/F1 metrics
-   ```
-
-2. **Edge Deployment Characteristics**
-   ```
-   REQUIRED: Deploy on Seeed XIAO and measure:
-   - Inference latency: ms per prediction
-   - Memory footprint: Flash KB, RAM KB
-   - Power consumption: mW (idle, active, prediction)
-   - Battery life estimation: hours
-   ```
-
-3. **Training-Deployment Parity Validation**
-   ```
-   REQUIRED: Before/after accuracy for zero-padding fix:
-   - Accuracy with zero-padding: XX.X%
-   - Accuracy with edge-replication: YY.Y%  
-   - Feature distribution analysis
-   ```
-
-4. **Cross-Platform Deployment**
-   ```
-   NICE-TO-HAVE: Deploy same model on:
-   - Seeed XIAO nRF52840 (primary)
-   - ESP32 (comparison platform)
-   - Memory/timing comparison data
-   ```
+11. **`figures/workflow_diagram.png`**
+12. **`figures/ui_data_upload.png`**
+13. **`figures/ui_results_display.png`**
+14. **`figures/padding_comparison.png`**
 
 ---
 
-## 🤝 USER INPUT REQUIREMENTS
+## USER SUPPORT NEEDED — STRUCTURED LIST
 
-### A. SCREENSHOTS DẦN THU THẬP (High Priority)
+### CATEGORY 1: DATA COLLECTION (CRITICAL PATH)
 
-**Tab 1: Data Management**
-- [ ] CSV upload interface with dataset list
-- [ ] Data visualization plots (time series)
-- [ ] Label assignment interface
+#### Task 1.1: Retrain Models with Fixed Pipeline
+**What you need to do**:
+1. Run Feature Engineering tab with:
+   - Edge-value replication ✅ (already fixed)
+   - Kalman filter enabled (Q=0.001, R=0.1)
+   - Longer recordings if possible (≥1.5s per window)
+   - Use sliding window feature to generate 50+ windows/class
+2. Train all 4 models: NN, RF, SVM, CNN (if applicable)
+3. Record training metrics for each
 
-**Tab 2: Signal Preprocessing** 
-- [ ] Raw sensor data plots
-- [ ] Butterworth filter settings
-- [ ] **DRAGGABLE WINDOWING** interface (UNIQUE FEATURE vs Edge Impulse)
+**Expected output**: New `.joblib` model files in `persistent_data/models/`
 
-**Tab 3: Feature Engineering**
-- [ ] Feature extraction mode selection (6 modes)
-- [ ] Feature statistics display  
-- [ ] Train/val/test split configuration
-
-**Tab 4: Model Training**
-- [ ] Algorithm selection (RF, SVM, NN, PyTorch)
-- [ ] Hyperparameter grid interface
-- [ ] Training progress and results
-
-**Tab 5: Code Generation**
-- [ ] Platform selection (11 generators)
-- [ ] Optimization mode selection
-- [ ] Generated code preview
-
-**Tab 6: Device Testing**
-- [ ] Serial monitor with real-time predictions
-- [ ] Confusion matrix display
-- [ ] Performance metrics
-
-### B. DEVICE DEPLOYMENT RESULTS (High Priority)
-
-**Real Hardware Testing on Seeed XIAO:**
-- [ ] Video/photos of device in operation
-- [ ] Serial output showing predictions
-- [ ] Current consumption measurements (multimeter/power profiler)
-- [ ] Comparison of Python vs C++ predictions on same test data
-
-### C. TRAINING RESULTS (Critical)
-
-**Complete Training Session Data:**
-- [ ] Run training on HAR dataset with all 3 algorithms
-- [ ] Collect confusion matrices, accuracy metrics
-- [ ] Save model files (.joblib) for analysis
-- [ ] Compare before/after accuracy for technical fixes
-
-### D. COMPARATIVE ANALYSIS DATA (Medium Priority)
-
-**Framework vs Edge Impulse:**
-- [ ] Same dataset trained on both platforms
-- [ ] Accuracy comparison
-- [ ] Model size comparison
-- [ ] Deployment code complexity comparison
+**Timeline**: 1-2 hours (depending on data collection)
 
 ---
 
-## 📅 TIMELINE VÀ PRIORITIES
+#### Task 1.2: Collect On-Device Test Data
+**What you need to do**:
+1. Flash retrained models to Seeed XIAO (one at a time)
+2. Perform each activity (running, still, walking, walking_downstairs, walking_upstairs) for ~30 seconds each
+3. Use Device Test tab to record predictions + sensor data
+4. Export CSV files for each model + activity combination
 
-### Week 1: Critical Experimental Data
-- **Days 1-2:** Run complete training pipeline, collect real accuracy/timing data
-- **Days 3-4:** Deploy on Seeed XIAO, measure inference performance
-- **Days 5-7:** Take comprehensive UI screenshots of all 6 tabs
+**Expected output**:
+- CSV files: `device_test_{model}_{activity}.csv`
+- Accuracy numbers for each model
+- Inference time measurements (from Serial output)
 
-### Week 2: Figure Generation & Chapter Updates
-- **Days 1-3:** Generate all required figures using collected data
-- **Days 4-5:** Update Vietnamese thesis chapters with real numbers
-- **Days 6-7:** Integrate technical findings into relevant chapters
-
-### Week 3: Polish & Validation
-- **Days 1-3:** Complete thesis compilation and proofreading
-- **Days 4-5:** Cross-validation with English draft quality
-- **Days 6-7:** Final PDF generation and review
+**Timeline**: 2-3 hours (flash + test + export)
 
 ---
 
-## 📋 IMMEDIATE ACTION CHECKLIST
+#### Task 1.3: (OPTIONAL) Cross-Device Benchmark
+**What you need to do**:
+1. If you have ESP32 or M5Stack available, flash one model to it
+2. Repeat activity tests
+3. Compare accuracy/inference time vs XIAO
 
-### For User (You) To Do This Week:
-- [ ] **Run Training Pipeline:** Execute full HAR training with RF/SVM/NN, record all metrics
-- [ ] **Deploy and Test:** Flash generated code to Seeed XIAO, collect performance data
-- [ ] **Take Screenshots:** Capture UI of all 6 tabs during a complete workflow
-- [ ] **Power Measurements:** Use multimeter/power profiler to measure device consumption
-- [ ] **Comparative Test:** If possible, run same dataset on Edge Impulse for comparison
+**Expected output**: Cross-device benchmark table
 
-### For AI Assistant (Me) To Do:
-- [ ] **Generate Figures:** Create system architecture, deployment matrix, feature comparison charts
-- [ ] **Update Vietnamese Chapters:** Incorporate technical findings and real experimental data
-- [ ] **LaTeX Integration:** Ensure all figures compile properly with Vietnamese thesis
-- [ ] **Technical Validation:** Cross-check framework claims against actual codebase
-- [ ] **Defense Preparation:** Identify strongest technical contributions for thesis defense
+**Timeline**: 1-2 hours (if hardware available)
 
 ---
 
-## 🎯 SUCCESS CRITERIA
+### CATEGORY 2: UI SCREENSHOTS (MEDIUM PRIORITY)
 
-### Minimum Viable Update (Must Have)
-1. ✅ Real experimental data replaces all placeholder numbers
-2. ✅ UI screenshots show complete 6-tab workflow  
-3. ✅ Technical findings properly integrated into chapters
-4. ✅ Vietnamese thesis compiles to PDF without errors
-5. ✅ Framework capabilities accurately represented
+#### Task 2.1: Preprocessing Tab Screenshots
+**What you need to do**:
+1. Open Preprocessing tab
+2. Enable Kalman filter, set Q=0.001, R=0.1
+3. Screenshot the settings panel
+4. Screenshot a before/after signal plot (if available in UI)
 
-### Excellent Update (Should Have)
-6. ✅ Cross-platform deployment comparison (XIAO + ESP32)
-7. ✅ Competitive analysis vs Edge Impulse with real data
-8. ✅ Power consumption measurements and battery life estimates
-9. ✅ All 11 code generators showcased in deployment matrix
-10. ✅ Video demonstration of real-time HAR on device
-
-### Outstanding Update (Nice to Have)
-11. ✅ Multi-subject validation beyond single-person dataset
-12. ✅ Additional activity classes beyond basic 6 activities
-13. ✅ Extended inference accuracy analysis (confidence thresholds, smoothing)
-14. ✅ Published demo video and reproducible setup guide
+**Expected output**: `figures/ui_kalman_settings.png`
 
 ---
 
-## 📞 SUPPORT REQUESTS
+#### Task 2.2: Data Upload Screenshot
+**What you need to do**: Take screenshot of Data tab with dataset loaded
 
-### Technical Assistance Needed:
-- **LaTeX Compilation:** Help with Vietnamese character encoding, figure integration
-- **Python Code:** Automated figure generation from trained models
-- **Data Analysis:** Statistical comparison of before/after accuracy improvements
-
-### Content Review Needed:
-- **Technical Accuracy:** Verify framework descriptions match actual implementation
-- **Academic Writing:** Ensure Vietnamese technical terminology is consistent
-- **Defense Strategy:** Identify strongest points for thesis defense
+**Expected output**: `figures/ui_data_upload.png`
 
 ---
 
-**Status:** Plan created - Ready for execution  
-**Next Action:** User to collect experimental data and screenshots  
-**Timeline:** 3 weeks to completion  
-**Priority:** Update Vietnamese thesis to match framework reality and English draft quality
+#### Task 2.3: Results Display Screenshot
+**What you need to do**: Screenshot Training tab with model performance metrics displayed
+
+**Expected output**: `figures/ui_results_display.png`
+
+---
+
+#### Task 2.4: Preprocessing Draggable Windows Screenshot
+**What you need to do**: Screenshot Preprocessing tab showing draggable window selection
+
+**Expected output**: `figures/ui_preprocessing_draggable.png`
+
+---
+
+### CATEGORY 3: PROGRAMMATIC FIGURE GENERATION (I CAN HELP)
+
+#### Task 3.1: Confusion Matrix
+**What I need from you**: Test set predictions CSV (after retraining)
+
+**What I'll do**: Generate confusion matrix plot
+
+---
+
+#### Task 3.2: Kalman Signal Comparison
+**What I need from you**: Raw sensor CSV + Kalman-filtered CSV
+
+**What I'll do**: 3-subplot comparison (raw, IIR, Kalman)
+
+---
+
+#### Task 3.3: Architecture Diagrams
+**What I'll do**: Create system architecture, pipeline flowcharts using LaTeX TikZ or Python matplotlib
+
+---
+
+### CATEGORY 4: LATEX CONTENT (I WILL WRITE)
+
+#### Task 4.1: Chapter 3 Kalman Section
+**Status**: Ready to write (LaTeX content)
+
+**Depends on**: Task 2.1 (Kalman screenshot), Task 3.2 (signal comparison plot)
+
+---
+
+#### Task 4.2: Chapter 4 Results Tables
+**Status**: Waiting for data (Task 1.1, 1.2)
+
+**Placeholders to fill**:
+- Model accuracies (with/without Kalman)
+- On-device accuracy + inference time
+- TFLite surrogate agreement metrics
+
+---
+
+#### Task 4.3: Chapter 5 Discussion Updates
+**Status**: Ready to write (analysis)
+
+---
+
+## SUMMARY: CRITICAL PATH
+
+```
+┌─────────────────────────────────────┐
+│ CRITICAL: Data Collection (YOU)    │
+│ ├─ Retrain models (1-2h)           │
+│ ├─ Device tests (2-3h)             │
+│ └─ Export CSVs                     │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ Figure Generation (ME + YOU)        │
+│ ├─ Confusion matrix (I generate)   │
+│ ├─ Kalman plots (I generate)       │
+│ └─ UI screenshots (you capture)    │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ LaTeX Writing (ME)                  │
+│ ├─ Ch.3: Kalman section            │
+│ ├─ Ch.4: Results with real data    │
+│ ├─ Ch.5: Discussion updates        │
+│ └─ Ch.6: Contributions update      │
+└─────────────────────────────────────┘
+```
+
+**Estimated Total Time**:
+- **Your work**: 4-6 hours (mostly data collection + device testing)
+- **My work**: 6-8 hours (LaTeX writing + figure generation)
+- **Total**: 10-14 hours
+
+---
+
+## NEXT STEPS — IMMEDIATE ACTIONS
+
+1. **Review this plan** — Does it make sense? Any missing aspects?
+2. **Prioritize user tasks** — Can you do Task 1.1 (retrain) soon? Task 1.2 (device test)?
+3. **Identify blockers** — What do you need help with?
+4. **Define timeline** — When can you provide the critical data (retraining + device tests)?
+
+Once you confirm the plan and timeline, I'll:
+1. Update `TECHNICAL_FINDINGS.md` with Findings 15-16
+2. Start writing LaTeX content for chapters (using placeholders where data is needed)
+3. Generate diagrams and figures I can create without data
+4. Provide detailed checklist in `TODO_FOR_USER.md`
+
+---
+
+## DOCUMENT STATUS
+
+- [x] Initial plan created (copilot/update-thesis-report)
+- [x] PR #3 findings integrated (from develop)
+- [x] Merged comprehensive plan created
+- [ ] User reviewed and approved
+- [ ] User timeline confirmed
+- [ ] LaTeX content written
+- [ ] Figures generated
+- [ ] Real data collected and integrated
+- [ ] Final review and compilation check
