@@ -170,6 +170,30 @@ def load_training_data_summary(base_dir=None):
                        style={'text-align': 'center', 'color': '#999', 'font-size': '11px', 'margin-top': '10px'})
             ])
 
+        # Load FE metadata for feature method display
+        fe_method_label = None
+        fe_meta_info = {}
+        fe_meta_files = sorted(
+            glob.glob(os.path.join(training_dir, '*_fe_metadata.json')),
+            key=os.path.getmtime, reverse=True)
+        if fe_meta_files:
+            try:
+                with open(fe_meta_files[0], 'r') as f:
+                    fe_meta_info = json.load(f)
+            except Exception:
+                pass
+
+        FE_METHOD_LABELS = {
+            'orientation_invariant_time_only': '🧭 Orientation-Invariant Time-Domain (33 features)',
+            'orientation_invariant': '🧭 Orientation-Invariant + DFT (53 features)',
+            'time_domain': '🎯 Per-Axis Time-Domain (90 features)',
+            'all': '🎯 Per-Axis All + FFT (156 features)',
+            'frequency_domain': '🌊 Per-Axis Frequency Only (66 features)',
+            'raw': '📊 Raw Sensor Axes (6 features)',
+        }
+        raw_method = fe_meta_info.get('feature_method', '')
+        fe_method_label = FE_METHOD_LABELS.get(raw_method, raw_method)
+
         # Collect data statistics
         all_train_dfs = []
         all_test_dfs = []
@@ -281,13 +305,47 @@ def load_training_data_summary(base_dir=None):
 
             html.Hr(style={'margin': '20px 0', 'border-color': '#dee2e6'}),
 
+            # Feature Engineering method indicator
             html.Div([
+                html.P([
+                    html.Strong("🔬 Feature Engineering: "),
+                    html.Span(fe_method_label or "Unknown",
+                              style={'color': '#2E86AB', 'font-weight': 'bold'}),
+                ] + ([
+                    html.Span("  •  ", style={'color': '#ccc'}),
+                    html.Strong("Window: "),
+                    html.Span(f"{fe_meta_info.get('window_size_ms', '?')}ms "
+                              f"@ {fe_meta_info.get('sampling_rate', '?')}Hz"),
+                ] if fe_meta_info else []),
+                    style={'margin': '0 0 5px 0', 'text-align': 'center', 'color': '#495057'}),
+            ] + ([
+                html.P([
+                    html.Strong("📁 Datasets Loaded: "),
+                    html.Span(f"{len(train_files)} activity dataset(s)", style={
+                              'color': '#28a745'}),
+                    html.Span("  •  ", style={'color': '#ccc'}),
+                    html.Strong("Normalization: "),
+                    html.Span(fe_meta_info.get('normalization_method', 'N/A')),
+                ] + ([
+                    html.Span("  •  ", style={'color': '#ccc'}),
+                    html.Strong("Preprocessing: "),
+                    html.Span("Kalman ✓" if fe_meta_info.get('preprocessing', {}).get('kalman_filter') else ""),
+                    html.Span(" LPF ✓" if fe_meta_info.get('preprocessing', {}).get('low_pass_filter') else ""),
+                    html.Span(" Savgol ✓" if fe_meta_info.get('preprocessing', {}).get('savgol_filter') else ""),
+                ] if fe_meta_info.get('preprocessing') else []),
+                    style={'margin': '0', 'text-align': 'center', 'color': '#495057', 'font-size': '13px'})
+            ] if fe_meta_info else [
                 html.P([
                     html.Strong("📁 Datasets Loaded: "),
                     html.Span(f"{len(train_files)} activity dataset(s)", style={
                               'color': '#28a745'})
                 ], style={'margin': '0', 'text-align': 'center', 'color': '#495057'})
-            ])
+            ]), style={
+                'padding': '10px',
+                'background': '#f0f7ff',
+                'border-radius': '6px',
+                'border-left': '4px solid #2E86AB'
+            })
         ])
 
     except Exception as e:

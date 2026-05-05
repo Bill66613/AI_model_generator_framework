@@ -345,25 +345,48 @@ class DeploymentValidator:
                 report['checks_passed'].append(f"NUM_CLASSES={cpp_classes} ✓")
 
         # CNN Check 4: Core CNN functions present
-        cnn_functions = [
-            ('conv1d', 'Conv1D layer function'),
-            ('har_predict_from_window', 'Window-based prediction function'),
-        ]
-        for func_name, desc in cnn_functions:
-            if func_name in combined:
-                report['checks_passed'].append(f"{desc} present ✓")
-            else:
-                report['issues'].append(f"Missing {desc} ({func_name})")
-                report['passed'] = False
+        # For TFLite approach: conv1d weights live in the .tflite binary, not in C++ source.
+        # Detect TFLite by presence of the g_har_model byte array.
+        is_tflite = 'g_har_model' in combined
 
-        # CNN Check 5: Weight arrays present
-        weight_arrays = re.findall(r'static\s+const\s+float\s+(\w+)\s*\[', combined)
-        if weight_arrays:
-            report['checks_passed'].append(
-                f"CNN weight arrays present ({len(weight_arrays)} arrays) ✓")
+        if is_tflite:
+            # TFLite CNN: model is the byte array; inference goes through TFLite Micro
+            if 'g_har_model' in combined:
+                report['checks_passed'].append("TFLite model byte array (g_har_model) present ✓")
+            else:
+                report['issues'].append("Missing TFLite model byte array (g_har_model)")
+                report['passed'] = False
+            if 'har_predict_from_window' in combined:
+                report['checks_passed'].append("Window-based prediction function present ✓")
+            else:
+                report['issues'].append("Missing Window-based prediction function (har_predict_from_window)")
+                report['passed'] = False
+            if 'tflite_predict_window' in combined:
+                report['checks_passed'].append("TFLite window predict function present ✓")
+            else:
+                report['issues'].append("Missing TFLite window predict function (tflite_predict_window)")
+                report['passed'] = False
         else:
-            report['issues'].append("No CNN weight arrays found")
-            report['passed'] = False
+            # Direct CNN: conv1d and weight arrays must be in C++ source
+            cnn_functions = [
+                ('conv1d', 'Conv1D layer function'),
+                ('har_predict_from_window', 'Window-based prediction function'),
+            ]
+            for func_name, desc in cnn_functions:
+                if func_name in combined:
+                    report['checks_passed'].append(f"{desc} present ✓")
+                else:
+                    report['issues'].append(f"Missing {desc} ({func_name})")
+                    report['passed'] = False
+
+            # CNN Check 5 (direct only): Weight arrays present
+            weight_arrays = re.findall(r'static\s+const\s+float\s+(\w+)\s*\[', combined)
+            if weight_arrays:
+                report['checks_passed'].append(
+                    f"CNN weight arrays present ({len(weight_arrays)} arrays) ✓")
+            else:
+                report['issues'].append("No CNN weight arrays found")
+                report['passed'] = False
 
         # CNN Check 6: Activity names match classes
         for cls_name in model_data.get('classes', []):
@@ -371,13 +394,14 @@ class DeploymentValidator:
                 report['warnings'].append(
                     f"Class name '{cls_name}' not found in activity_names array")
 
-        # CNN Check 7: No feature extraction / scaling code (would be a bug for CNN)
-        if 'feature_means[NUM_FEATURES]' in source_code:
-            report['warnings'].append(
-                "CNN code contains feature_means — CNN should use raw windows, not features")
-        if 'extract_features' in source_code and 'extract_magnitude_stats' in source_code:
-            report['warnings'].append(
-                "CNN code contains feature extraction functions — CNN uses raw sensor data")
+        # CNN Check 7: No feature extraction / scaling code (would be a bug for non-TFLite CNN)
+        if not is_tflite:
+            if 'feature_means[NUM_FEATURES]' in source_code:
+                report['warnings'].append(
+                    "CNN code contains feature_means — CNN should use raw windows, not features")
+            if 'extract_features' in source_code and 'extract_magnitude_stats' in source_code:
+                report['warnings'].append(
+                    "CNN code contains feature extraction functions — CNN uses raw sensor data")
 
         report['checks_passed'].append("CNN architecture: raw window input (no feature extraction needed) ✓")
 

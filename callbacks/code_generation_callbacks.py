@@ -721,8 +721,11 @@ def register_callbacks(app):
                          'margin-bottom': '5px'}),
                 html.Div(f"Accuracy: Train {train_acc:.1f}% | Val {val_acc:.1f}% | Test {test_acc:.1f}%", style={
                          'margin-bottom': '5px'}),
-                html.Div(f"Features: {num_extracted_features}", style={
-                         'margin-bottom': '5px'}),
+                html.Div(
+                    f"Input: {raw_features} samples × {fe_config.get('num_channels', 6)} ch (raw windows)"
+                    if model_type == 'PYTORCH_CNN'
+                    else f"Features: {num_extracted_features}",
+                    style={'margin-bottom': '5px'}),
                 html.Div(f"Classes: {classes} activities",
                          style={'color': '#28a745'})
             ])
@@ -749,12 +752,14 @@ def register_callbacks(app):
                     html.Span("🎯 Feature Count: ", style={
                               'font-weight': 'bold'}),
                     html.Span(
-                        f"{raw_features} samples x {fe_config.get('num_channels', '?')} ch (raw windows)"
+                        f"{raw_features} samples × {fe_config.get('num_channels', 6)} channels = {raw_features * fe_config.get('num_channels', 6)} inputs (raw windows, no FE)"
                         if model_type == 'PYTORCH_CNN'
                         else f"{num_extracted_features} features",
                         style={'color': '#2E86AB'}),
-                    html.Span(f" ({feature_domain_label})",
-                              style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
+                    html.Span(
+                        f" (FE used for other models: {feature_domain_label})" if model_type == 'PYTORCH_CNN'
+                        else f" ({feature_domain_label})",
+                        style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
                 ])
             ])
 
@@ -772,6 +777,11 @@ def register_callbacks(app):
                         html.Div(f"Savitzky-Golay (window={preprocess_cfg.get('savgol_window_length', 5)}, "
                                  f"poly={preprocess_cfg.get('savgol_polyorder', 2)}) — NOT replicated on device",
                                  style={'color': '#ff9800', 'font-size': '12px'}))
+                if preprocess_cfg.get('kalman_filter'):
+                    preprocess_items.append(
+                        html.Div(f"Kalman filter (Q={preprocess_cfg.get('kalman_process_noise', 0.001)}, "
+                                 f"R={preprocess_cfg.get('kalman_measurement_noise', 0.1)}) — replicated on device ✓ exact parity",
+                                 style={'color': '#28a745', 'font-size': '12px'}))
                 if preprocess_cfg.get('outlier_removal'):
                     preprocess_items.append(
                         html.Div("Outlier removal (3-sigma) — NOT replicated on device (not needed for real-time)",
@@ -970,13 +980,14 @@ def register_callbacks(app):
          State('deployment-confidence-threshold', 'value'),
          State('deployment-smoothing-window', 'value'),
          State('deployment-iir-filter-enabled', 'value'),
+         State('deployment-kalman-filter-enabled', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
     def generate_embedded_code(n_clicks, model_filename, framework, target_board,
                                deployment_approach, optimization, quantization, stride,
                                confidence_threshold, smoothing_window, iir_filter_enabled,
-                               base_dir):
+                               kalman_filter_enabled, base_dir):
         """
         Generate embedded C/C++ code from the trained model using actual metadata.
         Model type is automatically detected from the selected model.
@@ -1041,7 +1052,15 @@ def register_callbacks(app):
 
             # Get feature names from model or training metadata
             feature_names = model.feature_names
-            if not feature_names:
+
+            # CNN models operate on raw windows, not extracted features.
+            # Use channel placeholder names so filename reflects input channels.
+            if model_type in ('pytorch_cnn', 'cnn'):
+                n_channels = (metadata.get('fe_config', {}).get('num_channels')
+                              or len(metadata.get('fe_config', {}).get('sensor_columns', []))
+                              or 6)
+                feature_names = [f'ch{i}' for i in range(n_channels)]
+            elif not feature_names:
                 # Try to get from training metadata
                 training_dir = os.path.join(base_dir, 'training')
                 metadata_files = glob.glob(
@@ -1054,6 +1073,7 @@ def register_callbacks(app):
 
             if not feature_names:
                 # Last resort: load from training CSV
+                training_dir = os.path.join(base_dir, 'training')
                 train_files = glob.glob(
                     os.path.join(training_dir, '*_train.csv'))
                 if train_files:
@@ -1096,12 +1116,14 @@ def register_callbacks(app):
             # Parse new deployment options
             smoothing_window = int(smoothing_window or 3)
             enable_iir = 'enabled' in (iir_filter_enabled or [])
+            enable_kalman = 'enabled' in (kalman_filter_enabled or [])
 
             # Generate code using proper code generators
             generated_code_files = generate_deployment_code(
                 model_type, model_data, platform, optimization, overlap_fraction, quantization,
                 deployment_approach, confidence_threshold=confidence_threshold,
-                smoothing_window=smoothing_window, enable_iir_filter=enable_iir
+                smoothing_window=smoothing_window, enable_iir_filter=enable_iir,
+                enable_kalman_filter=enable_kalman
             )
 
             # Filter out binary files (e.g., .onnx, .tflite) for text-based processing
@@ -1131,7 +1153,8 @@ def register_callbacks(app):
             saved_files = generate_and_save_deployment_code(
                 model_type, model_data, platform, output_dir, optimization, overlap_fraction, quantization,
                 deployment_approach, confidence_threshold=confidence_threshold,
-                smoothing_window=smoothing_window, enable_iir_filter=enable_iir
+                smoothing_window=smoothing_window, enable_iir_filter=enable_iir,
+                enable_kalman_filter=enable_kalman
             )
 
             # Get the first generated file for preview (typically the sketch/example)

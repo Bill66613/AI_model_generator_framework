@@ -568,7 +568,8 @@ class CodeGeneratorFactory:
                          deployment_approach: str = 'direct',
                          confidence_threshold: float = 0.6,
                          smoothing_window: int = 1,
-                         enable_iir_filter: bool = False) -> BaseCodeGenerator:
+                         enable_iir_filter: bool = False,
+                         enable_kalman_filter: bool = False) -> BaseCodeGenerator:
         """
         Create appropriate code generator based on model type, platform, and deployment approach.
 
@@ -603,25 +604,48 @@ class CodeGeneratorFactory:
             # Route to alternative deployment approach generators
             if deployment_approach == 'tflite_micro':
                 return TFLiteMicroCodeGenerator(
-                    model_data, platform, optimization, overlap, quantization)
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             if deployment_approach == 'onnx_runtime':
                 return ONNXRuntimeCodeGenerator(
-                    model_data, platform, optimization, overlap, quantization)
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             # --- Direct code generation (default) ---
 
             # For ARM Cortex-M platform, use specialized generator
             if platform == 'arm_cortex_m':
-                return cls._generators['arm_cortex_m'](model_data, platform, optimization, overlap, quantization)
+                return cls._generators['arm_cortex_m'](
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             # For MicroPython platform, use MicroPython generator
             if platform == 'micropython':
-                return cls._generators['micropython'](model_data, platform, optimization, overlap, quantization)
+                return cls._generators['micropython'](
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             # For Zephyr RTOS platform, use Zephyr generator
             if platform == 'zephyr':
-                return cls._generators['zephyr'](model_data, platform, optimization, overlap, quantization)
+                return cls._generators['zephyr'](
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             # For other platforms, use model-specific generators
             if model_type not in cls._generators:
@@ -635,7 +659,8 @@ class CodeGeneratorFactory:
             return generator_class(model_data, platform, optimization, overlap, quantization,
                                    confidence_threshold=confidence_threshold,
                                    smoothing_window=smoothing_window,
-                                   enable_iir_filter=enable_iir_filter)
+                                   enable_iir_filter=enable_iir_filter,
+                                   enable_kalman_filter=enable_kalman_filter)
 
         except (ValidationError, ModelDataError, OptimizationError) as e:
             # Re-raise validation errors with context
@@ -680,7 +705,8 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
                              deployment_approach: str = 'direct',
                              confidence_threshold: float = 0.6,
                              smoothing_window: int = 1,
-                             enable_iir_filter: bool = False) -> Dict[str, str]:
+                             enable_iir_filter: bool = False,
+                             enable_kalman_filter: bool = False) -> Dict[str, str]:
     """
     Convenience function to generate deployment code with organized naming.
 
@@ -710,7 +736,8 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         generator = CodeGeneratorFactory.create_generator(
             model_type, model_data, platform, optimization, overlap, quantization,
             deployment_approach, confidence_threshold=confidence_threshold,
-            smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter)
+            smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter,
+            enable_kalman_filter=enable_kalman_filter)
 
         # Create organized filenames
         # For alternative deployment approaches, generate files differently
@@ -878,7 +905,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
                                       deployment_approach: str = 'direct',
                                       confidence_threshold: float = 0.6,
                                       smoothing_window: int = 1,
-                                      enable_iir_filter: bool = False) -> Dict[str, str]:
+                                      enable_iir_filter: bool = False,
+                                      enable_kalman_filter: bool = False) -> Dict[str, str]:
     """
     Generate deployment code and save to organized folder structure.
 
@@ -910,7 +938,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
     generated_code = generate_deployment_code(
         model_type, model_data, platform, optimization, overlap, quantization,
         deployment_approach, confidence_threshold=confidence_threshold,
-        smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter)
+        smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter,
+        enable_kalman_filter=enable_kalman_filter)
 
     # Save files and return file paths
     saved_files = {}

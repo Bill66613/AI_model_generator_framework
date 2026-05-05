@@ -30,7 +30,8 @@ class BaseCodeGenerator(ABC):
                  quantization: str = 'none',
                  confidence_threshold: float = 0.6,
                  smoothing_window: int = 1,
-                 enable_iir_filter: bool = False):
+                 enable_iir_filter: bool = False,
+                 enable_kalman_filter: bool = False):
         # Validate inputs before proceeding
         self._validate_model_data(model_data)
         self._validate_optimization(optimization)
@@ -46,6 +47,7 @@ class BaseCodeGenerator(ABC):
         self.confidence_threshold = max(0.0, min(1.0, confidence_threshold))
         self.smoothing_window = max(1, min(9, smoothing_window))
         self.enable_iir_filter = enable_iir_filter
+        self.enable_kalman_filter = enable_kalman_filter
 
         # Quantization mode: 'none', 'int8', 'int16', 'float16'
         from .quantization import QUANTIZATION_MODES
@@ -129,6 +131,7 @@ class BaseCodeGenerator(ABC):
 // Function declarations
 {self._get_function_declarations()}
 {self._generate_iir_filter_declarations()}
+{self._generate_kalman_filter_declarations()}
 #endif // HAR_MODEL_H
 """
         return header.strip()
@@ -166,6 +169,7 @@ const char* activity_names[NUM_CLASSES] = {{
 }};
 
 {self._generate_iir_filter_implementation()}
+{self._generate_kalman_filter_implementation()}
 {self._generate_feature_scaling_arrays()}
 
 {self._generate_model_specific_implementation()}
@@ -528,6 +532,125 @@ const char* get_activity_name(int class_id) {{
         ]
         return '\n'.join(lines) + '\n'
 
+    # ── Kalman filter generation ─────────────────────────────────────────
+
+    def _has_kalman_filter(self) -> bool:
+        """Check if on-device Kalman filter should be generated.
+
+        Enabled when the user opts in via the deployment UI.
+        Unlike IIR (filtfilt vs lfilter), the Kalman filter is inherently
+        causal — so it's safe to add at deployment even if training
+        didn't use it (model receives cleaner input, generally beneficial).
+        """
+        return self.enable_kalman_filter
+
+    def _has_kalman_parity(self) -> bool:
+        """Return True if Kalman was also used during training (exact parity)."""
+        return bool(self.preprocessing.get('kalman_filter'))
+
+    def _generate_kalman_filter_declarations(self) -> str:
+        """Generate Kalman filter function declarations for the header."""
+        if not self._has_kalman_filter():
+            return ''
+        if self._has_kalman_parity():
+            comment = '// On-device Kalman filter (exact parity with training preprocessing)'
+        else:
+            comment = '// On-device Kalman filter (device-only — training did not use Kalman)'
+        return (
+            f'\n{comment}\n'
+            '#define KALMAN_FILTER_ENABLED 1\n'
+            'void kalman_filter_sample(float raw[N_CHANNELS]);\n'
+            'void kalman_filter_reset(void);\n'
+        )
+
+    def _generate_kalman_filter_implementation(self) -> str:
+        """Generate C++ Kalman filter implementation.
+
+        Implements a constant-velocity 1D Kalman filter per channel,
+        matching the Python ``kalman_filter()`` in ``utils/data_processing.py``.
+        State: [position, velocity].  Observation: position only.
+        """
+        if not self._has_kalman_filter():
+            return ''
+
+        q = self.preprocessing.get('kalman_process_noise', 1e-3)
+        r = self.preprocessing.get('kalman_measurement_noise', 1e-1)
+        fs = self.sampling_rate
+        dt = 1.0 / fs
+
+        # Pre-compute constant Q matrix entries
+        q00 = q * (dt ** 3) / 3.0
+        q01 = q * (dt ** 2) / 2.0
+        q11 = q * dt
+
+        parity_note = ('identical to Python training pipeline'
+                       if self._has_kalman_parity()
+                       else 'device-only — model trained without Kalman')
+        lines = [
+            f'// Kalman filter: constant-velocity model, Q_scale={q}, R={r}, fs={fs}Hz',
+            f'// Causal (forward-only) — {parity_note}',
+            f'#define KALMAN_DT {self._float_literal(dt)}',
+            f'',
+            f'// Per-channel Kalman state',
+            f'static float kalman_x[N_CHANNELS][2];   // [position, velocity]',
+            f'static float kalman_P[N_CHANNELS][2][2]; // error covariance',
+            f'static uint8_t kalman_initialized[N_CHANNELS]; // lazy-init flag (0=false, 1=true)',
+            f'',
+            f'// Process noise covariance (constant)',
+            f'static const float kalman_Q[2][2] = {{',
+            f'    {{{self._float_literal(q00)}, {self._float_literal(q01)}}},',
+            f'    {{{self._float_literal(q01)}, {self._float_literal(q11)}}}',
+            f'}};',
+            f'static const float kalman_R = {self._float_literal(r)};',
+            f'',
+            f'void kalman_filter_reset(void) {{',
+            f'    for (int ch = 0; ch < N_CHANNELS; ch++) {{',
+            f'        kalman_initialized[ch] = 0;',
+            f'    }}',
+            f'}}',
+            f'',
+            f'void kalman_filter_sample(float raw[N_CHANNELS]) {{',
+            f'    for (int ch = 0; ch < N_CHANNELS; ch++) {{',
+            f'        // --- Lazy-init from first measurement (matches Python: x = [z[0], 0]) ---',
+            f'        if (!kalman_initialized[ch]) {{',
+            f'            kalman_x[ch][0] = raw[ch];',
+            f'            kalman_x[ch][1] = 0.0f;',
+            f'            kalman_P[ch][0][0] = kalman_R;',
+            f'            kalman_P[ch][0][1] = 0.0f;',
+            f'            kalman_P[ch][1][0] = 0.0f;',
+            f'            kalman_P[ch][1][1] = kalman_R;',
+            f'            kalman_initialized[ch] = 1;',
+            f'        }}',
+            f'',
+            f'        // --- Predict ---',
+            f'        float x0 = kalman_x[ch][0] + KALMAN_DT * kalman_x[ch][1];',
+            f'        float x1 = kalman_x[ch][1];',
+            f'',
+            f'        float P00 = kalman_P[ch][0][0] + KALMAN_DT * (kalman_P[ch][1][0] + kalman_P[ch][0][1]) + KALMAN_DT * KALMAN_DT * kalman_P[ch][1][1] + kalman_Q[0][0];',
+            f'        float P01 = kalman_P[ch][0][1] + KALMAN_DT * kalman_P[ch][1][1] + kalman_Q[0][1];',
+            f'        float P10 = kalman_P[ch][1][0] + KALMAN_DT * kalman_P[ch][1][1] + kalman_Q[1][0];',
+            f'        float P11 = kalman_P[ch][1][1] + kalman_Q[1][1];',
+            f'',
+            f'        // --- Update ---',
+            f'        float S = P00 + kalman_R;',
+            f'        float K0 = P00 / S;',
+            f'        float K1 = P10 / S;',
+            f'        float y = raw[ch] - x0;',
+            f'',
+            f'        kalman_x[ch][0] = x0 + K0 * y;',
+            f'        kalman_x[ch][1] = x1 + K1 * y;',
+            f'',
+            f'        kalman_P[ch][0][0] = (1.0f - K0) * P00;',
+            f'        kalman_P[ch][0][1] = (1.0f - K0) * P01;',
+            f'        kalman_P[ch][1][0] = P10 - K1 * P00;',
+            f'        kalman_P[ch][1][1] = P11 - K1 * P01;',
+            f'',
+            f'        raw[ch] = kalman_x[ch][0];  // filtered output',
+            f'    }}',
+            f'}}',
+        ]
+        return '\n'.join(lines) + '\n'
+
     def _get_logging_macros(self) -> str:
         """Generate platform-portable logging macros.
         
@@ -556,9 +679,11 @@ const char* get_activity_name(int class_id) {{
             )
         else:
             # Arduino and Arduino-like (ESP32, Seeed XIAO, Teensy, ARM Cortex-M)
+            # Use snprintf to handle printf-style format args portably across all Arduino cores
             return (
                 '// Platform-portable logging (Arduino)\n'
-                '#define HAR_LOG(fmt, ...) do { Serial.println(fmt); } while(0)\n'
+                '#include <stdio.h>\n'
+                '#define HAR_LOG(fmt, ...) do { char _lbuf[128]; snprintf(_lbuf, sizeof(_lbuf), fmt, ##__VA_ARGS__); Serial.println(_lbuf); } while(0)\n'
                 '#define HAR_LOG_FLOAT(label, val) do { Serial.print(label); Serial.print(": "); Serial.println(val, 4); } while(0)'
             )
 
@@ -1453,6 +1578,9 @@ void setup() {{
     #ifdef IIR_FILTER_ENABLED
     iir_filter_reset();
     #endif
+    #ifdef KALMAN_FILTER_ENABLED
+    kalman_filter_reset();
+    #endif
 
 {platform_code['imu_init']}
 
@@ -1479,6 +1607,16 @@ void loop() {{
         }}
         #endif
 
+        // Apply on-device Kalman filter ({'exact parity with training' if self._has_kalman_parity() else 'device-only — model trained without Kalman'})
+        #ifdef KALMAN_FILTER_ENABLED
+        {{
+            float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};
+            kalman_filter_sample(raw_sample);
+            aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];
+            gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];
+        }}
+        #endif
+
         // Store in buffer
         sensor_buffer[buffer_index][0] = aX;
         sensor_buffer[buffer_index][1] = aY;
@@ -1490,14 +1628,22 @@ void loop() {{
         buffer_index++;
 
         // Check if buffer is full → run inference
-        const char* activity_name = NULL;
+        static const char* last_activity = NULL;
         if (buffer_index >= WINDOW_SIZE) {{
             // Extract features and predict BEFORE overlap copy
             extract_features(sensor_buffer, WINDOW_SIZE, features);
             float confidence = 0.0f;
             int predicted_class = har_predict(features, &confidence);
 
+            const char* activity_name = NULL;
 {self._generate_smoothing_prediction_logic()}
+            // Update persistent last_activity (keeps last known label between inference cycles)
+            if (activity_name != NULL) last_activity = activity_name;
+
+            // Debug: log prediction details (lines starting with # are ignored by parser)
+            Serial.print("# PRED: class="); Serial.print(predicted_class);
+            Serial.print(" conf="); Serial.print(confidence, 4);
+            Serial.print(" name="); Serial.println(predicted_class >= 0 ? get_activity_name(predicted_class) : "none");
 
             // Shift buffer for overlap: keep the last overlap portion
             int keep_samples = WINDOW_SIZE - (int)buffer_index_shift;
@@ -1510,16 +1656,16 @@ void loop() {{
         }}
 
         // Always output sensor CSV (for Device Test graph plotting)
-        // Append prediction only on inference cycles
+        // Append last prediction on every line so Device Test tab always has it
         Serial.print(aX, 4); Serial.print(",");
         Serial.print(aY, 4); Serial.print(",");
         Serial.print(aZ, 4); Serial.print(",");
         Serial.print(gX, 4); Serial.print(",");
         Serial.print(gY, 4); Serial.print(",");
         Serial.print(gZ, 4);
-        if (activity_name != NULL) {{
+        if (last_activity != NULL) {{
             Serial.print(",");
-            Serial.print(activity_name);
+            Serial.print(last_activity);
         }}
         Serial.println();
     }}

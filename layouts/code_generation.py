@@ -64,10 +64,10 @@ layout = html.Div([
             html.H4("⚙️ Step 2: Configure Target Platform", style={
                 'color': '#2E86AB', 'margin-bottom': '20px', 'border-bottom': '2px solid #2E86AB', 'padding-bottom': '10px'}),
 
+            # --- Sub-section A: Platform & Model Configuration ---
             html.Div([
-                # Left column: Framework + Board selection
+                # Left column: Framework + Board
                 html.Div([
-                    # Output Framework / Language selection (NEW - primary dimension)
                     html.Label("Output Language / Framework:", style={
                                'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Dropdown(
@@ -96,7 +96,6 @@ layout = html.Div([
                         'margin-bottom': '15px'
                     }),
 
-                    # Target Board selection (secondary — filtered by framework)
                     html.Label("Target Board:", style={
                                'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Dropdown(
@@ -113,7 +112,7 @@ layout = html.Div([
                     }),
                 ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
 
-                # Right column: Model params + optimization
+                # Right column: Model params + Deployment approach
                 html.Div([
                     html.Div([
                         html.H5("⚙️ Model Parameters (from training)", style={
@@ -145,19 +144,24 @@ layout = html.Div([
                         style={'margin-bottom': '5px'}
                     ),
                     html.Div([
-                        html.Div("💡 Choose how the model is deployed on the target device:",
-                                 style={'margin-bottom': '3px'}),
-                        html.Div("• Direct: Framework generates all C/C++ code — no external runtime needed", style={
+                        html.Div("• Direct: All C/C++ code generated — no external runtime needed", style={
                                  'margin-bottom': '3px'}),
-                        html.Div("• TFLite Micro: Converts to .tflite, uses TF Lite Micro interpreter (requires tensorflow)", style={
+                        html.Div("• TFLite Micro: .tflite model + interpreter (requires tensorflow)", style={
                                  'margin-bottom': '3px'}),
-                        html.Div("• ONNX Runtime: Exports .onnx model, uses ONNX Runtime C++ API (requires onnx, skl2onnx)", style={
+                        html.Div("• ONNX Runtime: .onnx model + ONNX C++ API (requires onnx, skl2onnx)", style={
                                  'font-size': '11px', 'color': '#999'})
                     ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic',
-                              'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px', 'margin-bottom': '15px'}),
+                              'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'}),
+                ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'})
+            ], style={'margin-bottom': '20px'}),
 
+            html.Hr(style={'border': '1px solid #e9ecef', 'margin': '15px 0'}),
+
+            # --- Sub-section B: Optimization & Quantization ---
+            html.Div([
+                html.Div([
                     html.Label("Optimization Level:", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Dropdown(
                         id='optimization-level',
                         options=[
@@ -170,60 +174,51 @@ layout = html.Div([
                         placeholder="Select optimization strategy",
                         style={'margin-bottom': '15px'}
                     ),
+                ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
 
+                html.Div([
                     html.Label("Weight Quantization:", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Dropdown(
                         id='quantization-mode',
                         options=[
                             {'label': '🔢 None (Float32) — Full precision', 'value': 'none'},
-                            {'label': '⚡ INT8 — 75% smaller weights, minimal accuracy loss', 'value': 'int8'},
-                            {'label': '📊 INT16 — 50% smaller weights, higher precision', 'value': 'int16'},
+                            {'label': '⚡ INT8 — 75% smaller, ~1-2% accuracy loss', 'value': 'int8'},
+                            {'label': '📊 INT16 — 50% smaller, negligible loss', 'value': 'int16'},
                             {'label': '🔀 Float16 — Reduced precision floats', 'value': 'float16'}
                         ],
                         value='none',
                         placeholder="Select weight quantization",
-                        style={'margin-bottom': '5px'}
+                        style={'margin-bottom': '15px'}
                     ),
-                    html.Div([
-                        html.Div("💡 Quantization reduces model weight storage on the microcontroller",
-                                 style={'margin-bottom': '3px'}),
-                        html.Div("• INT8: Best for NN/CNN — 4× smaller weights, ~1-2% accuracy loss", style={
-                                 'margin-bottom': '3px'}),
-                        html.Div("• INT16: Good balance — 2× smaller, negligible accuracy loss", style={
-                                 'margin-bottom': '3px'}),
-                        html.Div("• Less effective for Random Forest / SVM (tree thresholds need precision)", style={
-                                 'font-size': '11px', 'color': '#999'})
-                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic',
-                              'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px', 'margin-bottom': '15px'}),
+                ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'})
+            ], style={'margin-bottom': '15px'}),
 
+            # --- Sub-section C: Inference Settings ---
+            html.Div([
+                html.Div([
                     html.Label("Window Overlap (%):", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Input(
                         id='deployment-stride',
                         type='number',
-                        placeholder='0 (no overlap)',
-                        value=0,
+                        placeholder='50 (50% overlap)',
+                        value=50,
                         min=0,
                         max=99,
                         style={'width': '100%', 'padding': '8px',
-                               'border': '1px solid #ddd', 'border-radius': '4px'}
+                               'border': '1px solid #ddd', 'border-radius': '4px',
+                               'margin-bottom': '5px'}
                     ),
                     html.Div([
-                        html.Div("💡 Overlap controls how much windows overlap for real-time classification",
-                                 style={'margin-bottom': '5px'}),
-                        html.Div("• 0% = No overlap (fastest, each window processed once)", style={
-                                 'margin-bottom': '3px'}),
-                        html.Div("• 50% = Half overlap (2x classifications per window)", style={
-                                 'margin-bottom': '3px'}),
-                        html.Div("• 75% = High overlap (4x classifications, smoothest but slowest)", style={
-                                 'margin-bottom': '5px'}),
-                        html.Div("Higher overlap = MORE frequent updates = HIGHER power consumption", style={
-                                 'font-size': '11px', 'color': '#999'})
-                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic', 'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'}),
+                        html.Div("0% = no overlap (fastest) · 50% = 2× updates · 75% = smoothest",
+                                 style={'margin-bottom': '3px'}),
+                    ], style={'font-size': '11px', 'color': '#666', 'font-style': 'italic'}),
+                ], style={'width': '30%', 'display': 'inline-block', 'vertical-align': 'top'}),
 
+                html.Div([
                     html.Label("Confidence Threshold:", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Input(
                         id='deployment-confidence-threshold',
                         type='number',
@@ -233,19 +228,18 @@ layout = html.Div([
                         max=1.0,
                         step=0.05,
                         style={'width': '100%', 'padding': '8px',
-                               'border': '1px solid #ddd', 'border-radius': '4px'}
+                               'border': '1px solid #ddd', 'border-radius': '4px',
+                               'margin-bottom': '5px'}
                     ),
                     html.Div([
-                        html.Div("Minimum confidence to accept a prediction (0.0-1.0)",
-                                 style={'margin-bottom': '5px'}),
-                        html.Div("• Below threshold → returns 'unknown' instead of forcing a class", style={
-                                 'margin-bottom': '3px'}),
-                        html.Div("• Higher = fewer false positives, lower = more responsive", style={
-                                 'margin-bottom': '3px'}),
-                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic', 'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'}),
+                        html.Div("Below threshold → 'unknown'. Higher = fewer false positives",
+                                 style={'margin-bottom': '3px'}),
+                    ], style={'font-size': '11px', 'color': '#666', 'font-style': 'italic'}),
+                ], style={'width': '30%', 'display': 'inline-block', 'margin-left': '5%', 'vertical-align': 'top'}),
 
+                html.Div([
                     html.Label("Prediction Smoothing:", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
                     dcc.Input(
                         id='deployment-smoothing-window',
                         type='number',
@@ -255,36 +249,57 @@ layout = html.Div([
                         max=9,
                         step=2,
                         style={'width': '100%', 'padding': '8px',
-                               'border': '1px solid #ddd', 'border-radius': '4px'}
+                               'border': '1px solid #ddd', 'border-radius': '4px',
+                               'margin-bottom': '5px'}
                     ),
                     html.Div([
-                        html.Div("Majority vote over last N predictions to reduce spurious misclassifications",
-                                 style={'margin-bottom': '5px'}),
-                        html.Div("• 1 = No smoothing (raw predictions)", style={
-                                 'margin-bottom': '3px'}),
-                        html.Div("• 3 = Recommended (filters transient errors, fast response)", style={
-                                 'margin-bottom': '3px'}),
-                        html.Div("• 5-9 = More stable but slower to react to activity changes", style={
-                                 'margin-bottom': '3px'}),
-                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic', 'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'}),
+                        html.Div("Majority vote over N predictions. 1 = off, 3 = recommended",
+                                 style={'margin-bottom': '3px'}),
+                    ], style={'font-size': '11px', 'color': '#666', 'font-style': 'italic'}),
+                ], style={'width': '30%', 'display': 'inline-block', 'margin-left': '5%', 'vertical-align': 'top'})
+            ], style={'margin-bottom': '15px'}),
 
-                    html.Label("On-device IIR Filter:", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'margin-top': '15px', 'display': 'block'}),
-                    dcc.Checklist(
-                        id='deployment-iir-filter-enabled',
-                        options=[{'label': ' Enable causal IIR low-pass filter', 'value': 'enabled'}],
-                        value=[],
-                        style={'margin-bottom': '5px'}
-                    ),
+            html.Hr(style={'border': '1px solid #e9ecef', 'margin': '15px 0'}),
+
+            # --- Sub-section D: On-device Signal Filters ---
+            html.Div([
+                html.H5("📡 On-device Signal Preprocessing", style={
+                    'font-size': '14px', 'color': '#495057', 'margin-bottom': '12px'}),
+
+                html.Div([
+                    # IIR Filter
                     html.Div([
-                        html.Div("Applies a Butterworth IIR filter per-sample before buffering",
-                                 style={'margin-bottom': '5px'}),
-                        html.Div("Note: Training uses zero-phase filtfilt; on-device uses causal lfilter. "
-                                 "This can increase skewness/kurtosis for transient events.",
-                                 style={'color': '#ff9800', 'margin-bottom': '3px'}),
-                    ], style={'font-size': '12px', 'color': '#666', 'margin-top': '5px', 'font-style': 'italic', 'padding': '8px', 'background': '#f8f9fa', 'border-radius': '4px'})
-                ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'})
-            ])
+                        dcc.Checklist(
+                            id='deployment-iir-filter-enabled',
+                            options=[{'label': ' IIR low-pass filter (Butterworth)', 'value': 'enabled'}],
+                            value=[],
+                            style={'margin-bottom': '5px'}
+                        ),
+                        html.Div([
+                            html.Div("Per-sample Butterworth filter before buffering",
+                                     style={'margin-bottom': '3px'}),
+                            html.Div("⚠️ Training uses filtfilt (zero-phase); device uses causal lfilter — slight parity gap",
+                                     style={'color': '#ff9800'}),
+                        ], style={'font-size': '11px', 'color': '#666', 'margin-left': '25px', 'margin-bottom': '10px'}),
+                    ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
+
+                    # Kalman Filter
+                    html.Div([
+                        dcc.Checklist(
+                            id='deployment-kalman-filter-enabled',
+                            options=[{'label': ' Kalman filter (recommended)', 'value': 'enabled'}],
+                            value=[],
+                            style={'margin-bottom': '5px'}
+                        ),
+                        html.Div([
+                            html.Div("Constant-velocity Kalman filter per channel",
+                                     style={'margin-bottom': '3px'}),
+                            html.Div("✓ Causal — identical in training & deployment (no parity gap)",
+                                     style={'color': '#28a745'}),
+                        ], style={'font-size': '11px', 'color': '#666', 'margin-left': '25px', 'margin-bottom': '10px'}),
+                    ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'}),
+                ]),
+            ]),
         ], style={
             'background': 'white',
             'padding': '25px',

@@ -33,9 +33,9 @@
 ### Key Technical Findings (detail in TECHNICAL_FINDINGS.md)
 
 Key technical findings to reflect in the thesis (see `TECHNICAL_FINDINGS.md` for evidence):
-1. **Zero-padding artifact** → FIXED → edge-value replication (critical defense point)
+1. **Zero-padding artifact** → FIXED → edge-value replication (CRITICAL for defense)
 2. **Kurtosis/skewness formula mismatch** → FIXED → population std for z-scores in all generators
-3. **NN bias / default prediction behavior** → DOCUMENTED (explains “always predicts walking_downstairs” under distribution shift)
+3. **NN bias / default prediction behavior** → DOCUMENTED (explains "always predicts walking_downstairs" under distribution shift)
 4. **FFT precision gap** → RESOLVED via design choice (time-domain only features for exact parity)
 5. **Edge-replication still distorts if dataset is tiny** → DATA QUALITY issue (needs longer recordings)
 6. **Double standardization** → FIXED (scale once in training pipeline)
@@ -45,9 +45,11 @@ Key technical findings to reflect in the thesis (see `TECHNICAL_FINDINGS.md` for
 10. **Confidence threshold for unknown rejection** → IMPLEMENTED (deployment safety)
 11. **Class-aware data augmentation protection** → IMPLEMENTED
 12. **Multi-device deployment matrix is already implemented** → DOCUMENTED (XIAO is reference, not sole target)
-13. **(PR#3) CNN metadata mismatch** → FIXED (consistent feature/channel count in UI/code-gen)
-14. **(PR#3) Kalman filter (causal) + parity** → IMPLEMENTED
-15. **(PR#3) TFLite deployment scope** → CLARIFIED (RF/SVM not convertible via onnx2tf/ONNX-ML)
+13. **FFT robustness: Hann windowing + DC removal** → IMPLEMENTED → matches Edge Impulse quality
+14. **Deployment accuracy simulation** → IMPLEMENTED → predict on-device accuracy before deployment
+15. **TFLite deployment scope** → CLARIFIED (RF/SVM not directly convertible via onnx2tf/ONNX-ML; Keras surrogate fallback added as approximation)
+16. **CNN code generation metadata mismatch** → FIXED (consistent feature/channel count in UI and code-gen)
+17. **Kalman filter (causal) + exact deployment parity** → IMPLEMENTED (identical Python ↔ C++ filter equations with lazy-init)
 
 ---
 

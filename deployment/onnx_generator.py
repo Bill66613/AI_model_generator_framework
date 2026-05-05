@@ -41,8 +41,16 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
                  optimization: str = 'balanced', overlap: float = 0.5,
-                 quantization: str = 'none'):
-        super().__init__(model_data, platform, optimization, overlap, quantization='none')
+                 quantization: str = 'none',
+                 confidence_threshold: float = 0.6,
+                 smoothing_window: int = 1,
+                 enable_iir_filter: bool = False,
+                 enable_kalman_filter: bool = False):
+        super().__init__(model_data, platform, optimization, overlap, quantization='none',
+                         confidence_threshold=confidence_threshold,
+                         smoothing_window=smoothing_window,
+                         enable_iir_filter=enable_iir_filter,
+                         enable_kalman_filter=enable_kalman_filter)
         self.onnx_quantization = quantization
         self._onnx_bytes = None
         self._onnx_info = None
@@ -101,12 +109,12 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         return '\n'.join(lines)
 
     def _generate_model_specific_implementation(self) -> str:
-        """Generate the ONNX model as embedded C byte array."""
+        """Generate the ONNX model as embedded C byte array.
+
+        Raises ImportError/ValueError if conversion fails — caller must handle.
+        """
         if self._onnx_bytes is None:
-            try:
-                self.convert_model()
-            except (ImportError, ValueError) as e:
-                return self._generate_placeholder_model(str(e))
+            self.convert_model()  # Let exceptions propagate — UI will show failure
 
         return self._generate_onnx_c_array()
 
@@ -208,6 +216,11 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         lines.append("")
         lines.append("void onnx_cleanup() {")
         lines.append("    onnx_initialized = false;")
+        lines.append("}")
+        lines.append("")
+        lines.append("// har_predict_internal: bridges base har_predict() → onnx_predict()")
+        lines.append(f"int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {{")
+        lines.append("    return onnx_predict(features, probs_out);")
         lines.append("}")
 
         return '\n'.join(lines)
@@ -321,6 +334,11 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         lines.append("void onnx_cleanup() {}")
         lines.append("")
         lines.append("#endif  // USE_ONNX_RUNTIME")
+        lines.append("")
+        lines.append("// har_predict_internal: bridges base har_predict() → onnx_predict()")
+        lines.append(f"int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {{")
+        lines.append("    return onnx_predict(features, probs_out);")
+        lines.append("}")
 
         return '\n'.join(lines)
 
@@ -379,39 +397,48 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
             return self._generate_arduino_onnx_sketch(sketch, header_filename)
 
     def _generate_arduino_onnx_sketch(self, sketch: list, header_filename: str) -> str:
-        """Generate Arduino sketch with embedded ONNX model."""
+        """Generate Arduino sketch with embedded ONNX model.
+
+        Reuses base class `_get_platform_specific_code()` for IMU init/read
+        to ensure consistency with the direct deployment path (same defines,
+        same sensor conversion, same I2C init sequence).
+        """
+        # Reuse the canonical platform-specific IMU code from base class
+        platform_code = self._get_platform_specific_code()
+
         sketch.append(f"#include \"{header_filename}\"")
         sketch.append(f"")
-
-        if self.platform in ('seeed_xiao', 'arduino'):
-            sketch.append(f"#include <LSM6DS3.h>")
-            sketch.append(f"#include <Wire.h>")
-            sketch.append(f"LSM6DS3 imu(I2C_MODE, 0x6A);")
+        sketch.append(platform_code['includes'])
+        sketch.append(f"")
+        sketch.append(platform_code['defines'])
         sketch.append(f"")
 
         sketch.append(f"float sensor_buffer[WINDOW_SIZE][N_CHANNELS];")
         sketch.append(f"int sample_count = 0;")
+        sketch.append(f"")
 
-        sampling_rate = self.model_data.get('model_params', {}).get('sampling_rate', 100)
-        sketch.append(f"const unsigned long SAMPLE_INTERVAL_US = {int(1000000 / sampling_rate)};")
+        # Sliding window
+        sketch.append(platform_code['overlap_defines'])
+        sketch.append(f"")
+
+        sketch.append(f"// Timing — SAMPLING_RATE is defined in the header")
+        sketch.append(f"const unsigned long SAMPLE_INTERVAL_US = 1000000UL / SAMPLING_RATE;")
         sketch.append(f"unsigned long last_sample_time = 0;")
-        sketch.append(f"const float CONFIDENCE_THRESHOLD = 0.6f;")
         sketch.append(f"")
 
         sketch.append(f"void setup() {{")
         sketch.append(f"    Serial.begin(115200);")
         sketch.append(f"    while (!Serial && millis() < 3000);")
         sketch.append(f"    Serial.println(\"HAR ONNX Runtime - Initializing...\");")
+        sketch.append(f"")
 
-        if self.platform in ('seeed_xiao', 'arduino'):
-            sketch.append(f"    if (imu.begin() != 0) {{")
-            sketch.append(f"        Serial.println(\"ERROR: IMU init failed!\");")
-            sketch.append(f"        while (1);")
-            sketch.append(f"    }}")
+        # IMU init from base (includes Wire.begin, address fallback, diagnostics)
+        sketch.append(platform_code['imu_init'])
+        sketch.append(f"")
 
         sketch.append(f"    if (!onnx_init_from_buffer(g_onnx_model, g_onnx_model_len)) {{")
         sketch.append(f"        Serial.println(\"ERROR: ONNX init failed!\");")
-        sketch.append(f"        while (1);")
+        sketch.append(f"        while (1) {{ delay(2000); Serial.println(\"ONNX init failed\"); }}")
         sketch.append(f"    }}")
         sketch.append(f"    onnx_print_info();")
         sketch.append(f"    Serial.println(\"Ready!\");")
@@ -424,18 +451,21 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         sketch.append(f"    last_sample_time = now;")
         sketch.append(f"")
 
-        if self.platform in ('seeed_xiao', 'arduino'):
-            sketch.append(f"    sensor_buffer[sample_count][0] = imu.readFloatAccelX();")
-            sketch.append(f"    sensor_buffer[sample_count][1] = imu.readFloatAccelY();")
-            sketch.append(f"    sensor_buffer[sample_count][2] = imu.readFloatAccelZ();")
-            sketch.append(f"    sensor_buffer[sample_count][3] = imu.readFloatGyroX();")
-            sketch.append(f"    sensor_buffer[sample_count][4] = imu.readFloatGyroY();")
-            sketch.append(f"    sensor_buffer[sample_count][5] = imu.readFloatGyroZ();")
-        else:
-            sketch.append(f"    // Read IMU data into sensor_buffer[sample_count][0..5]")
+        # Sensor read from base (includes CONVERT_G_TO_MS2 multiplication)
+        sketch.append(platform_code['sensor_read'])
+        sketch.append(f"")
 
+        sketch.append(f"    // Store in buffer")
+        sketch.append(f"    sensor_buffer[sample_count][0] = aX;")
+        sketch.append(f"    sensor_buffer[sample_count][1] = aY;")
+        sketch.append(f"    sensor_buffer[sample_count][2] = aZ;")
+        sketch.append(f"    sensor_buffer[sample_count][3] = gX;")
+        sketch.append(f"    sensor_buffer[sample_count][4] = gY;")
+        sketch.append(f"    sensor_buffer[sample_count][5] = gZ;")
         sketch.append(f"    sample_count++;")
         sketch.append(f"")
+
+        sketch.append(f"    static const char* last_activity = NULL;")
         sketch.append(f"    if (sample_count >= WINDOW_SIZE) {{")
         sketch.append(f"        float features[NUM_FEATURES];")
         sketch.append(f"        extract_features(sensor_buffer, WINDOW_SIZE, features);")
@@ -444,24 +474,51 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         sketch.append(f"        float probabilities[NUM_CLASSES];")
         sketch.append(f"        int predicted = onnx_predict(features, probabilities);")
         sketch.append(f"")
+        sketch.append(f"        // Debug: print raw probabilities (lines starting with # are ignored by parser)")
+        sketch.append(f"        Serial.print(\"# PRED: class=\"); Serial.print(predicted);")
+        sketch.append(f"        Serial.print(\" probs=[\");")
+        sketch.append(f"        for (int i = 0; i < NUM_CLASSES; i++) {{")
+        sketch.append(f"            if (i > 0) Serial.print(\",\");")
+        sketch.append(f"            Serial.print(probabilities[i], 4);")
+        sketch.append(f"        }}")
+        sketch.append(f"        Serial.print(\"] name=\");")
+        sketch.append(f"        Serial.println(predicted >= 0 ? onnx_get_class_name(predicted) : \"none\");")
+        sketch.append(f"")
         sketch.append(f"        if (predicted >= 0) {{")
         sketch.append(f"            float conf = probabilities[predicted];")
         sketch.append(f"            if (conf >= CONFIDENCE_THRESHOLD) {{")
-        sketch.append(f"                Serial.print(\"PREDICTION:\");")
-        sketch.append(f"                Serial.print(onnx_get_class_name(predicted));")
-        sketch.append(f"                Serial.print(\":\");")
-        sketch.append(f"                Serial.println(conf, 4);")
+        sketch.append(f"                last_activity = onnx_get_class_name(predicted);")
+        sketch.append(f"            }} else {{")
+        sketch.append(f"                last_activity = \"unknown\";")
         sketch.append(f"            }}")
+        sketch.append(f"        }} else {{")
+        sketch.append(f"            last_activity = \"unknown\";")
         sketch.append(f"        }}")
         sketch.append(f"")
 
-        overlap = self.overlap
-        sketch.append(f"        int shift = int(WINDOW_SIZE * {1.0 - overlap:.2f});")
-        sketch.append(f"        for (int i = 0; i < WINDOW_SIZE - shift; i++)")
+        # Sliding window shift using base overlap defines
+        sketch.append(f"        // Slide window")
+        sketch.append(f"        int keep = WINDOW_SIZE - (int)buffer_index_shift;")
+        sketch.append(f"        for (int i = 0; i < keep; i++)")
         sketch.append(f"            for (int j = 0; j < N_CHANNELS; j++)")
-        sketch.append(f"                sensor_buffer[i][j] = sensor_buffer[i + shift][j];")
-        sketch.append(f"        sample_count = WINDOW_SIZE - shift;")
+        sketch.append(f"                sensor_buffer[i][j] = sensor_buffer[i + (int)buffer_index_shift][j];")
+        sketch.append(f"        sample_count = keep;")
         sketch.append(f"    }}")
+        sketch.append(f"")
+
+        # Sensor CSV output (for Device Test tab compatibility)
+        sketch.append(f"    // Sensor CSV output (for Device Test tab live plotting)")
+        sketch.append(f"    Serial.print(aX, 4); Serial.print(\",\");")
+        sketch.append(f"    Serial.print(aY, 4); Serial.print(\",\");")
+        sketch.append(f"    Serial.print(aZ, 4); Serial.print(\",\");")
+        sketch.append(f"    Serial.print(gX, 4); Serial.print(\",\");")
+        sketch.append(f"    Serial.print(gY, 4); Serial.print(\",\");")
+        sketch.append(f"    Serial.print(gZ, 4);")
+        sketch.append(f"    if (last_activity != NULL) {{")
+        sketch.append(f"        Serial.print(\",\");")
+        sketch.append(f"        Serial.print(last_activity);")
+        sketch.append(f"    }}")
+        sketch.append(f"    Serial.println();")
         sketch.append(f"}}")
 
         return '\n'.join(sketch)
