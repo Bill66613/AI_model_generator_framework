@@ -78,7 +78,8 @@ def kalman_filter(data, process_noise=1e-3, measurement_noise=1e-1, fs=None):
 
     Args:
         data: DataFrame of numeric columns.
-        process_noise: Process noise covariance (Q diagonal).  Smaller = smoother.
+        process_noise: Scalar noise scale applied to the constant-velocity
+                       process noise covariance matrix Q.  Smaller = smoother.
         measurement_noise: Measurement noise covariance (R).  Larger = smoother.
         fs: Sampling frequency in Hz.  Defaults to ``DEFAULT_SAMPLING_RATE``.
 
