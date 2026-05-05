@@ -69,6 +69,70 @@ def low_pass_filter(data, cutoff=5, fs=None, order=2):
     return pd.DataFrame(filtfilt(b, a, data, axis=0), columns=data.columns)
 
 
+def kalman_filter(data, process_noise=1e-3, measurement_noise=1e-1, fs=None):
+    """Apply a 1D Kalman filter independently to each sensor channel.
+
+    Uses a constant-velocity state model [position, velocity] per channel.
+    The filter is causal (forward-only), so training and deployment produce
+    identical results — no parity gap unlike filtfilt-based IIR.
+
+    Args:
+        data: DataFrame of numeric columns.
+        process_noise: Process noise covariance (Q diagonal).  Smaller = smoother.
+        measurement_noise: Measurement noise covariance (R).  Larger = smoother.
+        fs: Sampling frequency in Hz.  Defaults to ``DEFAULT_SAMPLING_RATE``.
+
+    Returns:
+        DataFrame with Kalman-filtered values, same shape as input.
+    """
+    if fs is None:
+        fs = DEFAULT_SAMPLING_RATE
+    import numpy as np
+
+    dt = 1.0 / fs
+
+    # State transition matrix: [pos, vel] -> [pos + vel*dt, vel]
+    F = np.array([[1, dt],
+                  [0, 1]], dtype=np.float64)
+    # Measurement matrix: we observe position only
+    H = np.array([[1, 0]], dtype=np.float64)
+    # Process noise covariance
+    Q = process_noise * np.array([[dt**3 / 3, dt**2 / 2],
+                                  [dt**2 / 2, dt]], dtype=np.float64)
+    # Measurement noise covariance
+    R = np.array([[measurement_noise]], dtype=np.float64)
+
+    result = pd.DataFrame(index=data.index, columns=data.columns, dtype=np.float64)
+
+    for col in data.columns:
+        z = data[col].values.astype(np.float64)
+        n = len(z)
+
+        # Initialize state with first measurement
+        x = np.array([z[0], 0.0], dtype=np.float64)
+        P = np.eye(2, dtype=np.float64) * measurement_noise
+
+        filtered = np.empty(n, dtype=np.float64)
+
+        for k in range(n):
+            # Predict
+            x = F @ x
+            P = F @ P @ F.T + Q
+
+            # Update
+            S = H @ P @ H.T + R
+            K = P @ H.T @ np.linalg.inv(S)
+            y = z[k] - (H @ x)[0]
+            x = x + (K @ np.array([[y]])).flatten()
+            P = (np.eye(2) - K @ H) @ P
+
+            filtered[k] = x[0]
+
+        result[col] = filtered
+
+    return result
+
+
 def split_data(df, split_ratio):
     train_df, test_df = train_test_split(
         df, test_size=1-split_ratio, random_state=42)

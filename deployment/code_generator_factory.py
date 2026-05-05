@@ -568,7 +568,8 @@ class CodeGeneratorFactory:
                          deployment_approach: str = 'direct',
                          confidence_threshold: float = 0.6,
                          smoothing_window: int = 1,
-                         enable_iir_filter: bool = False) -> BaseCodeGenerator:
+                         enable_iir_filter: bool = False,
+                         enable_kalman_filter: bool = False) -> BaseCodeGenerator:
         """
         Create appropriate code generator based on model type, platform, and deployment approach.
 
@@ -635,7 +636,8 @@ class CodeGeneratorFactory:
             return generator_class(model_data, platform, optimization, overlap, quantization,
                                    confidence_threshold=confidence_threshold,
                                    smoothing_window=smoothing_window,
-                                   enable_iir_filter=enable_iir_filter)
+                                   enable_iir_filter=enable_iir_filter,
+                                   enable_kalman_filter=enable_kalman_filter)
 
         except (ValidationError, ModelDataError, OptimizationError) as e:
             # Re-raise validation errors with context
@@ -680,7 +682,8 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
                              deployment_approach: str = 'direct',
                              confidence_threshold: float = 0.6,
                              smoothing_window: int = 1,
-                             enable_iir_filter: bool = False) -> Dict[str, str]:
+                             enable_iir_filter: bool = False,
+                             enable_kalman_filter: bool = False) -> Dict[str, str]:
     """
     Convenience function to generate deployment code with organized naming.
 
@@ -710,7 +713,8 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         generator = CodeGeneratorFactory.create_generator(
             model_type, model_data, platform, optimization, overlap, quantization,
             deployment_approach, confidence_threshold=confidence_threshold,
-            smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter)
+            smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter,
+            enable_kalman_filter=enable_kalman_filter)
 
         # Create organized filenames
         # For alternative deployment approaches, generate files differently
@@ -878,7 +882,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
                                       deployment_approach: str = 'direct',
                                       confidence_threshold: float = 0.6,
                                       smoothing_window: int = 1,
-                                      enable_iir_filter: bool = False) -> Dict[str, str]:
+                                      enable_iir_filter: bool = False,
+                                      enable_kalman_filter: bool = False) -> Dict[str, str]:
     """
     Generate deployment code and save to organized folder structure.
 
@@ -910,7 +915,8 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
     generated_code = generate_deployment_code(
         model_type, model_data, platform, optimization, overlap, quantization,
         deployment_approach, confidence_threshold=confidence_threshold,
-        smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter)
+        smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter,
+        enable_kalman_filter=enable_kalman_filter)
 
     # Save files and return file paths
     saved_files = {}

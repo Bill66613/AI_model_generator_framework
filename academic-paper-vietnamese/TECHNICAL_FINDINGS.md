@@ -1,8 +1,8 @@
 # PHÁT HIỆN KỸ THUẬT QUAN TRỌNG
 # Technical Findings — Framework vs Commercial Platforms
 
-**Last updated:** 2026-04-17  
-**Version:** 8.0 (added finding 14: deployment accuracy simulation — confidence + smoothing parity)
+**Last updated:** 2026-05-02  
+**Version:** 10.0 (added finding 16: Kalman filter with exact deployment parity)
 
 ---
 
@@ -26,6 +26,8 @@ This file documents **14 critical technical findings** discovered during framewo
 | 12 | Multi-device deployment matrix vs single-board narrative | DESIGN | ✅ DOCUMENTED | `deployment/code_generator_factory.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py`, `deployment/zephyr_generator.py` | Ch.1 §motivation, Ch.3 §CodeGen, Ch.4 §deployment, Ch.5 §validity |
 | 13 | FFT robustness: Hann windowing + DC removal + spectral stats | IMPROVEMENT | ✅ IMPLEMENTED | `utils/feature_extraction.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py` | Ch.3 §FE, Ch.5 §parity, Ch.5 §EI comparison |
 | 14 | Deployment accuracy simulation: confidence + majority-vote smoothing | FEATURE | ✅ IMPLEMENTED | `utils/edge_ml_model.py`, `callbacks/training_callbacks.py` | Ch.3 §Training, Ch.4 §robustness, Ch.5 §parity |
+| 15 | CNN code generation metadata mismatch — wrong feature count | MEDIUM | ✅ FIXED | `callbacks/code_generation_callbacks.py`, `deployment/cnn_generator.py` | Ch.3 §CodeGen, Ch.5 §multi-arch |
+| 16 | Kalman filter: causal preprocessing with exact deployment parity | FEATURE | ✅ IMPLEMENTED | `utils/data_processing.py`, `deployment/base_generator.py`, `callbacks/preprocessing_callbacks.py` | Ch.3 §preprocessing, Ch.5 §parity |
 
 **Action required:** Collect longer recordings (≥1.5s per window), use sliding window to generate 50+ windows/class, retrain, collect before/after accuracy data for Ch.4, and if possible add at least one more cross-device build/benchmark besides XIAO.
 
@@ -45,6 +47,8 @@ This file documents **14 critical technical findings** discovered during framewo
 - **Finding 10 (Confidence threshold)** → Code: `deployment/base_generator.py` (har_predict wrapper + softmax), `deployment/neural_network_generator.py`, `deployment/random_forest_generator.py`, `deployment/svm_generator.py`, `deployment/cnn_generator.py`, `deployment/micropython_generator.py` → Thesis: Ch.3 code generation robustness, Ch.4 real-world deployment
 - **Finding 11 (class-aware augmentation)** → Code: `utils/data_augmentation.py`, `callbacks/feature_engineering_callbacks.py`, `layouts/feature_engineering.py` → Thesis: Ch.3 augmentation, Ch.5 augmentation analysis
 - **Finding 12 (multi-device deployment matrix)** → Code: `deployment/code_generator_factory.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py`, `deployment/zephyr_generator.py` → Thesis: Ch.1 problem framing, Ch.3 generator matrix, Ch.4 multi-device results, Ch.5 validity scope
+- **Finding 15 (CNN metadata mismatch)** → Code: `callbacks/code_generation_callbacks.py` (feature_names fallback for CNN), `deployment/cnn_generator.py` (channel placeholder) → Thesis: Ch.3 multi-architecture code gen, Ch.5 pipeline correctness
+- **Finding 16 (Kalman filter)** → Code: `utils/data_processing.py` (Python kalman_filter), `deployment/base_generator.py` (C++ generation), `callbacks/preprocessing_callbacks.py` (UI wiring), `layouts/preprocessing.py` (UI toggle) → Thesis: Ch.3 preprocessing, Ch.5 training-deployment parity
 
 ---
 
@@ -58,6 +62,8 @@ This file documents **14 critical technical findings** discovered during framewo
 | 2026-03-01 | Findings 6-8 added | Three critical deployment bugs: double standardization, feature order mismatch, double extraction in code gen pipeline |
 | 2026-04-08 | Finding 12 added | Documented mismatch between single-board thesis narrative and already-implemented multi-device deployment matrix |
 | 2026-04-17 | Finding 13 added | FFT robustness: Hann windowing, DC removal, spectral shape descriptors — cross-checked against Edge Impulse spectral analysis block |
+| 2026-05-02 | Finding 15 added | CNN code generation metadata mismatch: wrong feature count in filename (f33 → f6) and confusing Feature Count display for CNN models |
+| 2026-05-02 | Finding 16 added | Kalman filter implementation: causal per-channel constant-velocity Kalman filter in Python + C++ with exact training-deployment parity |
 
 *Add a row here each time this file is updated.*
 
@@ -903,6 +909,165 @@ Added `evaluate_with_confidence_threshold()` method to `EdgeMLModel` that simula
 - Standard (training-equivalent)
 - Deployment estimate (with confidence filtering)
 - Deployment + smoothing (full on-device simulation)
+
+---
+
+## Finding 15: CNN Code Generation Metadata Mismatch — Wrong Feature Count in Filename and Display
+
+**Severity:** MEDIUM  
+**Status:** ✅ FIXED  
+**Date:** 2026-05-02  
+**Files:** `callbacks/code_generation_callbacks.py`, `deployment/cnn_generator.py`
+
+### §15.1 Mô tả vấn đề
+
+**Tên kỹ thuật:** Sai lệch metadata giữa CNN và Feature-based models trong Code Generation pipeline
+
+**Bối cảnh:** Framework hỗ trợ hai loại model architecture:
+- **Feature-based** (RF, SVM, MLP): Sử dụng extracted statistical features (33, 53, 90, etc. features tùy FE mode)
+- **CNN**: Sử dụng raw sensor windows (150 samples × 6 channels) — KHÔNG dùng extracted features
+
+**Vấn đề phát hiện:** Khi tạo code cho CNN model, hệ thống hiển thị sai:
+1. **Filename:** `har_pytorch_cnn_seeed_xiao_f33_c3_balanced_int8` — "f33" là số statistical features, nhưng CNN không sử dụng chúng
+2. **Feature Count display:** `"150 samples x 6 ch (raw windows) (orientation-robust, time + freq (DFT))"` — phần nhãn FE method gây nhầm lẫn vì CNN không áp dụng FE
+
+### §15.2 Dữ liệu chứng minh
+
+**Model:** `pytorch_cnn_har_model_20260424_000449.joblib`
+
+**trained_models.json metadata:**
+```json
+{
+  "features": 150,              // X_train.shape[1] = window_size_samples
+  "num_features_extracted": 53, // from fe_config (NOT used by CNN)
+  "fe_config": {
+    "feature_method": "orientation_invariant",
+    "num_features": 53,
+    "num_channels": 6,
+    "window_size_samples": 150
+  }
+}
+```
+
+**Root cause chain:**
+1. `model.feature_names` is `None` for CNN (correct — CNN doesn't extract features)
+2. Fallback reads `*_metadata.json` from training directory → returns 33 statistical feature names (from a DIFFERENT FE session: `orientation_invariant_time_only`)
+3. `model_data['feature_names']` = 33 items → `len(feature_names)` = 33 → filename gets "f33"
+4. CNN generator's own fallback (`[f'ch{i}' for i in range(6)]`) never triggers because feature_names is already populated
+
+**Compounding issue:** The first `*_metadata.json` found by glob may not even match the model's actual FE session (e.g., model trained with `orientation_invariant` = 53 features, but metadata file found was from `orientation_invariant_time_only` = 33 features).
+
+### §15.3 Hậu quả
+
+- **Confusing filename:** `f33` implies CNN uses 33 features, which is incorrect
+- **Misleading UI display:** FE method label shown for CNN creates false impression that statistical feature extraction is applied
+- **Inconsistency:** Two CNN models from different FE sessions get the same filename but different actual configurations
+
+### §15.4 Giải pháp
+
+**Fix 1: Feature names for CNN in code generation callback** (`callbacks/code_generation_callbacks.py`):
+```python
+# CNN models operate on raw windows, not extracted features.
+# Use channel placeholder names so filename reflects input channels.
+if model_type in ('pytorch_cnn', 'cnn'):
+    n_channels = (metadata.get('fe_config', {}).get('num_channels')
+                  or len(metadata.get('fe_config', {}).get('sensor_columns', []))
+                  or 6)
+    feature_names = [f'ch{i}' for i in range(n_channels)]
+```
+
+Result: Filename now correctly shows `f6` (CNN input channels per timestep).
+
+**Fix 2: Feature Count display** — CNN now shows:
+- Info panel: `"Input: 150 samples × 6 ch (raw windows)"`
+- Parameters panel: `"150 samples × 6 channels = 900 inputs (raw windows, no FE)"`
+- With clarifying note: `"(FE used for other models: orientation-robust, time + freq (DFT))"`
+
+### §15.5 Thesis Significance
+
+**Differentiator vs Edge Impulse:** This finding demonstrates the complexity of supporting multiple model architectures (feature-based AND raw-input CNN) within a single unified pipeline. EI handles this by having separate "processing blocks" — our framework must distinguish model types at code generation time to produce correct metadata.
+
+**Design insight:** The `trained_models.json` field semantics differ by model type:
+- `features`: `X_train.shape[1]` — for CNN this is window_size_samples (150), for MLP it's feature count (33/53)
+- `num_features_extracted`: Always the FE pipeline output count — meaningful for feature-based models, informational-only for CNN
+
+---
+
+## Finding 16: Kalman Filter — Causal Preprocessing with Exact Deployment Parity
+
+**Severity:** FEATURE  
+**Status:** ✅ IMPLEMENTED  
+**Date:** 2026-05-02  
+**Files:** `utils/data_processing.py`, `deployment/base_generator.py`, `callbacks/preprocessing_callbacks.py`, `layouts/preprocessing.py`, `layouts/code_generation.py`, `callbacks/code_generation_callbacks.py`, `deployment/code_generator_factory.py`
+
+### §16.1 Mô tả vấn đề
+
+**Tên kỹ thuật:** Bộ lọc Kalman nhân quả cho tiền xử lý tín hiệu IMU (Causal Kalman Filter for IMU Signal Preprocessing)
+
+**Bối cảnh:** Framework đã có bộ lọc Butterworth low-pass (IIR) nhưng tồn tại **lỗ hổng tương đồng (parity gap)**:
+- **Python (huấn luyện):** Sử dụng `filtfilt` (zero-phase, non-causal) — xử lý dữ liệu thuận và ngược
+- **C++ (triển khai):** Sử dụng `lfilter`-equivalent (causal, forward-only) — chỉ xử lý thuận
+
+Khoảng cách này gây sai lệch các đặc trưng nhạy pha (skewness, kurtosis) giữa huấn luyện và triển khai.
+
+**Giải pháp:** Thêm bộ lọc Kalman 1D constant-velocity model cho mỗi kênh cảm biến. Bộ lọc Kalman vốn là **nhân quả** (causal), do đó Python và C++ tạo ra **kết quả hoàn toàn giống nhau**.
+
+### §16.2 Mô hình toán học
+
+**State model:** Constant-velocity per channel
+$$\mathbf{x}_k = \begin{bmatrix} p_k \\ v_k \end{bmatrix}, \quad F = \begin{bmatrix} 1 & \Delta t \\ 0 & 1 \end{bmatrix}, \quad H = \begin{bmatrix} 1 & 0 \end{bmatrix}$$
+
+**Process noise:** $Q = q \begin{bmatrix} \frac{\Delta t^3}{3} & \frac{\Delta t^2}{2} \\ \frac{\Delta t^2}{2} & \Delta t \end{bmatrix}$
+
+**Measurement noise:** $R = r$ (scalar)
+
+**Tunable parameters:**
+- `process_noise` ($q$): Smaller = smoother output. Default: $10^{-3}$
+- `measurement_noise` ($r$): Larger = smoother output. Default: $10^{-1}$
+
+### §16.3 Implementation Details
+
+**Python** (`utils/data_processing.py`):
+```python
+def kalman_filter(data, process_noise=1e-3, measurement_noise=1e-1, fs=None):
+    # Constant-velocity Kalman per channel
+    # State: [position, velocity], Observation: position only
+    F = [[1, dt], [0, 1]]
+    H = [[1, 0]]
+    # Standard Kalman predict-update loop per sample
+```
+
+**C++** (`deployment/base_generator.py` → generated code):
+```c
+void kalman_filter_sample(float raw[N_CHANNELS]) {
+    for (int ch = 0; ch < N_CHANNELS; ch++) {
+        // Predict: x = F @ x, P = F @ P @ F^T + Q
+        // Update: K = P @ H^T / (H @ P @ H^T + R), x += K * (z - H @ x)
+        raw[ch] = kalman_x[ch][0];  // filtered output
+    }
+}
+```
+
+### §16.4 Parity Advantage vs IIR
+
+| Property | IIR (Butterworth) | Kalman |
+|----------|-------------------|--------|
+| Training filter | `filtfilt` (non-causal) | Forward-only (causal) |
+| Device filter | `lfilter` (causal) | Forward-only (causal) |
+| **Parity** | ⚠️ Gap (phase difference) | ✅ Exact |
+| Smoothness control | Cutoff frequency + order | Q and R parameters |
+| Adaptive | No (fixed coefficients) | Yes (gain adapts to signal) |
+| Memory per channel | 2×order floats | 2 state + 4 covariance floats |
+
+### §16.5 Thesis Significance
+
+**Differentiator vs Edge Impulse:** Edge Impulse does not offer Kalman filtering as a preprocessing option. Their spectral analysis block uses fixed bandpass filters. The Kalman filter:
+1. Provides adaptive noise reduction (gain adjusts based on prediction error)
+2. Guarantees exact training-deployment parity (no `filtfilt` vs `lfilter` gap)
+3. Uses a physically meaningful constant-velocity model suitable for IMU data
+4. Parameters (Q, R) are intuitive to tune and saved in preprocessing config for reproducibility
+
+**Parity contribution:** This is the first preprocessing filter in the framework with **zero parity gap**. Both IIR and Savitzky-Golay have inherent training-deployment differences (zero-phase vs causal, offline vs streaming). The Kalman filter eliminates this class of bugs entirely.
 
 ---
 

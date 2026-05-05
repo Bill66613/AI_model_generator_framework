@@ -45,6 +45,10 @@
 10. **Confidence threshold for unknown activity rejection** → IMPLEMENTED → safer real-world deployment
 11. **Class-aware data augmentation** → IMPLEMENTED → protects static activities from class confusion
 12. **Multi-device deployment matrix already implemented in codebase** → DOCUMENTED → thesis should frame XIAO as reference platform, not sole target
+13. **FFT robustness: Hann windowing + DC removal** → IMPLEMENTED → matches Edge Impulse quality
+14. **Deployment accuracy simulation** → IMPLEMENTED → predict on-device accuracy before deployment
+15. **CNN code generation metadata mismatch** → FIXED → wrong feature count in filename and display for CNN models
+16. **Kalman filter with exact deployment parity** → IMPLEMENTED → causal preprocessing that produces identical results in Python and C++
 
 ---
 

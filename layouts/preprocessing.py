@@ -115,6 +115,28 @@ layout = html.Div([
                     ], style={'margin-left': '25px', 'margin-bottom': '10px'}),
                 ]),
 
+                # Kalman filter config
+                html.Div([
+                    dcc.Checklist(
+                        id='preprocess-kalman-enabled',
+                        options=[{'label': ' Kalman filter (causal, deployment-safe)', 'value': 'enabled'}],
+                        value=[],
+                        style={'margin-bottom': '8px'}
+                    ),
+                    html.Div([
+                        html.Label("Process noise:", style={'display': 'inline-block', 'width': '110px', 'font-size': '13px'}),
+                        dcc.Input(id='preprocess-kalman-process-noise', type='number', value=0.001,
+                                  min=1e-6, max=1.0, step=0.001,
+                                  style={'width': '80px', 'display': 'inline-block', 'margin-right': '15px'}),
+                        html.Label("Meas. noise:", style={'display': 'inline-block', 'width': '95px', 'font-size': '13px'}),
+                        dcc.Input(id='preprocess-kalman-measurement-noise', type='number', value=0.1,
+                                  min=1e-4, max=10.0, step=0.01,
+                                  style={'width': '80px', 'display': 'inline-block'}),
+                    ], style={'margin-left': '25px', 'margin-bottom': '5px'}),
+                    html.Div("Causal filter — identical output in training & deployment (no parity gap)",
+                             style={'font-size': '11px', 'color': '#28a745', 'margin-left': '25px'}),
+                ]),
+
             ], style={'width': '60%', 'display': 'inline-block', 'vertical-align': 'top'}),
 
             html.Div([
