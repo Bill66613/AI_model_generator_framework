@@ -119,16 +119,23 @@ def kalman_filter(data, process_noise=1e-3, measurement_noise=1e-1, fs=None):
         filtered = np.empty(n, dtype=np.float64)
 
         for k in range(n):
-            # Predict
+            # Predict (matrix form, but P is 2x2 so unrolled for clarity)
             x = F @ x
             P = F @ P @ F.T + Q
 
-            # Update
-            S = H @ P @ H.T + R
-            K = P @ H.T @ np.linalg.inv(S)
-            y = z[k] - (H @ x)[0]
-            x = x + (K @ np.array([[y]])).flatten()
-            P = (np.eye(2) - K @ H) @ P
+            # Update — scalar form: H = [1, 0], so S = P[0,0] + R is a scalar
+            S_scalar = P[0, 0] + R[0, 0]
+            K0 = P[0, 0] / S_scalar  # Kalman gain for position
+            K1 = P[1, 0] / S_scalar  # Kalman gain for velocity
+            y = z[k] - x[0]          # measurement residual
+            x[0] += K0 * y
+            x[1] += K1 * y
+            # P = (I - K*H) @ P, unrolled for H = [1, 0]
+            p00, p01, p10, p11 = P[0, 0], P[0, 1], P[1, 0], P[1, 1]
+            P[0, 0] = (1.0 - K0) * p00
+            P[0, 1] = (1.0 - K0) * p01
+            P[1, 0] = p10 - K1 * p00
+            P[1, 1] = p11 - K1 * p01
 
             filtered[k] = x[0]
 

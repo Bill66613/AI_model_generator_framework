@@ -604,25 +604,48 @@ class CodeGeneratorFactory:
             # Route to alternative deployment approach generators
             if deployment_approach == 'tflite_micro':
                 return TFLiteMicroCodeGenerator(
-                    model_data, platform, optimization, overlap, quantization)
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             if deployment_approach == 'onnx_runtime':
                 return ONNXRuntimeCodeGenerator(
-                    model_data, platform, optimization, overlap, quantization)
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             # --- Direct code generation (default) ---
 
             # For ARM Cortex-M platform, use specialized generator
             if platform == 'arm_cortex_m':
-                return cls._generators['arm_cortex_m'](model_data, platform, optimization, overlap, quantization)
+                return cls._generators['arm_cortex_m'](
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             # For MicroPython platform, use MicroPython generator
             if platform == 'micropython':
-                return cls._generators['micropython'](model_data, platform, optimization, overlap, quantization)
+                return cls._generators['micropython'](
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             # For Zephyr RTOS platform, use Zephyr generator
             if platform == 'zephyr':
-                return cls._generators['zephyr'](model_data, platform, optimization, overlap, quantization)
+                return cls._generators['zephyr'](
+                    model_data, platform, optimization, overlap, quantization,
+                    confidence_threshold=confidence_threshold,
+                    smoothing_window=smoothing_window,
+                    enable_iir_filter=enable_iir_filter,
+                    enable_kalman_filter=enable_kalman_filter)
 
             # For other platforms, use model-specific generators
             if model_type not in cls._generators:

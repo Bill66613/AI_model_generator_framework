@@ -136,8 +136,20 @@ class TFLiteConverter:
             onnx_result = self._try_convert_via_onnx(quantization, representative_data)
             if onnx_result is not None:
                 return onnx_result
-            # Fallback: Keras surrogate via knowledge distillation
+            # Fallback: Keras surrogate via knowledge distillation.
+            # NOTE: The resulting TFLite model is an approximation of the
+            # original RF/SVM — it may have lower accuracy.  For production
+            # use, Direct C/C++ Code Generation is recommended (faithful,
+            # no approximation, smaller binary).
             keras_model = self._build_keras_surrogate()
+            # Mark the conversion as surrogate so callers can surface the warning
+            self._conversion_info['strategy'] = 'keras_surrogate'
+            self._conversion_info['is_approximation'] = True
+            self._conversion_info['approximation_warning'] = (
+                f'{self.model_type.upper()} converted via Keras surrogate (knowledge distillation). '
+                'This is an approximation — accuracy may differ from the original model. '
+                'Use Direct C/C++ Code Generation for a faithful deployment.'
+            )
         else:
             raise ValueError(f"Unsupported model type: {self.model_type}")
 
@@ -881,11 +893,24 @@ class TFLiteConverter:
             for op in subgraph.operators:
                 used_opcode_indices.add(op.opcodeIndex)
 
-            # Map to builtin codes
+            # Map to builtin codes.
+            # In the TFLite flatbuffers schema, `deprecated_builtin_code` is a byte
+            # field (0-126, or 127 as PLACEHOLDER_FOR_GREATER_OP_CODES).
+            # When deprecated_builtin_code == 127, the actual opcode lives in the
+            # int32 `builtin_code` field (value >= 128).  For ops with codes < 127,
+            # the int32 field defaults to 0 (ADD), so we must NOT use it as a
+            # fallback indicator — ADD (0) is a perfectly valid opcode.
+            # Reference: tensorflow/lite/schema/schema.fbs, OperatorCode table.
+            PLACEHOLDER_FOR_GREATER_OP_CODES = 127
             unique_ops = set()
             for idx in used_opcode_indices:
                 oc = op_codes[idx]
-                code = oc.builtinCode if oc.builtinCode != 0 else oc.deprecatedBuiltinCode
+                if oc.deprecatedBuiltinCode == PLACEHOLDER_FOR_GREATER_OP_CODES:
+                    # Extended opcode: read from the int32 field
+                    code = oc.builtinCode
+                else:
+                    # Legacy byte field is authoritative
+                    code = oc.deprecatedBuiltinCode
                 if code in BUILTIN_OP_NAMES:
                     unique_ops.add(BUILTIN_OP_NAMES[code])
                 else:

@@ -38,9 +38,17 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'arduino',
                  optimization: str = 'balanced', overlap: float = 0.5,
-                 quantization: str = 'none'):
+                 quantization: str = 'none',
+                 confidence_threshold: float = 0.6,
+                 smoothing_window: int = 1,
+                 enable_iir_filter: bool = False,
+                 enable_kalman_filter: bool = False):
         # Pass actual quantization to base so header macros are correct
-        super().__init__(model_data, platform, optimization, overlap, quantization=quantization)
+        super().__init__(model_data, platform, optimization, overlap, quantization=quantization,
+                         confidence_threshold=confidence_threshold,
+                         smoothing_window=smoothing_window,
+                         enable_iir_filter=enable_iir_filter,
+                         enable_kalman_filter=enable_kalman_filter)
         self.tflite_quantization = quantization  # Store for TFLite converter
         self._tflite_bytes = None
         self._tflite_c_array = None

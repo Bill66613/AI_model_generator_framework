@@ -440,3 +440,145 @@ class TestPopulationStd:
         # Must match population std, not sample std
         assert abs(py_std - pop_std) < 1e-10
         assert abs(py_std - sample_std) > 1e-6  # Must NOT match sample std
+
+
+# ---------------------------------------------------------------------------
+# Kalman filter parity: Python implementation vs generated C++ equations
+# ---------------------------------------------------------------------------
+
+def _cpp_kalman_filter(signal: np.ndarray, dt: float, Q_scale: float, R: float) -> np.ndarray:
+    """Re-implement the generated C++ Kalman filter equations in Python.
+
+    Mirrors deployment/base_generator.py _generate_kalman_filter_implementation():
+    - constant-velocity model, H = [1, 0]
+    - lazy-init: first sample seeds state as [z[0], 0.0]
+    - scalar update form (H = [1,0] makes S = P[0,0] + R)
+
+    PARITY REQUIREMENT: This function MUST be kept in sync with both
+    utils/data_processing.kalman_filter() (Python training path) and the C++
+    code emitted by BaseCodeGenerator._generate_kalman_filter_implementation()
+    (deployment path).  Any change to the filter equations in one place must be
+    reflected in all three locations to maintain training-deployment parity.
+    """
+    n = len(signal)
+    if n == 0:
+        return signal.copy()
+
+    # Constant Q matrix entries (matches C++ codegen)
+    q00 = Q_scale * (dt ** 3) / 3.0
+    q01 = Q_scale * (dt ** 2) / 2.0
+    q11 = Q_scale * dt
+
+    # State and covariance — lazy init on first sample
+    x0 = signal[0]
+    x1 = 0.0
+    p00 = R
+    p01 = 0.0
+    p10 = 0.0
+    p11 = R
+
+    output = np.empty(n, dtype=np.float64)
+
+    for k in range(n):
+        # --- Predict ---
+        nx0 = x0 + dt * x1
+        nx1 = x1
+        np00 = p00 + dt * (p10 + p01) + dt * dt * p11 + q00
+        np01 = p01 + dt * p11 + q01
+        np10 = p10 + dt * p11 + q01
+        np11 = p11 + q11
+        x0, x1 = nx0, nx1
+        p00, p01, p10, p11 = np00, np01, np10, np11
+
+        # --- Update (scalar form, H = [1, 0]) ---
+        S = p00 + R
+        K0 = p00 / S
+        K1 = p10 / S
+        y = signal[k] - x0
+        x0 += K0 * y
+        x1 += K1 * y
+        new_p00 = (1.0 - K0) * p00
+        new_p01 = (1.0 - K0) * p01
+        new_p10 = p10 - K1 * p00
+        new_p11 = p11 - K1 * p01
+        p00, p01, p10, p11 = new_p00, new_p01, new_p10, new_p11
+
+        output[k] = x0
+
+    return output
+
+
+class TestKalmanFilterParity:
+    """Verify Python kalman_filter() matches the generated C++ equations."""
+
+    def test_kalman_single_channel_parity(self):
+        """Single synthetic channel: Python vs C++ re-implementation."""
+        from utils.data_processing import kalman_filter
+
+        rng = np.random.RandomState(7)
+        n = 100
+        t = np.arange(n) / 100.0
+        raw = np.sin(2 * np.pi * 2 * t) + rng.normal(0, 0.2, n)
+
+        Q_scale = 1e-3
+        R_noise = 0.1
+        fs = 100
+        dt = 1.0 / fs
+
+        df = pd.DataFrame({'ch0': raw})
+        py_out = kalman_filter(df, process_noise=Q_scale, measurement_noise=R_noise,
+                               fs=fs)['ch0'].values
+        cpp_out = _cpp_kalman_filter(raw, dt, Q_scale, R_noise)
+
+        # Should be numerically identical (same algorithm, same lazy-init)
+        np.testing.assert_allclose(py_out, cpp_out, rtol=1e-9, atol=1e-9,
+                                   err_msg="Python kalman_filter() diverges from C++ equations")
+
+    def test_kalman_empty_column(self):
+        """Empty column returns empty without crash."""
+        from utils.data_processing import kalman_filter
+
+        df = pd.DataFrame({'a': pd.Series([], dtype=float),
+                           'b': pd.Series([], dtype=float)})
+        result = kalman_filter(df)
+        assert result.shape == (0, 2)
+
+    def test_kalman_lazy_init_matches_python(self):
+        """C++ lazy-init (state seeded from first sample) matches Python."""
+        from utils.data_processing import kalman_filter
+
+        # Step signal: starts at 5.0, then drops — lazy-init should match Python's x=[z[0],0]
+        raw = np.array([5.0, 5.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=float)
+        df = pd.DataFrame({'x': raw})
+        py_out = kalman_filter(df, process_noise=1e-3, measurement_noise=0.1,
+                               fs=100)['x'].values
+        cpp_out = _cpp_kalman_filter(raw, dt=0.01, Q_scale=1e-3, R=0.1)
+
+        np.testing.assert_allclose(py_out, cpp_out, rtol=1e-9, atol=1e-9)
+
+    def test_kalman_multi_channel_parity(self):
+        """All 6 sensor channels agree between Python and C++ equations."""
+        from utils.data_processing import kalman_filter
+
+        rng = np.random.RandomState(42)
+        n = 50
+        t = np.arange(n) / 100.0
+        cols = ['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
+        data = {c: np.sin(2 * np.pi * (i + 1) * t) + rng.normal(0, 0.1, n)
+                for i, c in enumerate(cols)}
+        df = pd.DataFrame(data)
+
+        Q_scale = 1e-3
+        R_noise = 0.1
+        fs = 100
+        dt = 1.0 / fs
+
+        py_result = kalman_filter(df, process_noise=Q_scale,
+                                  measurement_noise=R_noise, fs=fs)
+
+        for col in cols:
+            cpp_out = _cpp_kalman_filter(df[col].values, dt, Q_scale, R_noise)
+            np.testing.assert_allclose(
+                py_result[col].values, cpp_out, rtol=1e-9, atol=1e-9,
+                err_msg=f"Parity failure on channel {col}"
+            )
