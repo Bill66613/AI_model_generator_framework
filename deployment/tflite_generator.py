@@ -169,7 +169,7 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
             resolver_include = '#include "tensorflow/lite/micro/all_ops_resolver.h"'
         else:
             resolver_include = '#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"'
-        return f"{base_includes}\n{resolver_include}"
+        return f"{base_includes}\n#include <TensorFlowLite.h>\n{resolver_include}"
 
     def _generate_cnn_tflite_implementation(self, header_filename=None) -> str:
         """CNN TFLite implementation: TFLite byte array + raw-window inference only.

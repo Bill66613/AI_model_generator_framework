@@ -288,7 +288,7 @@ layout = html.Div([
                         dcc.Checklist(
                             id='deployment-kalman-filter-enabled',
                             options=[{'label': ' Kalman filter (recommended)', 'value': 'enabled'}],
-                            value=['enabled'],
+                            value=[],
                             style={'margin-bottom': '5px'}
                         ),
                         html.Div([
