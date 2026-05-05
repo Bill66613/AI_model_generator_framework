@@ -1,14 +1,14 @@
 # PHÁT HIỆN KỸ THUẬT QUAN TRỌNG
 # Technical Findings — Framework vs Commercial Platforms
 
-**Last updated:** 2026-05-02  
-**Version:** 10.0 (added finding 16: Kalman filter with exact deployment parity)
+**Last updated:** 2026-05-05  
+**Version:** 10.0 (PR#3 merged: TFLite scope clarification, CNN metadata fix, Kalman filter parity)
 
 ---
 
 ## QUICK CONTEXT (Read this first in any new session)
 
-This file documents **14 critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
+This file documents **critical technical findings** discovered during framework development and device testing. These findings are the **core differentiators** of the thesis vs commercial platforms (Edge Impulse, SensiML) and form the strongest defense arguments.
 
 | # | Finding | Severity | Status | Code Files Affected | Thesis Chapters |
 |---|---------|----------|--------|---------------------|-----------------|
@@ -26,8 +26,9 @@ This file documents **14 critical technical findings** discovered during framewo
 | 12 | Multi-device deployment matrix vs single-board narrative | DESIGN | ✅ DOCUMENTED | `deployment/code_generator_factory.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py`, `deployment/zephyr_generator.py` | Ch.1 §motivation, Ch.3 §CodeGen, Ch.4 §deployment, Ch.5 §validity |
 | 13 | FFT robustness: Hann windowing + DC removal + spectral stats | IMPROVEMENT | ✅ IMPLEMENTED | `utils/feature_extraction.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py` | Ch.3 §FE, Ch.5 §parity, Ch.5 §EI comparison |
 | 14 | Deployment accuracy simulation: confidence + majority-vote smoothing | FEATURE | ✅ IMPLEMENTED | `utils/edge_ml_model.py`, `callbacks/training_callbacks.py` | Ch.3 §Training, Ch.4 §robustness, Ch.5 §parity |
-| 15 | CNN code generation metadata mismatch — wrong feature count | MEDIUM | ✅ FIXED | `callbacks/code_generation_callbacks.py`, `deployment/cnn_generator.py` | Ch.3 §CodeGen, Ch.5 §multi-arch |
-| 16 | Kalman filter: causal preprocessing with exact deployment parity | FEATURE | ✅ IMPLEMENTED | `utils/data_processing.py`, `deployment/base_generator.py`, `callbacks/preprocessing_callbacks.py` | Ch.3 §preprocessing, Ch.5 §parity |
+| 15 | TFLite deployment scope: RF/SVM not convertible via onnx2tf | DESIGN | ⚠️ LIMITATION | `deployment/converters/tflite_converter.py`, PR#3 | Ch.2 §related work, Ch.5 §limitations |
+| 16 | CNN code generation metadata mismatch — wrong feature/channel count | MEDIUM | ✅ FIXED | `callbacks/code_generation_callbacks.py`, `deployment/cnn_generator.py` | Ch.3 §CodeGen, Ch.5 §multi-arch |
+| 17 | Kalman filter: causal preprocessing with exact deployment parity | FEATURE | ✅ IMPLEMENTED | `utils/data_processing.py`, `deployment/base_generator.py`, `callbacks/preprocessing_callbacks.py` | Ch.3 §preprocessing, Ch.5 §parity |
 
 **Action required:** Collect longer recordings (≥1.5s per window), use sliding window to generate 50+ windows/class, retrain, collect before/after accuracy data for Ch.4, and if possible add at least one more cross-device build/benchmark besides XIAO.
 
@@ -47,8 +48,9 @@ This file documents **14 critical technical findings** discovered during framewo
 - **Finding 10 (Confidence threshold)** → Code: `deployment/base_generator.py` (har_predict wrapper + softmax), `deployment/neural_network_generator.py`, `deployment/random_forest_generator.py`, `deployment/svm_generator.py`, `deployment/cnn_generator.py`, `deployment/micropython_generator.py` → Thesis: Ch.3 code generation robustness, Ch.4 real-world deployment
 - **Finding 11 (class-aware augmentation)** → Code: `utils/data_augmentation.py`, `callbacks/feature_engineering_callbacks.py`, `layouts/feature_engineering.py` → Thesis: Ch.3 augmentation, Ch.5 augmentation analysis
 - **Finding 12 (multi-device deployment matrix)** → Code: `deployment/code_generator_factory.py`, `deployment/base_generator.py`, `deployment/micropython_generator.py`, `deployment/zephyr_generator.py` → Thesis: Ch.1 problem framing, Ch.3 generator matrix, Ch.4 multi-device results, Ch.5 validity scope
-- **Finding 15 (CNN metadata mismatch)** → Code: `callbacks/code_generation_callbacks.py` (feature_names fallback for CNN), `deployment/cnn_generator.py` (channel placeholder) → Thesis: Ch.3 multi-architecture code gen, Ch.5 pipeline correctness
-- **Finding 16 (Kalman filter)** → Code: `utils/data_processing.py` (Python kalman_filter), `deployment/base_generator.py` (C++ generation), `callbacks/preprocessing_callbacks.py` (UI wiring), `layouts/preprocessing.py` (UI toggle) → Thesis: Ch.3 preprocessing, Ch.5 training-deployment parity
+- **Finding 15 (TFLite scope)** → Evidence: RF/SVM rely on ONNX-ML ops (TreeEnsembleClassifier) not supported by onnx2tf; only NN/CNN are feasible direct conversion targets; RF/SVM now fall back to Keras surrogate (approximation) → Thesis: Ch.5 limitations + comparison
+- **Finding 16 (CNN metadata mismatch)** → Code: `callbacks/code_generation_callbacks.py` (feature_names fallback for CNN), `deployment/cnn_generator.py` (channel placeholder) → Thesis: Ch.3 multi-architecture code gen, Ch.5 pipeline correctness
+- **Finding 17 (Kalman filter)** → Code: `utils/data_processing.py` (Python kalman_filter), `deployment/base_generator.py` (C++ generation), `callbacks/preprocessing_callbacks.py` (UI wiring), `layouts/preprocessing.py` (UI toggle) → Thesis: Ch.3 preprocessing, Ch.5 training-deployment parity
 
 ---
 
@@ -61,6 +63,7 @@ This file documents **14 critical technical findings** discovered during framewo
 | 2025-02-27 | Finding 5 added | Documented edge-replication distortion and tiny dataset root cause analysis |
 | 2026-03-01 | Findings 6-8 added | Three critical deployment bugs: double standardization, feature order mismatch, double extraction in code gen pipeline |
 | 2026-04-08 | Finding 12 added | Documented mismatch between single-board thesis narrative and already-implemented multi-device deployment matrix |
+| 2026-05-05 | Prep PR#3 merge | Added findings 15–17 placeholders for: TFLite scope limitation, CNN metadata fix, and Kalman parity preprocessing |
 | 2026-04-17 | Finding 13 added | FFT robustness: Hann windowing, DC removal, spectral shape descriptors — cross-checked against Edge Impulse spectral analysis block |
 | 2026-05-02 | Finding 15 added | CNN code generation metadata mismatch: wrong feature count in filename (f33 → f6) and confusing Feature Count display for CNN models |
 | 2026-05-02 | Finding 16 added | Kalman filter implementation: causal per-channel constant-velocity Kalman filter in Python + C++ with exact training-deployment parity |

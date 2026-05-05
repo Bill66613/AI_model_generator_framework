@@ -1,11 +1,11 @@
-# HƯỚNG DẪN HOÀN THIỆN BÁO CÁO LUẬN VĂN
+# THESIS REPORT INSTRUCTIONS (Agent Working Notes)
 
-**Last updated:** 2026-04-08  
-**Version:** 5.1 (redirected thesis narrative to multi-device deployment; XIAO now framed as reference platform)  
-**Sinh viên:** Nguyễn Trường Minh Hoàng (MSSV: 2270757)  
-**Đề tài:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người  
-**GVHD:** TS. Lê Trọng Nhân  
-**Yêu cầu ngôn ngữ:** Tiếng Việt (theo quy định chương trình Thạc sĩ)
+**Last updated:** 2026-05-05  
+**Version:** 5.3 (English-only instruction file for agent; thesis content stays Vietnamese)  
+**Student:** Nguyễn Trương Minh Hoàng (MSSV: 2270757)  
+**Thesis topic:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người  
+**Supervisor:** TS. Lê Trọng Nhân  
+**Thesis language requirement:** Vietnamese (per program requirements)
 
 ---
 
@@ -13,7 +13,7 @@
 
 **What is this file?** Master checklist and guide for completing the Vietnamese thesis report. Tracks what's done, what's pending, and provides LaTeX snippets ready to paste.
 
-**Current blocking action:** Retrain models with fixed pipeline (zero-padding → edge-replication), then collect before/after accuracy numbers to fill placeholder values in Ch.4.
+**Current blocking action:** Retrain + re-measure after PR\#3: (1) validate Kalman (causal) preprocessing, (2) validate TFLite flow for NN/CNN, and (3) collect real accuracy/latency numbers to replace placeholders in Ch.4.
 
 **Narrative direction:** Thesis now emphasizes **multi-device deployment capability**. Seeed XIAO nRF52840 is the **reference benchmark platform**, not the sole target device.
 
@@ -24,7 +24,7 @@
 | Ch.1 Giới thiệu | `chapters/main/introduction.tex` | ✅ Reframed for multi-device deployment | Collect more cross-device benchmark evidence if available |
 | Ch.2 Công trình liên quan | `chapters/main/relatedwork.tex` | ✅ Written in Vietnamese | — |
 | Ch.3 Phương pháp luận | `chapters/main/methodology.tex` | ✅ Reframed | Added multi-device generator matrix + reference-platform wording |
-| Ch.4 Kết quả | `chapters/main/results.tex` | ⚠️ Reframed + placeholder numbers | Needs real data after retrain and, ideally, at least one extra target build/benchmark |
+| Ch.4 Kết quả | `chapters/main/results.tex` | ⚠️ Reframed + placeholder numbers | Needs real data after retrain; add TFLite section + Kalman impact |
 | Ch.5 Thảo luận | `chapters/main/discussion.tex` | ✅ Reframed | Separated architectural multi-device support from single-platform benchmark evidence |
 | Ch.6 Kết luận | `chapters/main/conclusion.tex` | ✅ Reframed | Multi-device contribution now explicit; XIAO framed as representative case |
 | References | `references.bib` | ✅ Updated | Added 11 new refs (augmentation, confidence, parity, calibration) |
@@ -32,23 +32,24 @@
 
 ### Key Technical Findings (detail in TECHNICAL_FINDINGS.md)
 
-12 findings differentiate this thesis from commercial platforms:
+Key technical findings to reflect in the thesis (see `TECHNICAL_FINDINGS.md` for evidence):
 1. **Zero-padding artifact** → FIXED → edge-value replication (CRITICAL for defense)
-2. **Kurtosis formula mismatch** → FIXED → population std in all generators
-3. **NN bias default prediction** → DOCUMENTED → explains "always predicts walking_downstairs"
-4. **FFT precision gap** → RESOLVED → time-domain only features
-5. **Edge-replication distortion + tiny dataset** → DATA QUALITY → need longer recordings
-6. **Double standardization** → FIXED → FE tab no longer scales; training pipeline scales once
-7. **Feature order mismatch** → FIXED → reorder remapping at code-gen time
-8. **Double extraction** → FIXED → `extract_real_model_parameters()` called once, not twice
-9. **CNN validation false positives** → FIXED → Validator now architecture-aware (CNN vs feature-based)
-10. **Confidence threshold for unknown activity rejection** → IMPLEMENTED → safer real-world deployment
-11. **Class-aware data augmentation** → IMPLEMENTED → protects static activities from class confusion
-12. **Multi-device deployment matrix already implemented in codebase** → DOCUMENTED → thesis should frame XIAO as reference platform, not sole target
+2. **Kurtosis/skewness formula mismatch** → FIXED → population std for z-scores in all generators
+3. **NN bias / default prediction behavior** → DOCUMENTED (explains "always predicts walking_downstairs" under distribution shift)
+4. **FFT precision gap** → RESOLVED via design choice (time-domain only features for exact parity)
+5. **Edge-replication still distorts if dataset is tiny** → DATA QUALITY issue (needs longer recordings)
+6. **Double standardization** → FIXED (scale once in training pipeline)
+7. **Feature order mismatch (Python alphabet vs C++ compute order)** → FIXED (reorder at code-gen)
+8. **Double extraction bug undoing reorder** → FIXED
+9. **CNN validation false positives** → FIXED (architecture-aware validator)
+10. **Confidence threshold for unknown rejection** → IMPLEMENTED (deployment safety)
+11. **Class-aware data augmentation protection** → IMPLEMENTED
+12. **Multi-device deployment matrix is already implemented** → DOCUMENTED (XIAO is reference, not sole target)
 13. **FFT robustness: Hann windowing + DC removal** → IMPLEMENTED → matches Edge Impulse quality
 14. **Deployment accuracy simulation** → IMPLEMENTED → predict on-device accuracy before deployment
-15. **CNN code generation metadata mismatch** → FIXED → wrong feature count in filename and display for CNN models
-16. **Kalman filter with exact deployment parity** → IMPLEMENTED → causal preprocessing that produces identical results in Python and C++
+15. **TFLite deployment scope** → CLARIFIED (RF/SVM not directly convertible via onnx2tf/ONNX-ML; Keras surrogate fallback added as approximation)
+16. **CNN code generation metadata mismatch** → FIXED (consistent feature/channel count in UI and code-gen)
+17. **Kalman filter (causal) + exact deployment parity** → IMPLEMENTED (identical Python ↔ C++ filter equations with lazy-init)
 
 ---
 
@@ -63,8 +64,57 @@
 | 2026-03-25 | Consistency fixes | Fixed: 5/6 class count, 90/138 feature count, 75/150 window size, NN arch 90→100→5, added 6th objective to intro, removed duplicate BibTeX, added kurtosis verification to code gen, added power estimate disclaimer |
 | 2026-03-26 | Round 2 consistency | Fixed: per-class Support 1078→30 (match test set), NN "two hidden layers"→"one", SensiML pricing unified \$99-500/month across all chapters |
 | 2026-04-08 | Multi-device redirect | Reframed Ch.1/3/4/5/6 so thesis emphasizes multi-device deployment capability; XIAO now treated as reference benchmark platform |
+| 2026-05-05 | Sync PR\#3 | Added TODOs/placeholders for TFLite scope, Kalman preprocessing parity, and CNN metadata fix; updated requested evidence list |
 
 *Add a row here each time this file is updated.*
+
+---
+
+## PR\#3 NOTES (Upcoming Merge)
+
+### What changes matter for the thesis narrative
+1. **TFLite/TFLite Micro deployment**: only NN/CNN are applicable; RF/SVM cannot be converted because they rely on ONNX-ML operators (TreeEnsembleClassifier) that onnx2tf does not support.
+2. **Kalman preprocessing**: add a causal (forward-only) denoising option to avoid the parity gap of filtfilt-style filters.
+3. **CNN metadata mismatch**: fix inconsistent feature/channel reporting between training artifacts, UI, and code-gen naming.
+
+### Where to update in LaTeX (keep it concise)
+- Ch.3: add a short subsection on Kalman (goal, causal property, key parameters).
+- Ch.3/Ch.5: clarify the TFLite scope (NN/CNN) and why RF/SVM are not applicable.
+- Ch.4: add a table/paragraph for Kalman impact (if numbers available) and compare latency/accuracy between native C++ vs TFLite (if measured).
+
+---
+
+## ✅ WHAT I NEED FROM YOU (To Replace Placeholders)
+
+Goal: replace placeholders with real numbers + figures.
+
+1. **UI screenshots (PNG)**
+   - Data tab (upload + preview)
+   - Preprocess tab (draggable windows + filter toggle if present)
+   - Feature Engineering tab (feature mode + augmentation)
+   - Train tab (training results + confusion matrix)
+   - Code Gen tab (platform/backend selection + output files)
+   - Device Test tab (serial output / live inference)
+
+2. **Training results after the latest changes**
+   - Accuracy + macro F1 on test set (at least NN; include RF/SVM if still used)
+   - Confusion matrix image
+   - Config: window size, stride, feature mode, augmentation on/off, Kalman on/off
+
+3. **Real-device deployment results (reference platform: XIAO)**
+   - Latency (ms): separate feature extraction vs prediction
+   - Notes on prediction stability (with/without smoothing + confidence threshold)
+   - If available: a short log/CSV from a few test sessions
+
+4. **TFLite/TFLite Micro results (if applicable)**
+   - Target (PC / MCU / simulator)
+   - Latency and accuracy vs native C++
+   - Evidence logs: RF/SVM conversion failure output from onnx2tf (for citation)
+
+5. **Orientation/mounting mismatch problem**
+   - Describe 2–3 mounting orientations (photo or short description)
+   - Provide 1–2 short CSV segments per orientation to quantify degradation
+
 
 ---
 
