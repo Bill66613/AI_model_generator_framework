@@ -54,6 +54,7 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         self._tflite_c_array = None
         self._tflite_ops = None  # Populated by convert_model() via enumerate_ops()
         self._arena_size = None
+        self._use_all_ops_resolver = False  # Set to True when enumerate_ops() hits an unknown op
 
     def convert_model(self) -> bytes:
         """
@@ -91,6 +92,9 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
 
         # Enumerate actual ops used in the model for resolver generation
         self._tflite_ops = converter.enumerate_ops()
+        if self._tflite_ops is None:
+            # enumerate_ops() hit an unknown op — fall back to AllOpsResolver
+            self._use_all_ops_resolver = True
 
         # Estimate arena size
         self._arena_size = self._estimate_arena_size()
@@ -107,7 +111,6 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         """
         n_features = len(self.feature_names)
         n_classes = len(self.classes)
-        is_quantized = self.tflite_quantization in ('int8', 'int16')
         # Bytes per value: 1 for INT8 internal tensors, 2 for INT16, 4 for float32
         if self.tflite_quantization == 'int16':
             bpv = 2
@@ -158,6 +161,15 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         if self.model_type == 'pytorch_cnn':
             return self._generate_cnn_tflite_implementation(header_filename)
         return super().generate_implementation(header_filename)
+
+    def _get_impl_includes(self) -> str:
+        """Add TFLite resolver include at the top level of the .cpp file."""
+        base_includes = super()._get_impl_includes()
+        if self._use_all_ops_resolver:
+            resolver_include = '#include "tensorflow/lite/micro/all_ops_resolver.h"'
+        else:
+            resolver_include = '#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"'
+        return f"{base_includes}\n{resolver_include}"
 
     def _generate_cnn_tflite_implementation(self, header_filename=None) -> str:
         """CNN TFLite implementation: TFLite byte array + raw-window inference only.
@@ -346,15 +358,13 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         AllOpsResolver is larger but guarantees no missing-op runtime failures.
         """
         ops = self._tflite_ops
-        # None means convert_model() was not called, OR enumerate_ops() hit an unknown op.
-        # Distinguish by checking whether conversion has happened.
-        if ops is None and self._tflite_bytes is not None:
-            # enumerate_ops() returned None due to an unknown op — use AllOpsResolver
+        # _use_all_ops_resolver is set when enumerate_ops() hit an unknown op.
+        if self._use_all_ops_resolver:
+            # Header already added by _get_impl_includes() — only emit the declaration here.
             lines = []
             lines.append("    // WARNING: model contains an unrecognized op code.")
-            lines.append("    // Using AllOpsResolver for safe compilation; for a smaller binary,")
+            lines.append("    // AllOpsResolver is used for safe compilation; for a smaller binary,")
             lines.append("    // add the missing op to BUILTIN_OP_NAMES in tflite_converter.py.")
-            lines.append("    #include \"tensorflow/lite/micro/all_ops_resolver.h\"")
             lines.append("    static tflite::AllOpsResolver resolver;")
             return lines
 

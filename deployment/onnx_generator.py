@@ -217,6 +217,11 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         lines.append("void onnx_cleanup() {")
         lines.append("    onnx_initialized = false;")
         lines.append("}")
+        lines.append("")
+        lines.append("// har_predict_internal: bridges base har_predict() → onnx_predict()")
+        lines.append(f"int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {{")
+        lines.append("    return onnx_predict(features, probs_out);")
+        lines.append("}")
 
         return '\n'.join(lines)
 
@@ -329,6 +334,11 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         lines.append("void onnx_cleanup() {}")
         lines.append("")
         lines.append("#endif  // USE_ONNX_RUNTIME")
+        lines.append("")
+        lines.append("// har_predict_internal: bridges base har_predict() → onnx_predict()")
+        lines.append(f"int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {{")
+        lines.append("    return onnx_predict(features, probs_out);")
+        lines.append("}")
 
         return '\n'.join(lines)
 

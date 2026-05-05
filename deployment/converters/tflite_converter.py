@@ -837,12 +837,15 @@ class TFLiteConverter:
 
         return '\n'.join(lines)
 
-    def enumerate_ops(self) -> List[str]:
+    def enumerate_ops(self) -> Optional[List[str]]:
         """
         Enumerate the unique TFLite builtin operators used in the model.
 
         Returns a list of op names matching the MicroMutableOpResolver
         method names, e.g. ['Quantize', 'Conv2D', 'Reshape', ...].
+
+        Returns None when an unknown opcode is encountered, signalling that
+        the caller should fall back to AllOpsResolver for safe compilation.
 
         These are needed to build a MicroMutableOpResolver<N> with exactly
         the ops the model requires.
