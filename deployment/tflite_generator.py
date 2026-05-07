@@ -56,6 +56,64 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         self._arena_size = None
         self._use_all_ops_resolver = False  # Set to True when enumerate_ops() hits an unknown op
 
+    def _load_representative_data(self):
+        """Load real training data for INT8 quantization calibration.
+
+        For CNN models, loads the raw_train.npy file from the training directory.
+        For MLP/other models, loads features from training CSV.
+        Returns None if no data available (converter will fall back to synthetic).
+        """
+        import os
+        import glob
+
+        if self.tflite_quantization == 'none':
+            return None
+
+        model_info = self.model_data.get('model_info', {})
+        training_dir = self.model_data.get('training_dir', '')
+
+        # Try to find training dir from model_info or model_params
+        if not training_dir:
+            training_dir = model_info.get('training_dir', '')
+        if not training_dir:
+            model_params = self.model_data.get('model_params', {})
+            training_dir = model_params.get('training_dir', '')
+
+        if not training_dir or not os.path.isdir(training_dir):
+            return None
+
+        try:
+            if self.model_type == 'pytorch_cnn':
+                # Load raw sensor windows: shape (n_windows, window_size, n_channels)
+                raw_files = glob.glob(os.path.join(training_dir, '*_raw_train.npy'))
+                if raw_files:
+                    data = np.load(raw_files[0])
+                    # Use up to 200 samples for calibration
+                    if len(data) > 200:
+                        indices = np.random.default_rng(42).choice(
+                            len(data), 200, replace=False)
+                        data = data[indices]
+                    logger.info(f"Loaded {len(data)} real CNN windows for INT8 calibration")
+                    return data.astype(np.float32)
+            else:
+                # MLP/RF/SVM: load feature CSV
+                import pandas as pd
+                train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
+                if train_files:
+                    df = pd.read_csv(train_files[0])
+                    feature_cols = [c for c in df.columns if c != 'label']
+                    data = df[feature_cols].values
+                    if len(data) > 200:
+                        indices = np.random.default_rng(42).choice(
+                            len(data), 200, replace=False)
+                        data = data[indices]
+                    logger.info(f"Loaded {len(data)} real feature samples for INT8 calibration")
+                    return data.astype(np.float32)
+        except Exception as e:
+            logger.warning(f"Could not load representative data: {e}")
+
+        return None
+
     def convert_model(self) -> bytes:
         """
         Convert the model to TFLite format.
@@ -83,8 +141,15 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
             model_params=self.model_data.get('model_params', {})
         )
 
+        # Load real representative data for INT8 quantization calibration.
+        # CNN models are especially sensitive: N(0,1) calibration data causes
+        # the quantization range to be too narrow for real IMU values (~9.8 m/s²),
+        # resulting in near-uniform (garbage) output probabilities on-device.
+        representative_data = self._load_representative_data()
+
         self._tflite_bytes = converter.convert(
-            quantization=self.tflite_quantization
+            quantization=self.tflite_quantization,
+            representative_data=representative_data
         )
 
         # Generate C array

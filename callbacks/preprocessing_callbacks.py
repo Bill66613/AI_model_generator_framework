@@ -1865,7 +1865,7 @@ def register_callbacks(app):
             old_files = metadata[dataset_name]['dragged_samples']
             for old_file in old_files:
                 # Only remove manual dragged windows, not sliding windows
-                if 'dragged_window_' in old_file and os.path.exists(old_file):
+                if 'dragged_window_' in old_file and 'sliding_' not in old_file and os.path.exists(old_file):
                     try:
                         os.remove(old_file)
                         print(f"Removed old window file: {old_file}")

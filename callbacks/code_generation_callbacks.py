@@ -1110,7 +1110,8 @@ def register_callbacks(app):
                 'model_params': model_params,
                 'model_object': model,  # Pass actual model for parameter extraction
                 # Pass full metadata so base_generator can read feature_config
-                'model_info': metadata
+                'model_info': metadata,
+                'training_dir': os.path.join(base_dir, 'training'),
             }
 
             # Parse new deployment options
