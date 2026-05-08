@@ -534,12 +534,12 @@ Một lỗi metadata đã được phát hiện và sửa chữa trong CNN pipel
 \end{itemize}
 
 Code logic đã được cập nhật:
-```python
+\begin{verbatim}
 # CNN models operate on raw windows, not extracted features
 if model_type in ('pytorch_cnn', 'cnn'):
     n_channels = metadata.get('fe_config', {}).get('num_channels', 6)
     feature_names = [f'ch{i}' for i in range(n_channels)]
-```
+\end{verbatim}
 
 \textbf{Phân biệt với Edge Impulse}: Edge Impulse xử lý sự phức tạp này bằng cách có "processing blocks" riêng biệt cho feature-based và raw-input models. Framework này phải phân biệt loại mô hình tại thời điểm tạo mã để tạo ra metadata và validation logic chính xác.
 
