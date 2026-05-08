@@ -977,6 +977,7 @@ dependencies = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "seaborn" },
+    { name = "tensorflow" },
     { name = "torch" },
 ]
 
@@ -1025,6 +1026,7 @@ requires-dist = [
     { name = "skl2onnx", marker = "extra == 'onnx'", specifier = ">=1.15.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.1.0" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = ">=1.3.0" },
+    { name = "tensorflow", specifier = ">=2.21.0" },
     { name = "tensorflow", marker = "extra == 'tflite'", specifier = ">=2.13.0" },
     { name = "torch", specifier = ">=2.0.0" },
 ]

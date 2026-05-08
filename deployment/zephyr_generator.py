@@ -27,7 +27,11 @@ class ZephyrCodeGenerator(BaseCodeGenerator):
 
     def __init__(self, model_data: Dict[str, Any], platform: str = 'zephyr',
                  optimization: str = 'balanced', overlap: float = 0.5,
-                 quantization: str = 'none'):
+                 quantization: str = 'none',
+                 confidence_threshold: float = 0.6,
+                 smoothing_window: int = 1,
+                 enable_iir_filter: bool = False,
+                 enable_kalman_filter: bool = False):
         # CNN models don't use traditional features — provide placeholders
         model_type_name = model_data.get('model_type', '')
         if model_type_name == 'pytorch_cnn' and not model_data.get('feature_names'):
@@ -35,7 +39,11 @@ class ZephyrCodeGenerator(BaseCodeGenerator):
             n_ch = model_data.get('n_channels', 6)
             model_data['feature_names'] = [f'ch{i}' for i in range(n_ch)]
 
-        super().__init__(model_data, platform, optimization, overlap, quantization)
+        super().__init__(model_data, platform, optimization, overlap, quantization,
+                         confidence_threshold=confidence_threshold,
+                         smoothing_window=smoothing_window,
+                         enable_iir_filter=enable_iir_filter,
+                         enable_kalman_filter=enable_kalman_filter)
         self.model_type_name = model_data.get('model_type', '')
 
         # Create inner model-specific generator

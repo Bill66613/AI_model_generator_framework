@@ -18,6 +18,7 @@ from config.config import (
 _model_cache = {
     'model': None,
     'scaler': None,
+    'label_encoder': None,
     'model_info': None,
     'last_modified': None
 }
@@ -284,11 +285,13 @@ def register_callbacks(app):
                 _model_cache['model'] = model_bundle.get('model', model_bundle)
                 _model_cache['model_info'] = model_bundle
                 _model_cache['scaler'] = model_bundle.get('scaler')
+                _model_cache['label_encoder'] = model_bundle.get('label_encoder')
                 _model_cache['last_modified'] = model_modified
                 print(f"Loaded model from {model_path}")
 
             model = _model_cache['model']
             scaler = _model_cache['scaler']
+            label_encoder = _model_cache.get('label_encoder')
 
             # ---- Build feature vector using the SAME method as training ----
             window_df = pd.DataFrame(window_data)
@@ -308,6 +311,13 @@ def register_callbacks(app):
 
             # Predict
             prediction = model.predict(features_scaled)[0]
+
+            # Map numeric class back to activity name
+            if label_encoder is not None:
+                try:
+                    prediction = label_encoder.inverse_transform([prediction])[0]
+                except Exception:
+                    pass  # Keep raw prediction if inverse_transform fails
 
             # Get confidence if available
             confidence_text = ""

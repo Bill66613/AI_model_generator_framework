@@ -38,7 +38,7 @@ onnx = [
     "onnxruntime>=1.16.0",
 ]
 tflite = [
-    "tensorflow>=2.13.0",
+    "tensorflow>=2.21.0",
 ]
 dev = [
     "pytest>=7.4.0",

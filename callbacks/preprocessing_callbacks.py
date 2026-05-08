@@ -14,7 +14,7 @@ from config.config import (
     DEFAULT_SAMPLING_RATE, get_sampling_rate_from_metadata,
     get_dataset_path, get_window_path, get_window_pattern, get_training_data_path
 )
-from utils.data_processing import clean_data, low_pass_filter
+from utils.data_processing import clean_data, low_pass_filter, detect_sensor_columns
 
 
 def compute_window_quality(window_data, sensor_cols=None):
@@ -428,11 +428,15 @@ def register_callbacks(app):
         State('preprocess-savgol-enabled', 'value'),
         State('preprocess-savgol-window', 'value'),
         State('preprocess-savgol-polyorder', 'value'),
+        State('preprocess-kalman-enabled', 'value'),
+        State('preprocess-kalman-process-noise', 'value'),
+        State('preprocess-kalman-measurement-noise', 'value'),
         prevent_initial_call=True
     )
     def clean_and_smooth_data(n_clicks, dataset_name, base_dir,
                               outlier_enabled, lpf_enabled, lpf_cutoff, lpf_order,
-                              savgol_enabled, savgol_window, savgol_polyorder):
+                              savgol_enabled, savgol_window, savgol_polyorder,
+                              kalman_enabled, kalman_process_noise, kalman_measurement_noise):
         """Clean and smooth the selected dataset and display it in a graph."""
         if not dataset_name:
             return no_update, no_update, no_update
@@ -460,10 +464,13 @@ def register_callbacks(app):
             use_outlier = 'enabled' in (outlier_enabled or [])
             use_lpf = 'enabled' in (lpf_enabled or [])
             use_savgol = 'enabled' in (savgol_enabled or [])
+            use_kalman = 'enabled' in (kalman_enabled or [])
             lpf_cutoff = float(lpf_cutoff or 5)
             lpf_order = int(lpf_order or 2)
             savgol_window = int(savgol_window or 5)
             savgol_polyorder = int(savgol_polyorder or 2)
+            kalman_q = float(kalman_process_noise or 1e-3)
+            kalman_r = float(kalman_measurement_noise or 1e-1)
 
             preprocess_config = {
                 'outlier_removal': use_outlier,
@@ -473,6 +480,9 @@ def register_callbacks(app):
                 'savgol_filter': use_savgol,
                 'savgol_window_length': savgol_window,
                 'savgol_polyorder': savgol_polyorder,
+                'kalman_filter': use_kalman,
+                'kalman_process_noise': kalman_q,
+                'kalman_measurement_noise': kalman_r,
             }
 
             # Clean the data
@@ -488,6 +498,18 @@ def register_callbacks(app):
             if use_savgol:
                 for col in df.select_dtypes(include=['float64', 'int64']).columns:
                     df[col] = savgol_filter(df[col], window_length=savgol_window, polyorder=savgol_polyorder)
+
+            # Apply Kalman filter
+            if use_kalman:
+                from utils.data_processing import kalman_filter
+                sensor_cols_for_kalman = detect_sensor_columns(df)
+                if sensor_cols_for_kalman:
+                    df[sensor_cols_for_kalman] = kalman_filter(
+                        df[sensor_cols_for_kalman],
+                        process_noise=kalman_q,
+                        measurement_noise=kalman_r,
+                        fs=sampling_rate
+                    )
 
             # Create time axis for proper labeling
             df['Time_seconds'] = df.index / sampling_rate

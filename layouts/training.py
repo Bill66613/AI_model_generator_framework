@@ -195,6 +195,29 @@ layout = html.Div([
         })
     ]),
 
+    # Data Summary Section
+    html.Div([
+        html.H3("📁 Training Data Summary", style={
+                'color': '#2E86AB', 'margin-bottom': '20px'}),
+        html.Div(id='training-data-summary', style={
+            'min-height': '80px',
+            'background-color': '#f8f9fa',
+            'padding': '20px',
+            'border-radius': '8px',
+            'border': '1px solid #dee2e6'
+        }, children=[
+            html.P("No training data loaded. Please complete the train-validation-test split in the Preprocessing tab.",
+                   style={'text-align': 'center', 'color': '#6c757d', 'font-style': 'italic', 'margin': '0'})
+        ])
+    ], style={
+        'background-color': '#ffffff',
+        'padding': '25px',
+        'border-radius': '10px',
+        'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
+        'margin-bottom': '25px',
+        'border': '1px solid #e9ecef'
+    }),
+
     # Training Controls Section
     html.Div([
         html.H3("🚀 Training Controls", style={
@@ -268,29 +291,6 @@ layout = html.Div([
                 html.P("Validate model robustness with cross-validation",
                        style={'font-size': '12px', 'color': '#666', 'text-align': 'center'})
             ], style={'width': '32%', 'display': 'inline-block'})
-        ])
-    ], style={
-        'background-color': '#ffffff',
-        'padding': '25px',
-        'border-radius': '10px',
-        'box-shadow': '0 2px 10px rgba(0,0,0,0.1)',
-        'margin-bottom': '25px',
-        'border': '1px solid #e9ecef'
-    }),
-
-    # Data Summary Section
-    html.Div([
-        html.H3("📁 Training Data Summary", style={
-                'color': '#2E86AB', 'margin-bottom': '20px'}),
-        html.Div(id='training-data-summary', style={
-            'min-height': '80px',
-            'background-color': '#f8f9fa',
-            'padding': '20px',
-            'border-radius': '8px',
-            'border': '1px solid #dee2e6'
-        }, children=[
-            html.P("No training data loaded. Please complete the train-validation-test split in the Preprocessing tab.",
-                   style={'text-align': 'center', 'color': '#6c757d', 'font-style': 'italic', 'margin': '0'})
         ])
     ], style={
         'background-color': '#ffffff',
