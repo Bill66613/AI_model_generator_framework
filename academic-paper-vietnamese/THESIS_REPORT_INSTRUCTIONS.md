@@ -65,6 +65,7 @@ Key technical findings to reflect in the thesis (see `TECHNICAL_FINDINGS.md` for
 | 2026-03-26 | Round 2 consistency | Fixed: per-class Support 1078→30 (match test set), NN "two hidden layers"→"one", SensiML pricing unified \$99-500/month across all chapters |
 | 2026-04-08 | Multi-device redirect | Reframed Ch.1/3/4/5/6 so thesis emphasizes multi-device deployment capability; XIAO now treated as reference benchmark platform |
 | 2026-05-05 | Sync PR\#3 | Added TODOs/placeholders for TFLite scope, Kalman preprocessing parity, and CNN metadata fix; updated requested evidence list |
+| 2026-05-05 | Integrate Findings 15-17 | ✅ Added: Kalman filter section in Ch.3 methodology, TFLite limitations section, multi-architecture code generation section, technical findings analysis in Ch.5 discussion, updated research objective #6, added kalman1960new + tensorflow2015_whitepaper references |
 
 *Add a row here each time this file is updated.*
 

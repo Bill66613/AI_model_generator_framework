@@ -49,6 +49,68 @@ Mô-đun tiền xử lý cung cấp các hoạt động làm sạch có thể c�
 \end{itemize}
 Dữ liệu đã làm sạch được trực quan hóa cùng với các tín hiệu gốc, cho phép người dùng xác minh hiệu quả tiền xử lý trước khi phân đoạn.
 
+\subsection{Bộ lọc Kalman cho Tiền xử lý Tín hiệu}
+\label{sec:kalman_filter}
+
+Framework giới thiệu bộ lọc Kalman constant-velocity 1D cho mỗi kênh cảm biến IMU như một giải pháp tiền xử lý tín hiệu tiên tiến \cite{kalman1960new}. Đây là bước đột phá quan trọng trong việc giải quyết \textit{khoảng cách tương đồng huấn luyện-triển khai} (training-deployment parity gap) mà các bộ lọc IIR truyền thống gặp phải.
+
+\subsubsection{Vấn đề Parity với Bộ lọc IIR}
+Các bộ lọc Butterworth low-pass truyền thống tồn tại lỗ hổng tương đồng:
+\begin{itemize}
+    \item \textbf{Huấn luyện (Python)}: Sử dụng \texttt{filtfilt} (zero-phase, non-causal) --- xử lý dữ liệu theo hai chiều (thuận và ngược) để loại bỏ méo pha
+    \item \textbf{Triển khai (C++)}: Sử dụng \texttt{lfilter} (causal, forward-only) --- chỉ xử lý theo một chiều do ràng buộc thời gian thực
+\end{itemize}
+
+Khoảng cách này gây sai lệch pha và biên độ trong các đặc trưng thống kê nhạy cảm như skewness và kurtosis, dẫn đến hiệu suất mô hình giảm sút khi triển khai thực tế.
+
+\subsubsection{Mô hình Toán học Kalman Filter}
+Bộ lọc Kalman được triển khai với mô hình constant-velocity cho mỗi kênh:
+
+\textbf{State vector}: 
+$$\mathbf{x}_k = \begin{bmatrix} p_k \\ v_k \end{bmatrix}$$
+với $p_k$ là vị trí (tín hiệu cảm biến) và $v_k$ là vận tốc tại thời điểm $k$.
+
+\textbf{Transition matrix}: 
+$$F = \begin{bmatrix} 1 & \Delta t \\ 0 & 1 \end{bmatrix}$$
+
+\textbf{Observation matrix}: 
+$$H = \begin{bmatrix} 1 & 0 \end{bmatrix}$$
+
+\textbf{Process noise covariance}: 
+$$Q = q \begin{bmatrix} \frac{\Delta t^3}{3} & \frac{\Delta t^2}{2} \\ \frac{\Delta t^2}{2} & \Delta t \end{bmatrix}$$
+
+\textbf{Measurement noise covariance}: $R = r$ (scalar)
+
+Các tham số có thể điều chỉnh:
+\begin{itemize}
+    \item \textit{process\_noise} ($q$): Giá trị nhỏ hơn tạo ra đầu ra mượt hơn. Mặc định: $10^{-3}$
+    \item \textit{measurement\_noise} ($r$): Giá trị lớn hơn tạo ra đầu ra mượt hơn. Mặc định: $10^{-1}$
+\end{itemize}
+
+\subsubsection{Ưu điểm Parity của Kalman Filter}
+Bộ lọc Kalman mang lại những lợi thế quan trọng so với bộ lọc IIR:
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh Bộ lọc IIR và Kalman Filter về Parity}
+    \small
+    \begin{tabular}{@{}p{3cm}p{5cm}p{4cm}@{}}
+        \toprule
+        Đặc tính & IIR (Butterworth) & Kalman Filter \\
+        \midrule
+        Bộ lọc huấn luyện & \texttt{filtfilt} (non-causal) & Forward-only (causal) \\
+        Bộ lọc thiết bị & \texttt{lfilter} (causal) & Forward-only (causal) \\
+        \textbf{Tương đồng Parity} & ⚠️ Có khoảng cách (phase difference) & ✅ Hoàn toàn chính xác \\
+        Kiểm soát độ mượt & Tần số cắt + bậc filter & Tham số Q và R \\
+        Tính thích ứng & Không (hệ số cố định) & Có (gain thích ứng theo tín hiệu) \\
+        Bộ nhớ mỗi kênh & $2 \times \text{order}$ floats & 2 state + 4 covariance floats \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:kalman_iir_comparison}
+\end{table}
+
+\textbf{Đóng góp về Parity}: Bộ lọc Kalman là bộ lọc tiền xử lý đầu tiên trong framework với \textit{khoảng cách parity bằng không}. Cả IIR và Savitzky-Golay đều có sự khác biệt nội tại giữa huấn luyện-triển khai (zero-phase vs causal, offline vs streaming). Bộ lọc Kalman loại bỏ hoàn toàn lớp lỗi này.
+
 \subsection{Phân đoạn Cửa sổ Thời gian Kéo thả}
 Một đóng góp mới của framework này là \textit{giao diện cửa sổ kéo thả tương tác} cho phân đoạn hoạt động. Các tính năng chính bao gồm:
 \begin{itemize}
@@ -324,6 +386,48 @@ Mô hình được biên dịch trước (ahead-of-time compilation) sang mã C 
 
 \textit{Nhược điểm:} Chuỗi công cụ đóng---mã đã tạo bởi EON Compiler khó kiểm toán và không thể sửa đổi. Apache TVM/microTVM yêu cầu kiến thức biên dịch cấp chuyên gia. Hầu hết các trình biên dịch mô hình bắt buộc mô hình đầu vào theo định dạng ONNX hoặc TFLite, loại trừ các mô hình scikit-learn cổ điển (RF, SVM) mà không qua bước chuyển đổi trung gian phức tạp.
 
+\subsection{Triển khai TFLite Micro}
+\label{sec:tflite_micro_deployment}
+
+Framework hỗ trợ đường dẫn triển khai TFLite Micro như một phương pháp bổ sung cho các kiến trúc mô hình phù hợp. Quá trình chuyển đổi tuân theo pipeline ONNX→TensorFlow→TFLite với các hạn chế quan trọng về phạm vi hỗ trợ \cite{tensorflow2015_whitepaper}.
+
+\subsubsection{Phạm vi Hỗ trợ theo Loại Mô hình}
+Nghiên cứu thực nghiệm cho thấy khả năng chuyển đổi khác nhau đáng kể giữa các loại mô hình:
+
+\paragraph{Neural Network và CNN: Chuyển đổi Trực tiếp ✅}
+Các mô hình neural network (MLP) và CNN từ PyTorch có thể chuyển đổi thành công qua pipeline:
+\begin{enumerate}
+    \item PyTorch model → ONNX (\texttt{torch.onnx.export})
+    \item ONNX → TensorFlow (\texttt{onnx-tf})
+    \item TensorFlow → TFLite (\texttt{tf.lite.TFLiteConverter})
+    \item TFLite → TFLite Micro (quantization INT8)
+\end{enumerate}
+
+\paragraph{Random Forest và SVM: Hạn chế ONNX-ML ❌}
+Các mô hình Random Forest và SVM gặp rào cản chuyển đổi do hạn chế trong hệ sinh thái ONNX-ML:
+\begin{itemize}
+    \item \textbf{Scikit-learn → ONNX}: \texttt{skl2onnx} tạo các toán tử ONNX-ML như \texttt{TreeEnsembleClassifier} và \texttt{SVMClassifier}
+    \item \textbf{ONNX-ML → TensorFlow}: \texttt{onnx2tf} \textbf{không hỗ trợ} các toán tử ONNX-ML, chỉ hỗ trợ các toán tử ONNX chuẩn (operator domain "ai.onnx")
+    \item \textbf{Kết quả}: Pipeline bị gián đoạn, không thể chuyển đổi RF/SVM sang TFLite
+\end{itemize}
+
+\subsubsection{Giải pháp Keras Surrogate cho RF/SVM}
+Để khắc phục hạn chế ONNX-ML, framework triển khai \textit{phương pháp Keras surrogate}:
+
+\begin{enumerate}
+    \item \textbf{Sinh dữ liệu huấn luyện surrogate}: Sử dụng mô hình RF/SVM gốc để tạo soft predictions trên tập dữ liệu đại diện
+    \item \textbf{Huấn luyện Keras MLP}: Mạng neural đa lớp học ánh xạ từ features → soft predictions của RF/SVM
+    \item \textbf{Chuyển đổi MLP → TFLite}: Keras MLP có thể chuyển đổi thành công qua pipeline tiêu chuẩn
+\end{enumerate}
+
+\textbf{Hạn chế Surrogate}: Keras surrogate là \textit{xấp xỉ}, không phải triển khai chính xác. Độ thỏa thuận kỳ vọng 80-90\% giữa mô hình gốc và surrogate. Cho độ chính xác tối đa, \textit{tạo mã trực tiếp C++ vẫn là phương pháp được khuyến nghị cho RF/SVM}.
+
+\subsubsection{Khuyến nghị Sử dụng}
+\begin{itemize}
+    \item \textbf{NN/CNN}: Sử dụng TFLite Micro để tận dụng runtime tối ưu hóa và hỗ trợ quantization INT8
+    \item \textbf{RF/SVM}: Ưu tiên tạo mã trực tiếp C++ (chính xác, nhanh, nhỏ gọn). TFLite surrogate chỉ khi yêu cầu tích hợp runtime chuẩn hóa
+\end{itemize}
+
 \paragraph{Phương pháp 3: Tạo mã trực tiếp (Direct Code Generation)---phương pháp đề xuất}
 Framework trích xuất trực tiếp các tham số đã huấn luyện từ đối tượng scikit-learn---trọng số và bias của mạng nơ-ron (\texttt{coefs\_}, \texttt{intercepts\_}), support vectors và hệ số kernel của SVM, cấu trúc cây nhị phân của Random Forest---rồi tạo mã C++ thuần (pure C++) triển khai thuật toán suy luận tương ứng.
 
@@ -352,7 +456,7 @@ Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên 
         Hỗ trợ DNN sâu & Tốt & Tốt & Hạn chế \\
         \bottomrule
     \end{tabular}
-    \small{$^\dag$TFLite Micro hỗ trợ RF/SVM hạn chế; cần chuyển đổi qua ONNX rồi TFLite.}\\
+    \small{$^\dag$TFLite Micro chỉ hỗ trợ NN/CNN; RF/SVM không thể chuyển đổi trực tiếp do onnx2tf không hỗ trợ ONNX-ML TreeEnsembleClassifier. Keras surrogate có thể sử dụng nhưng là xấp xỉ (80-90\% thỏa thuận).}\\
     \small{$^\ddag$EON Compiler và TVM tập trung vào mạng nơ-ron; không hỗ trợ RF/SVM gốc.}
     \label{tab:codegen_comparison}
 \end{table}
@@ -393,6 +497,58 @@ Các phiên bản tương lai của framework nên tích hợp đường dẫn T
 \end{enumerate}
 
 \textbf{Xác minh Công thức Thống kê}: Mã C++ đã tạo cho trích xuất đặc trưng sử dụng các công thức thống kê được xác minh khớp chính xác với triển khai Python (pandas/NumPy). Cụ thể, các đặc trưng kurtosis và skewness sử dụng \textit{độ lệch chuẩn tổng thể} (population standard deviation, chia $n$) cho chuẩn hóa z-scores, thay vì độ lệch chuẩn mẫu (chia $n-1$). Sự khác biệt này, mặc dù nhỏ ($\sim$1,3\% cho $n=150$), là hệ thống và tích lũy qua nhiều đặc trưng, có thể ảnh hưởng đến độ chính xác triển khai nếu không được xử lý.
+
+\subsection{Kiến trúc Tạo Mã Đa Kiến trúc}
+\label{sec:multi_architecture_codegen}
+
+Framework hỗ trợ hai loại pipeline mô hình với yêu cầu metadata và validation khác biệt đáng kể, đòi hỏi kiến trúc tạo mã có khả năng nhận biết kiến trúc (architecture-aware):
+
+\subsubsection{Pipeline Feature-based vs End-to-end}
+\paragraph{Feature-based Models (RF, SVM, NN)}
+Các mô hình này hoạt động trên extracted statistical features:
+\begin{itemize}
+    \item \textbf{Input}: Vector đặc trưng thống kê (33, 53, 90 features tùy theo FE mode)
+    \item \textbf{Preprocessing}: Áp dụng feature extraction pipeline đầy đủ
+    \item \textbf{Scaling}: StandardScaler trên features đã extract
+    \item \textbf{Metadata}: Feature names phản ánh các đặc trưng thống kê (e.g., "acc_x_mean", "gyro_y_kurtosis")
+\end{itemize}
+
+\paragraph{CNN End-to-end Models}
+Mô hình CNN xử lý raw sensor windows trực tiếp:
+\begin{itemize}
+    \item \textbf{Input}: Raw cửa sổ cảm biến (150 samples × 6 channels = 900 inputs)
+    \item \textbf{Preprocessing}: Chỉ áp dụng signal filtering (IIR hoặc Kalman), không feature extraction
+    \item \textbf{Scaling}: StandardScaler trực tiếp trên raw sensor data
+    \item \textbf{Metadata}: Channel placeholders (e.g., "ch0", "ch1", ..., "ch5")
+\end{itemize}
+
+\subsubsection{Architecture-Aware Validation và Metadata}
+Các kiến trúc khác nhau yêu cầu logic validation và metadata generation riêng biệt:
+
+\textbf{Ví dụ Metadata Consistency (Tìm kiếm Kỹ thuật Số 16)}:
+Một lỗi metadata đã được phát hiện và sửa chữa trong CNN pipeline:
+\begin{itemize}
+    \item \textbf{Vấn đề}: CNN model hiển thị filename "f33" (tức 33 features), nhưng thực tế CNN sử dụng 6 channels per timestep
+    \item \textbf{Nguyên nhân}: Fallback logic lấy nhầm feature names từ session FE khác thay vì tạo channel placeholders
+    \item \textbf{Giải pháp}: Architecture-aware metadata generation---CNN models luôn sử dụng channel placeholders
+\end{itemize}
+
+Code logic đã được cập nhật:
+```python
+# CNN models operate on raw windows, not extracted features
+if model_type in ('pytorch_cnn', 'cnn'):
+    n_channels = metadata.get('fe_config', {}).get('num_channels', 6)
+    feature_names = [f'ch{i}' for i in range(n_channels)]
+```
+
+\textbf{Phân biệt với Edge Impulse}: Edge Impulse xử lý sự phức tạp này bằng cách có "processing blocks" riêng biệt cho feature-based và raw-input models. Framework này phải phân biệt loại mô hình tại thời điểm tạo mã để tạo ra metadata và validation logic chính xác.
+
+\subsubsection{Design Insights}
+Trường \texttt{trained\_models.json} có ngữ nghĩa khác nhau tùy theo loại mô hình:
+\begin{itemize}
+    \item \texttt{features}: \texttt{X\_train.shape[1]}---với CNN là \texttt{window\_size\_samples} (150), với MLP là feature count (33/53)
+    \item \texttt{num\_features\_extracted}: Luôn là output count của FE pipeline---có ý nghĩa cho feature-based models, chỉ mang tính thông tin cho CNN
+\end{itemize}
 
 Hình \ref{fig:ui_code_generation} cho thấy giao diện tạo mã với bản xem trước gói mã triển khai đã tạo, các tùy chọn cấu hình nền tảng/backend và các tệp đầu ra có thể tải xuống.
 

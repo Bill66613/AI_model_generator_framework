@@ -279,6 +279,103 @@ Các thiết bị đeo tiêu dùng (đồng hồ thông minh, băng thể dục)
     \item Huấn luyện cá nhân hóa (phản hồi thời gian thực về cường độ hoạt động)
 \end{itemize}
 
+\section{Phân Tích Các Phát Hiện Kỹ Thuật Quan Trọng}
+
+\subsection{Bộ lọc Kalman: Đột Phá về Training-Deployment Parity}
+\label{sec:disc_kalman_parity}
+
+Việc triển khai bộ lọc Kalman constant-velocity đại diện cho một đột phá quan trọng trong việc giải quyết vấn đề khoảng cách tương đồng huấn luyện-triển khai (training-deployment parity gap). Đây là lần đầu tiên framework có một bộ lọc tiền xử lý với \textbf{khoảng cách parity bằng không}.
+
+\subsubsection{So sánh với Các Phương pháp IIR Truyền thống}
+Các bộ lọc IIR Butterworth truyền thống tồn tại lỗ hổng parity vốn có:
+\begin{itemize}
+    \item \textbf{Huấn luyện}: \texttt{filtfilt} (non-causal, zero-phase) xử lý dữ liệu theo hai chiều
+    \item \textbf{Triển khai}: \texttt{lfilter} (causal, forward-only) chỉ có thể xử lý theo một chiều do ràng buộc thời gian thực
+\end{itemize}
+
+Khoảng cách này gây sai lệch đặc biệt nghiêm trọng với các đặc trưng nhạy cảm với pha như skewness và kurtosis, có thể dẫn đến suy giảm hiệu suất mô hình 2-5\% khi triển khai thực tế.
+
+\subsubsection{Ưu thế Thiết kế của Kalman Filter}
+Bộ lọc Kalman khắc phục vấn đề này từ gốc thông qua thiết kế vốn có:
+\begin{enumerate}
+    \item \textbf{Tính nhân quả tự nhiên}: Kalman filter về bản chất là causal---chỉ sử dụng observation hiện tại và trạng thái trước đó
+    \item \textbf{Tính thích ứng}: Gain điều chỉnh tự động dựa trên prediction error, tạo ra đặc tính lọc thích ứng
+    \item \textbf{Mô hình vật lý}: Constant-velocity model phù hợp với bản chất chuyển động của dữ liệu IMU
+    \item \textbf{Tham số trực quan}: Process noise (Q) và measurement noise (R) có ý nghĩa vật lý rõ ràng
+\end{enumerate}
+
+\textbf{So sánh với Edge Impulse}: Edge Impulse không cung cấp Kalman filtering như một tùy chọn tiền xử lý. Spectral analysis block của họ sử dụng các bandpass filter cố định, thiếu khả năng thích ứng và đảm bảo parity của Kalman filter.
+
+\subsection{Phân Tích Kiến trúc Tạo Mã Đa Kiến trúc}
+\label{sec:disc_multi_arch}
+
+Việc hỗ trợ đồng thời các mô hình feature-based (RF/SVM/NN) và end-to-end (CNN) trong cùng một framework đặt ra những thách thức kiến trúc độc đáo mà Finding 16 đã chỉ ra.
+
+\subsubsection{Sự Phức Tạp Metadata theo Kiến trúc}
+Case study về CNN metadata mismatch (Finding 16) minh họa tầm quan trọng của architecture-aware code generation:
+
+\textbf{Vấn đề}: CNN model hiển thị filename "f33" (33 features) mặc dù thực tế sử dụng 6 channels per timestep.
+
+\textbf{Nguyên nhân gốc}: Fallback logic không phân biệt được giữa:
+\begin{itemize}
+    \item Feature-based models: cần statistical feature names (e.g., "acc\_x\_mean", "gyro\_y\_kurtosis")  
+    \item CNN models: cần channel placeholders (e.g., "ch0", "ch1", ..., "ch5")
+\end{itemize}
+
+\textbf{Giải pháp kiến trúc}: Architecture-aware metadata generation với logic phân nhánh rõ ràng cho từng loại mô hình.
+
+\subsubsection{Phân Biệt với Edge Impulse}
+Edge Impulse xử lý sự phức tạp này bằng cách có "processing blocks" riêng biệt cho từng loại mô hình. Framework này phải quản lý cả hai pipeline trong cùng một codebase thống nhất, đòi hỏi:
+\begin{itemize}
+    \item Validation logic nhận biết kiến trúc
+    \item Metadata semantics khác nhau cho từng model type
+    \item Input dimension handling linh hoạt (90 features vs 900 raw inputs)
+\end{itemize}
+
+Điều này thể hiện trade-off thiết kế: complexity tăng để đổi lấy flexibility và unified user experience.
+
+\subsection{Hạn chế TFLite và Giải pháp Keras Surrogate}
+\label{sec:disc_tflite_limitations}
+
+Finding 15 tiết lộ những hạn chế quan trọng trong hệ sinh thái ONNX-ML và TFLite đối với các thuật toán ML cổ điển.
+
+\subsubsection{Phân tích Chi tiết về ONNX-ML Bottleneck}
+Pipeline chuyển đổi bị gián đoạn tại bước ONNX→TensorFlow:
+\begin{enumerate}
+    \item \texttt{skl2onnx}: Thành công tạo ONNX-ML operators (TreeEnsembleClassifier, SVMClassifier)
+    \item \texttt{onnx2tf}: \textbf{Không hỗ trợ} ONNX-ML operators---chỉ hỗ trợ standard ONNX operators
+    \item \textbf{Kết quả}: RF/SVM không thể chuyển đổi trực tiếp sang TFLite
+\end{enumerate}
+
+Đây là một hạn chế hệ thống trong hệ sinh thái, không phải lỗi triển khai cụ thể của framework.
+
+\subsubsection{Đánh giá Keras Surrogate Method}
+Giải pháp Keras surrogate đưa ra trade-offs quan trọng:
+
+\textbf{Ưu điểm}:
+\begin{itemize}
+    \item Cho phép RF/SVM sử dụng TFLite pipeline
+    \item Tận dụng được quantization INT8 và runtime optimizations
+    \item Tương thích với hệ sinh thái TensorFlow hiện có
+\end{itemize}
+
+\textbf{Nhược điểm}:
+\begin{itemize}
+    \item \textbf{Approximation loss}: Keras MLP chỉ đạt 80-90\% agreement với RF/SVM gốc
+    \item \textbf{Memory overhead}: MLP surrogate có thể lớn hơn direct C++ implementation
+    \item \textbf{Training complexity}: Cần additional training step và hyperparameter tuning
+\end{itemize}
+
+\textbf{Khuyến nghị sử dụng}: 
+\begin{itemize}
+    \item \textbf{RF/SVM}: Ưu tiên direct C++ generation (exact, compact, fast)
+    \item \textbf{NN/CNN}: Sử dụng TFLite để tận dụng ecosystem mature
+    \item \textbf{TFLite surrogate}: Chỉ khi yêu cầu standardized runtime integration
+\end{itemize}
+
+\subsubsection{Implications cho Edge AI Ecosystem}
+Findings này chỉ ra một gap quan trọng trong edge AI toolchain: ONNX-ML và standard ONNX có operator domains khác nhau, tạo ra compatibility issues ở interface layers. Điều này nhấn mạnh giá trị của direct code generation approach cho classical ML algorithms.
+
 \section{Các Hướng Nghiên Cứu Tương Lai}
 
 \subsection{Các Mở Rộng Ngắn Hạn}
