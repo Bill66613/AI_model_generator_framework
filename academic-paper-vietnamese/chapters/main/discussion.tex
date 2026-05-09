@@ -340,7 +340,7 @@ Edge Impulse xử lý sự phức tạp này bằng cách có "processing blocks
 Finding 15 tiết lộ những hạn chế quan trọng trong hệ sinh thái ONNX-ML và TFLite đối với các thuật toán ML cổ điển.
 
 \subsubsection{Phân tích Chi tiết về ONNX-ML Bottleneck}
-Pipeline chuyển đổi bị gián đoạn tại bước ONNX→TensorFlow:
+Pipeline chuyển đổi bị gián đoạn tại bước ONNX$\rightarrow$TensorFlow:
 \begin{enumerate}
     \item \texttt{skl2onnx}: Thành công tạo ONNX-ML operators (TreeEnsembleClassifier, SVMClassifier)
     \item \texttt{onnx2tf}: \textbf{Không hỗ trợ} ONNX-ML operators---chỉ hỗ trợ standard ONNX operators

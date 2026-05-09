@@ -100,7 +100,7 @@ Bộ lọc Kalman mang lại những lợi thế quan trọng so với bộ lọ
         \midrule
         Bộ lọc huấn luyện & \texttt{filtfilt} (non-causal) & Forward-only (causal) \\
         Bộ lọc thiết bị & \texttt{lfilter} (causal) & Forward-only (causal) \\
-        \textbf{Tương đồng Parity} & ⚠️ Có khoảng cách (phase difference) & ✅ Hoàn toàn chính xác \\
+        \textbf{Tương đồng Parity} & \textbf{(!)} Có khoảng cách (phase difference) & \checkmark\ Hoàn toàn chính xác \\
         Kiểm soát độ mượt & Tần số cắt + bậc filter & Tham số Q và R \\
         Tính thích ứng & Không (hệ số cố định) & Có (gain thích ứng theo tín hiệu) \\
         Bộ nhớ mỗi kênh & $2 \times \text{order}$ floats & 2 state + 4 covariance floats \\
@@ -389,25 +389,25 @@ Mô hình được biên dịch trước (ahead-of-time compilation) sang mã C 
 \subsection{Triển khai TFLite Micro}
 \label{sec:tflite_micro_deployment}
 
-Framework hỗ trợ đường dẫn triển khai TFLite Micro như một phương pháp bổ sung cho các kiến trúc mô hình phù hợp. Quá trình chuyển đổi tuân theo pipeline ONNX→TensorFlow→TFLite với các hạn chế quan trọng về phạm vi hỗ trợ \cite{tensorflow2015_whitepaper}.
+Framework hỗ trợ đường dẫn triển khai TFLite Micro như một phương pháp bổ sung cho các kiến trúc mô hình phù hợp. Quá trình chuyển đổi tuân theo pipeline ONNX$\rightarrow$TensorFlow$\rightarrow$TFLite với các hạn chế quan trọng về phạm vi hỗ trợ \cite{tensorflow2015_whitepaper}.
 
 \subsubsection{Phạm vi Hỗ trợ theo Loại Mô hình}
 Nghiên cứu thực nghiệm cho thấy khả năng chuyển đổi khác nhau đáng kể giữa các loại mô hình:
 
-\paragraph{Neural Network và CNN: Chuyển đổi Trực tiếp ✅}
+\paragraph{Neural Network và CNN: Chuyển đổi Trực tiếp (hỗ trợ)}
 Các mô hình neural network (MLP) và CNN từ PyTorch có thể chuyển đổi thành công qua pipeline:
 \begin{enumerate}
-    \item PyTorch model → ONNX (\texttt{torch.onnx.export})
-    \item ONNX → TensorFlow (\texttt{onnx-tf})
-    \item TensorFlow → TFLite (\texttt{tf.lite.TFLiteConverter})
-    \item TFLite → TFLite Micro (quantization INT8)
+    \item PyTorch model $\rightarrow$ ONNX (\texttt{torch.onnx.export})
+    \item ONNX $\rightarrow$ TensorFlow (\texttt{onnx-tf})
+    \item TensorFlow $\rightarrow$ TFLite (\texttt{tf.lite.TFLiteConverter})
+    \item TFLite $\rightarrow$ TFLite Micro (quantization INT8)
 \end{enumerate}
 
-\paragraph{Random Forest và SVM: Hạn chế ONNX-ML ❌}
+\paragraph{Random Forest và SVM: Hạn chế ONNX-ML (không hỗ trợ trực tiếp)}
 Các mô hình Random Forest và SVM gặp rào cản chuyển đổi do hạn chế trong hệ sinh thái ONNX-ML:
 \begin{itemize}
-    \item \textbf{Scikit-learn → ONNX}: \texttt{skl2onnx} tạo các toán tử ONNX-ML như \texttt{TreeEnsembleClassifier} và \texttt{SVMClassifier}
-    \item \textbf{ONNX-ML → TensorFlow}: \texttt{onnx2tf} \textbf{không hỗ trợ} các toán tử ONNX-ML, chỉ hỗ trợ các toán tử ONNX chuẩn (operator domain "ai.onnx")
+    \item \textbf{Scikit-learn $\rightarrow$ ONNX}: \texttt{skl2onnx} tạo các toán tử ONNX-ML như \texttt{TreeEnsembleClassifier} và \texttt{SVMClassifier}
+    \item \textbf{ONNX-ML $\rightarrow$ TensorFlow}: \texttt{onnx2tf} \textbf{không hỗ trợ} các toán tử ONNX-ML, chỉ hỗ trợ các toán tử ONNX chuẩn (operator domain "ai.onnx")
     \item \textbf{Kết quả}: Pipeline bị gián đoạn, không thể chuyển đổi RF/SVM sang TFLite
 \end{itemize}
 
@@ -416,8 +416,8 @@ Các mô hình Random Forest và SVM gặp rào cản chuyển đổi do hạn c
 
 \begin{enumerate}
     \item \textbf{Sinh dữ liệu huấn luyện surrogate}: Sử dụng mô hình RF/SVM gốc để tạo soft predictions trên tập dữ liệu đại diện
-    \item \textbf{Huấn luyện Keras MLP}: Mạng neural đa lớp học ánh xạ từ features → soft predictions của RF/SVM
-    \item \textbf{Chuyển đổi MLP → TFLite}: Keras MLP có thể chuyển đổi thành công qua pipeline tiêu chuẩn
+    \item \textbf{Huấn luyện Keras MLP}: Mạng neural đa lớp học ánh xạ từ features $\rightarrow$ soft predictions của RF/SVM
+    \item \textbf{Chuyển đổi MLP $\rightarrow$ TFLite}: Keras MLP có thể chuyển đổi thành công qua pipeline tiêu chuẩn
 \end{enumerate}
 
 \textbf{Hạn chế Surrogate}: Keras surrogate là \textit{xấp xỉ}, không phải triển khai chính xác. Độ thỏa thuận kỳ vọng 80-90\% giữa mô hình gốc và surrogate. Cho độ chính xác tối đa, \textit{tạo mã trực tiếp C++ vẫn là phương pháp được khuyến nghị cho RF/SVM}.
@@ -456,8 +456,8 @@ Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên 
         Hỗ trợ DNN sâu & Tốt & Tốt & Hạn chế \\
         \bottomrule
     \end{tabular}
-    \small{$^\dag$TFLite Micro chỉ hỗ trợ NN/CNN; RF/SVM không thể chuyển đổi trực tiếp do onnx2tf không hỗ trợ ONNX-ML TreeEnsembleClassifier. Keras surrogate có thể sử dụng nhưng là xấp xỉ (80-90\% thỏa thuận).}\\
-    \small{$^\ddag$EON Compiler và TVM tập trung vào mạng nơ-ron; không hỗ trợ RF/SVM gốc.}
+    \par{\small $^\dag$TFLite Micro chỉ hỗ trợ NN/CNN; RF/SVM không thể chuyển đổi trực tiếp do onnx2tf không hỗ trợ ONNX-ML TreeEnsembleClassifier. Keras surrogate có thể sử dụng nhưng là xấp xỉ (80--90\% thỏa thuận).}
+    \par{\small $^\ddag$EON Compiler và TVM tập trung vào mạng nơ-ron; không hỗ trợ RF/SVM gốc.}
     \label{tab:codegen_comparison}
 \end{table}
 
