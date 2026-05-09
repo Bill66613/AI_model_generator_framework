@@ -22,57 +22,57 @@
 % Custom commands
 \newcommand{\Month}{
   \ifcase \the\month
-  \or January
-  \or February
-  \or March
-  \or April
-  \or May
-  \or June
-  \or July
-  \or August
-  \or September
-  \or October
-  \or November
-  \or December
+  \or 01
+  \or 02
+  \or 03
+  \or 04
+  \or 05
+  \or 06
+  \or 07
+  \or 08
+  \or 09
+  \or 10
+  \or 11
+  \or 12
   \fi
 }
 
-\newcommand{\@upperuniname}{Vietnam National University Ho Chi Minh City}
-\newcommand{\@uniname}{Ho Chi Minh City University of Technology}
+\newcommand{\@upperuniname}{Đại học Quốc gia Thành phố Hồ Chí Minh}
+\newcommand{\@uniname}{Trường Đại học Bách Khoa, Đại học Quốc gia Thành phố Hồ Chí Minh}
 
-\newcommand{\@deptname}{Faculty of Computer Science and Engineering}
+\newcommand{\@deptname}{Khoa Khoa học \& Kỹ thuật Máy tính}
 \newcommand{\deptname}[1]{\renewcommand{\@deptname}{#1}}
 
-\newcommand{\@reporttype}{Graduation Thesis}
+\newcommand{\@reporttype}{Luận văn tốt nghiệp}
 \newcommand{\reporttype}[1]{\renewcommand{\@reporttype}{#1}}
 
-\newcommand{\@stumajor}{Computer Science}
+\newcommand{\@stumajor}{Khoa học Máy tính}
 \newcommand{\stumajor}[1]{\renewcommand{\@stumajor}{#1}}
 
-\renewcommand{\@title}{Report title}
+\renewcommand{\@title}{Đề tài luận văn}
 
-\newcommand{\@defcouncil}{Council}
+\newcommand{\@defcouncil}{Hội đồng: }
 \newcommand{\defcouncil}[1]{\renewcommand{\@defcouncil}{#1}}
 
-\newcommand{\@supervisor}{Supervisor}
+\newcommand{\@supervisor}{Giảng viên hướng dẫn: }
 \newcommand{\supervisor}[1]{\renewcommand{\@supervisor}{#1}}
 
-\newcommand{\@secretary}{Secretary}
+\newcommand{\@secretary}{Thư ký: }
 \newcommand{\secretary}[1]{\renewcommand{\@secretary}{#1}}
 
-\newcommand{\@reviewer}{Reviewer}
+\newcommand{\@reviewer}{Người phản biện: }
 \newcommand{\reviewer}[1]{\renewcommand{\@reviewer}{#1}}
 
-\newcommand{\@stuname}{STUDENT:\ H}
+\newcommand{\@stuname}{Học viên: }
 \newcommand{\stuname}[1]{\renewcommand{\@stuname}{#1}}
 
-\newcommand{\@stuid}{STUDENT'S ID:\ xxxxxxx}
+\newcommand{\@stuid}{Mã số học viên: }
 \newcommand{\stuid}[1]{\renewcommand{\@stuid}{#1}}
 
-\newcommand{\@reportplace}{Ho Chi Minh City}
+\newcommand{\@reportplace}{Thành phố Hồ Chí Minh}
 \newcommand{\reportplace}[1]{\renewcommand{\@reportplace}{#1}}
 
-\newcommand{\@reporttime}{\Month \the\year}
+\newcommand{\@reporttime}{\Month/\the\year}
 \newcommand{\reporttime}[1]{\renewcommand{\@reporttime}{#1}}
 
 % Configurations
@@ -155,31 +155,32 @@
     \vfill
     \MakeUppercase{\@reporttype}
     \vfill
-    \MakeUppercase{Thesis}
+    % \MakeUppercase{Luận văn}
     \vfill
     {\Large\MakeUppercase{\parbox[c]{0.8\linewidth}{\centering\@title}}}
     \vfill
-    {\mdseries Major: \@stumajor}
+    {\mdseries Chuyên ngành: \@stumajor}
   \end{center}
   \vfill
   \hfill\parbox[t]{13cm}{
     % THESIS COMMITTEE: \@defcouncil
 
-    SUPERVISOR(s): \parbox[t]{7cm}{\@supervisor}
+    GVHD: \@supervisor
+    % Giảng viên hướng dẫn: \parbox[t]{10cm}{\@supervisor}
 
-    %MEMBER SECRETARY: \@secretary
-    % REVIEWER: \@reviewer
+    %THƯ KÝ: \@secretary
+    % NGƯỜI PHẢN BIỆN: \@reviewer
 
     \hspace*{3cm} ---o0o---
 
-    \@stuname
+    Học viên: \@stuname
 
-    \@stuid
+    Mã số học viên: \@stuid
   }
   \vfill
   \mdseries
   \begin{center}
-    \MakeUppercase{\@reportplace, \@reporttime}
+  \@reportplace, \@reporttime
   \end{center}
   \normalsize
   \cleardoublepage
