@@ -93,6 +93,7 @@ Bộ lọc Kalman mang lại những lợi thế quan trọng so với bộ lọ
 \begin{table}[H]
     \centering
     \caption{So sánh Bộ lọc IIR và Kalman Filter về Parity}
+    \label{tab:kalman_iir_comparison}
     \small
     \begin{tabular}{@{}p{3cm}p{5cm}p{4cm}@{}}
         \toprule
@@ -106,7 +107,6 @@ Bộ lọc Kalman mang lại những lợi thế quan trọng so với bộ lọ
         Bộ nhớ mỗi kênh & $2 \times \text{order}$ floats & 2 state + 4 covariance floats \\
         \bottomrule
     \end{tabular}
-    \label{tab:kalman_iir_comparison}
 \end{table}
 
 \textbf{Đóng góp về Parity}: Bộ lọc Kalman là bộ lọc tiền xử lý đầu tiên trong framework với \textit{khoảng cách parity bằng không}. Cả IIR và Savitzky-Golay đều có sự khác biệt nội tại giữa huấn luyện-triển khai (zero-phase vs causal, offline vs streaming). Bộ lọc Kalman loại bỏ hoàn toàn lớp lỗi này.
@@ -348,6 +348,7 @@ Bảng~\ref{tab:deployment_target_matrix} tóm tắt ma trận đích triển kh
 \begin{table}[H]
     \centering
     \caption{Ma trận đích triển khai được hỗ trợ trong kiến trúc generator}
+    \label{tab:deployment_target_matrix}
     \small
     \begin{tabular}{@{}p{2.6cm}p{2.8cm}p{2.6cm}p{4.6cm}@{}}
         \toprule
@@ -360,7 +361,6 @@ Bảng~\ref{tab:deployment_target_matrix} tóm tắt ma trận đích triển kh
         Backend runtime thay thế & tflite\_micro, onnx\_runtime & mã glue + model nhị phân & Mở rộng cho các pipeline cần runtime suy luận chuẩn hóa \\
         \bottomrule
     \end{tabular}
-    \label{tab:deployment_target_matrix}
 \end{table}
 
 \subsection{Lý do Chọn Tạo Mã Trực tiếp thay vì Runtime Suy luận}
@@ -442,8 +442,9 @@ Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên 
 \begin{table}[H]
     \centering
     \caption{So sánh phương pháp triển khai mô hình ML trên vi điều khiển}
+    \label{tab:codegen_comparison}
     \small
-    \begin{tabular}{@{}p{3.2cm}ccc@{}}
+    \begin{tabular}{@{}lp{2.5cm}p{2.5cm}p{2.5cm}@{}}
         \toprule
         Tiêu chí & Runtime & Compiler & \textbf{Trực tiếp (Ours)} \\
         \midrule
@@ -456,9 +457,12 @@ Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên 
         Hỗ trợ DNN sâu & Tốt & Tốt & Hạn chế \\
         \bottomrule
     \end{tabular}
-    \par{\small $^\dag$TFLite Micro chỉ hỗ trợ NN/CNN; RF/SVM không thể chuyển đổi trực tiếp do onnx2tf không hỗ trợ ONNX-ML TreeEnsembleClassifier. Keras surrogate có thể sử dụng nhưng là xấp xỉ (80--90\% thỏa thuận).}
-    \par{\small $^\ddag$EON Compiler và TVM tập trung vào mạng nơ-ron; không hỗ trợ RF/SVM gốc.}
-    \label{tab:codegen_comparison}
+    \vspace{4pt}
+    \begin{minipage}{\linewidth}
+    \footnotesize
+    $^\dag$TFLite Micro chỉ hỗ trợ NN/CNN; RF/SVM không thể chuyển đổi trực tiếp do onnx2tf không hỗ trợ ONNX-ML TreeEnsembleClassifier. Keras surrogate có thể sử dụng nhưng là xấp xỉ (80--90\% thỏa thuận).\\
+    $^\ddag$EON Compiler và TVM tập trung vào mạng nơ-ron; không hỗ trợ RF/SVM gốc.
+    \end{minipage}
 \end{table}
 
 \subsubsection{Lập luận cho Lựa chọn Thiết kế}
