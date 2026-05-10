@@ -354,19 +354,21 @@ class TFLiteConverter:
         model = self.model_object
 
         # PyTorch MLP: check trainer export
-        if hasattr(model, 'trainer') and model.trainer is not None:
-            if hasattr(model.trainer, 'export_mlp_weights'):
-                weights = model.trainer.export_mlp_weights()
+        # EdgeMLModel stores the trainer as _pytorch_trainer (private attr)
+        trainer = getattr(model, '_pytorch_trainer', None) or getattr(model, 'trainer', None)
+        if trainer is not None:
+            if hasattr(trainer, 'export_mlp_weights'):
+                weights = trainer.export_mlp_weights()
                 if weights:
                     return weights
 
-        # Check model_object for pytorch_weights
+        # Check model_object for pytorch_weights (set during save/load)
         if hasattr(model, 'pytorch_weights'):
             return model.pytorch_weights
 
         # sklearn MLP: extract from MLPClassifier
-        sklearn_model = model.model
-        if hasattr(sklearn_model, 'coefs_') and hasattr(sklearn_model, 'intercepts_'):
+        sklearn_model = getattr(model, 'model', None)
+        if sklearn_model is not None and hasattr(sklearn_model, 'coefs_') and hasattr(sklearn_model, 'intercepts_'):
             return {
                 'coefs_': [c.copy() for c in sklearn_model.coefs_],
                 'intercepts_': [b.copy() for b in sklearn_model.intercepts_],
@@ -379,8 +381,9 @@ class TFLiteConverter:
         model = self.model_object
 
         state_dict = None
-        if hasattr(model, 'trainer') and model.trainer is not None:
-            state_dict = model.trainer.model.state_dict()
+        trainer = getattr(model, '_pytorch_trainer', None) or getattr(model, 'trainer', None)
+        if trainer is not None:
+            state_dict = trainer.model.state_dict()
         elif hasattr(model, 'model'):
             import torch
             if isinstance(model.model, torch.nn.Module):
