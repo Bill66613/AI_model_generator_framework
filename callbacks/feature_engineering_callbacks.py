@@ -175,7 +175,8 @@ def register_callbacks(app):
         n_axes = n_accel + n_gyro
         n_mag_groups = (1 if n_accel > 0 else 0) + (1 if n_gyro > 0 else 0)
         jerk_feats = 3 if n_accel >= 2 else 0
-        freq_per_mag = 10  # DFT features per magnitude group (7 spectral + 3 shape stats)
+        # DFT features per magnitude group (7 spectral + 3 shape stats)
+        freq_per_mag = 10
 
         feature_counts = {
             'orientation_invariant_time_only': (
@@ -586,12 +587,24 @@ def register_callbacks(app):
 
             # Clean up stale training files from previous FE runs that used
             # a different feature set.  Only remove files that do NOT belong to
-            # the current dataset_name (determined below) and that have no
-            # matching _fe_metadata.json — i.e. old per-file splits.
+            # any known FE dataset (i.e. old per-file splits without metadata).
             # Build the dataset name first so we can guard against deleting our own files.
+
+            # Encode feature method into dataset name so different FE configs
+            # coexist (e.g. running_still_walking_oit33 vs _oi53).
+            _FE_ABBREV = {
+                'orientation_invariant_time_only': 'oit',
+                'orientation_invariant': 'oi',
+                'time_domain': 'td',
+                'all': 'all',
+                'frequency_domain': 'fd',
+                'raw': 'raw',
+            }
+            fe_abbrev = _FE_ABBREV.get(feature_method, feature_method[:3])
             dataset_name = '_'.join(sorted(selected_labels)[:3])
             if len(selected_labels) > 3:
                 dataset_name += f"_and_{len(selected_labels)-3}_more"
+            dataset_name += f"_{fe_abbrev}{len(feature_names)}"
 
             existing_fe_meta = glob.glob(os.path.join(
                 training_dir, '*_fe_metadata.json'))

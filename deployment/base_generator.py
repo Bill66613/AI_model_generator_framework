@@ -347,7 +347,8 @@ const char* get_activity_name(int class_id) {{
                      for i, name in enumerate(safe_names)]
             return '\n'.join(lines)
         else:
-            entries = ', '.join([f'{name} = {i}' for i, name in enumerate(safe_names)])
+            entries = ', '.join(
+                [f'{name} = {i}' for i, name in enumerate(safe_names)])
             return f'enum ActivityClass {{\n    {entries}\n}};'
 
     def _get_function_declarations(self) -> str:
@@ -653,7 +654,7 @@ const char* get_activity_name(int class_id) {{
 
     def _get_logging_macros(self) -> str:
         """Generate platform-portable logging macros.
-        
+
         Provides HAR_LOG(fmt, ...) so utility/debug functions compile on all
         platforms without changing the body of the code.
         """
@@ -691,7 +692,7 @@ const char* get_activity_name(int class_id) {{
         """Generate feature scaling arrays with real parameters.
         Uses PROGMEM on AVR platforms to store in flash instead of RAM."""
         precision = self.feature_precision
-        
+
         # Use PROGMEM for AVR-based Arduino boards (limited RAM)
         progmem = 'PROGMEM ' if self.platform == 'arduino' else ''
         read_macro = self._needs_progmem_read()
@@ -749,7 +750,7 @@ static inline float pgm_read_float_near_safe(const float* addr) {
 
     def _generate_complete_feature_extraction(self) -> str:
         """Generate optimization-aware feature extraction function.
-        
+
         CRITICAL: The feature extraction algorithm MUST match training exactly.
         Optimization level affects precision/sampling/window size, NOT the algorithm.
         If the model was trained with orientation-robust features, C++ MUST use
@@ -760,7 +761,7 @@ static inline float pgm_read_float_near_safe(const float* addr) {
         include_per_axis = False
         include_frequency = False
         feature_method = None  # initialise before try blocks to avoid NameError
-        
+
         # Source 1: Explicit feature_config in model_info
         try:
             feature_config = self.model_data.get(
@@ -768,8 +769,10 @@ static inline float pgm_read_float_near_safe(const float* addr) {
             if feature_config:
                 orientation_robust = feature_config.get(
                     'orientation_robust', False)
-                include_per_axis = feature_config.get('include_per_axis', False)
-                include_frequency = feature_config.get('include_frequency', False)
+                include_per_axis = feature_config.get(
+                    'include_per_axis', False)
+                include_frequency = feature_config.get(
+                    'include_frequency', False)
         except Exception:
             pass
 
@@ -784,9 +787,12 @@ static inline float pgm_read_float_near_safe(const float* addr) {
 
         # Source 3: Auto-detect from feature names (most reliable)
         if self.feature_names:
-            has_acc_mag = any(str(name).startswith('acc_mag_') for name in self.feature_names)
-            has_gyro_mag = any(str(name).startswith('gyro_mag_') for name in self.feature_names)
-            has_jerk_mag = any(str(name).startswith('acc_jerk_mag_') for name in self.feature_names)
+            has_acc_mag = any(str(name).startswith('acc_mag_')
+                              for name in self.feature_names)
+            has_gyro_mag = any(str(name).startswith('gyro_mag_')
+                               for name in self.feature_names)
+            has_jerk_mag = any(str(name).startswith('acc_jerk_mag_')
+                               for name in self.feature_names)
             if has_acc_mag and has_gyro_mag:
                 orientation_robust = True
             # Auto-detect frequency features from names
@@ -795,8 +801,8 @@ static inline float pgm_read_float_near_safe(const float* addr) {
             if any(str(name).endswith(freq_suffixes) for name in self.feature_names):
                 include_frequency = True
             # Also check for per-axis features
-            has_per_axis = any(str(name).startswith(('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_')) 
-                             for name in self.feature_names)
+            has_per_axis = any(str(name).startswith(('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_'))
+                               for name in self.feature_names)
             if has_per_axis:
                 include_per_axis = True
 
@@ -1178,7 +1184,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
 
     def _generate_per_axis_extraction(self) -> str:
         """Generate per-axis feature extraction that ALWAYS matches training.
-        
+
         CRITICAL: All optimization levels produce the SAME 15 features per axis
         in the SAME order. The optimization level only affects:
           - Sorting algorithm (insertion sort vs bubble sort)

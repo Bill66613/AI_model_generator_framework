@@ -199,6 +199,19 @@ layout = html.Div([
     html.Div([
         html.H3("📁 Training Data Summary", style={
                 'color': '#2E86AB', 'margin-bottom': '20px'}),
+
+        # FE dataset selector
+        html.Div([
+            html.Label("Select Feature Engineering Dataset:", style={
+                       'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+            dcc.Dropdown(
+                id='fe-dataset-selector',
+                options=[],
+                placeholder="Select a feature engineering dataset...",
+                style={'margin-bottom': '15px'}
+            ),
+        ], style={'margin-bottom': '15px'}),
+
         html.Div(id='training-data-summary', style={
             'min-height': '80px',
             'background-color': '#f8f9fa',

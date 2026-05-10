@@ -54,7 +54,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         self._tflite_c_array = None
         self._tflite_ops = None  # Populated by convert_model() via enumerate_ops()
         self._arena_size = None
-        self._use_all_ops_resolver = False  # Set to True when enumerate_ops() hits an unknown op
+        # Set to True when enumerate_ops() hits an unknown op
+        self._use_all_ops_resolver = False
 
     def _load_representative_data(self):
         """Load real training data for INT8 quantization calibration.
@@ -85,7 +86,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         try:
             if self.model_type == 'pytorch_cnn':
                 # Load raw sensor windows: shape (n_windows, window_size, n_channels)
-                raw_files = glob.glob(os.path.join(training_dir, '*_raw_train.npy'))
+                raw_files = glob.glob(os.path.join(
+                    training_dir, '*_raw_train.npy'))
                 if raw_files:
                     data = np.load(raw_files[0])
                     # Use up to 200 samples for calibration
@@ -93,21 +95,39 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
                         indices = np.random.default_rng(42).choice(
                             len(data), 200, replace=False)
                         data = data[indices]
-                    logger.info(f"Loaded {len(data)} real CNN windows for INT8 calibration")
+                    logger.info(
+                        f"Loaded {len(data)} real CNN windows for INT8 calibration")
                     return data.astype(np.float32)
             else:
-                # MLP/RF/SVM: load feature CSV
+                # MLP/RF/SVM: load feature CSV matching model's feature count
                 import pandas as pd
-                train_files = glob.glob(os.path.join(training_dir, '*_train.csv'))
-                if train_files:
-                    df = pd.read_csv(train_files[0])
+                train_files = glob.glob(
+                    os.path.join(training_dir, '*_train.csv'))
+                num_features = len(
+                    self.feature_names) if self.feature_names else 0
+                df = None
+                for tf in sorted(train_files, reverse=True):
+                    candidate = pd.read_csv(tf, nrows=1)
+                    feat_cols = [c for c in candidate.columns if c != 'label']
+                    if num_features == 0 or len(feat_cols) == num_features:
+                        df = pd.read_csv(tf)
+                        break
+                if df is not None:
                     feature_cols = [c for c in df.columns if c != 'label']
                     data = df[feature_cols].values
                     if len(data) > 200:
                         indices = np.random.default_rng(42).choice(
                             len(data), 200, replace=False)
                         data = data[indices]
-                    logger.info(f"Loaded {len(data)} real feature samples for INT8 calibration")
+                    # Apply StandardScaler: the TFLite model expects scaled
+                    # inputs (same as sklearn pipeline). Raw features have
+                    # ranges like [0, 9627] but the model sees ~N(0,1).
+                    means = np.array(self.feature_means, dtype=np.float32)
+                    stds = np.array(self.feature_stds, dtype=np.float32)
+                    stds[stds < 1e-7] = 1.0  # prevent division by zero
+                    data = (data - means) / stds
+                    logger.info(
+                        f"Loaded {len(data)} real feature samples for INT8 calibration (scaled)")
                     return data.astype(np.float32)
         except Exception as e:
             logger.warning(f"Could not load representative data: {e}")
@@ -207,7 +227,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
             # MLP: input features + hidden layers + output
             weights = self.model_data.get('weights', {})
             hidden_size = weights.get('hidden_size', 64) if weights else 64
-            arena = (n_features * 4 + hidden_size * 2 * bpv + n_classes * 4) * 2
+            arena = (n_features * 4 + hidden_size *
+                     2 * bpv + n_classes * 4) * 2
         else:
             # RF/SVM: mostly the input + output tensors
             arena = (n_features + n_classes) * 4 * 4
@@ -241,7 +262,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         No feature extraction or scaling arrays — CNN operates directly on raw IMU windows.
         """
         import os
-        header_include = os.path.basename(header_filename) if header_filename else 'har_model.h'
+        header_include = os.path.basename(
+            header_filename) if header_filename else 'har_model.h'
         classes_str = ', '.join([f'"{cls}"' for cls in self.classes])
         impl_lines = [
             f'/*',
@@ -258,6 +280,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
             f'    {classes_str}',
             f'}};',
             f'',
+            self._generate_iir_filter_implementation(),
+            self._generate_kalman_filter_implementation(),
             self._generate_model_specific_implementation(),
             f'',
             f'void har_init() {{',
@@ -300,21 +324,25 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append("// ---- TFLite Micro Model ----")
         arena_size = self._arena_size if self._arena_size is not None else self._estimate_arena_size()
         lines.append(f"#define TENSOR_ARENA_SIZE {arena_size}")
-        lines.append(f"#define TFLITE_MODEL_SIZE {len(self._tflite_bytes) if self._tflite_bytes else 0}")
+        lines.append(
+            f"#define TFLITE_MODEL_SIZE {len(self._tflite_bytes) if self._tflite_bytes else 0}")
         lines.append("")
         lines.append("extern const unsigned char g_har_model[];")
         lines.append("extern const unsigned int g_har_model_len;")
         lines.append("")
         if self.model_type == 'pytorch_cnn':
-            lines.append("// TFLite Micro inference (CNN: raw sensor window input)")
+            lines.append(
+                "// TFLite Micro inference (CNN: raw sensor window input)")
             lines.append("bool tflite_init();")
             lines.append("void tflite_print_info();")
-            lines.append(f"int tflite_predict_window(float sensor_data[WINDOW_SIZE][N_CHANNELS], float probabilities[NUM_CLASSES]);")
+            lines.append(
+                f"int tflite_predict_window(float sensor_data[WINDOW_SIZE][N_CHANNELS], float probabilities[NUM_CLASSES]);")
         else:
             lines.append("// TFLite Micro inference function")
             lines.append("bool tflite_init();")
             lines.append("void tflite_print_info();")
-            lines.append(f"int tflite_predict(float features[NUM_FEATURES], float probabilities[NUM_CLASSES]);")
+            lines.append(
+                f"int tflite_predict(float features[NUM_FEATURES], float probabilities[NUM_CLASSES]);")
         return '\n'.join(lines)
 
     def _generate_model_specific_implementation(self) -> str:
@@ -333,10 +361,12 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
             return self._generate_cnn_tflite_predict()
         lines = []
         lines.append("// ---- TFLite Micro Prediction ----")
-        lines.append("// Feature extraction is handled by extract_features() from the base implementation")
+        lines.append(
+            "// Feature extraction is handled by extract_features() from the base implementation")
         lines.append("")
         lines.append("#include <TensorFlowLite.h>")
-        lines.append("#include \"tensorflow/lite/micro/micro_mutable_op_resolver.h\"")
+        lines.append(
+            "#include \"tensorflow/lite/micro/micro_mutable_op_resolver.h\"")
         lines.append("#include \"tensorflow/lite/micro/micro_interpreter.h\"")
         lines.append("#include \"tensorflow/lite/schema/schema_generated.h\"")
         lines.append("")
@@ -358,11 +388,13 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append("")
         lines.append("    // Build interpreter")
         lines.append("    static tflite::MicroInterpreter static_interpreter(")
-        lines.append("        model, resolver, tensor_arena, TENSOR_ARENA_SIZE, nullptr);")
+        lines.append(
+            "        model, resolver, tensor_arena, TENSOR_ARENA_SIZE, nullptr);")
         lines.append("    interpreter = &static_interpreter;")
         lines.append("")
         lines.append("    // Allocate tensors")
-        lines.append("    TfLiteStatus allocate_status = interpreter->AllocateTensors();")
+        lines.append(
+            "    TfLiteStatus allocate_status = interpreter->AllocateTensors();")
         lines.append("    if (allocate_status != kTfLiteOk) {")
         lines.append("        HAR_LOG(\"AllocateTensors() failed\");")
         lines.append("        return false;")
@@ -372,12 +404,15 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append("    input_tensor = interpreter->input(0);")
         lines.append("    output_tensor = interpreter->output(0);")
         lines.append("")
-        lines.append(f"    HAR_LOG(\"TFLite init OK. Arena used: %d / %d bytes\",")
-        lines.append(f"            interpreter->arena_used_bytes(), TENSOR_ARENA_SIZE);")
+        lines.append(
+            f"    HAR_LOG(\"TFLite init OK. Arena used: %d / %d bytes\",")
+        lines.append(
+            f"            interpreter->arena_used_bytes(), TENSOR_ARENA_SIZE);")
         lines.append("    return true;")
         lines.append("}")
         lines.append("")
-        lines.append(f"int tflite_predict(float features[NUM_FEATURES], float probabilities[NUM_CLASSES]) {{")
+        lines.append(
+            f"int tflite_predict(float features[NUM_FEATURES], float probabilities[NUM_CLASSES]) {{")
         lines.append("    if (interpreter == nullptr) {")
         lines.append("        if (!tflite_init()) return -1;")
         lines.append("    }")
@@ -409,8 +444,10 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append("}")
         lines.append("")
         # Bridge: base class har_predict() calls har_predict_internal() → delegate to tflite_predict()
-        lines.append("// har_predict_internal: bridges base har_predict() → tflite_predict()")
-        lines.append(f"int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {{")
+        lines.append(
+            "// har_predict_internal: bridges base har_predict() → tflite_predict()")
+        lines.append(
+            f"int har_predict_internal(float features[NUM_FEATURES], float probs_out[NUM_CLASSES]) {{")
         lines.append("    return tflite_predict(features, probs_out);")
         lines.append("}")
         return '\n'.join(lines)
@@ -427,9 +464,12 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         if self._use_all_ops_resolver:
             # Header already added by _get_impl_includes() — only emit the declaration here.
             lines = []
-            lines.append("    // WARNING: model contains an unrecognized op code.")
-            lines.append("    // AllOpsResolver is used for safe compilation; for a smaller binary,")
-            lines.append("    // add the missing op to BUILTIN_OP_NAMES in tflite_converter.py.")
+            lines.append(
+                "    // WARNING: model contains an unrecognized op code.")
+            lines.append(
+                "    // AllOpsResolver is used for safe compilation; for a smaller binary,")
+            lines.append(
+                "    // add the missing op to BUILTIN_OP_NAMES in tflite_converter.py.")
             lines.append("    static tflite::AllOpsResolver resolver;")
             return lines
 
@@ -442,8 +482,10 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
                 ops = ['Dequantize', 'FullyConnected', 'Quantize', 'Softmax']
 
         lines = []
-        lines.append(f"    // Register exactly the {len(ops)} ops used by this model")
-        lines.append(f"    static tflite::MicroMutableOpResolver<{len(ops)}> resolver;")
+        lines.append(
+            f"    // Register exactly the {len(ops)} ops used by this model")
+        lines.append(
+            f"    static tflite::MicroMutableOpResolver<{len(ops)}> resolver;")
         for op in sorted(ops):
             lines.append(f"    resolver.Add{op}();")
         return lines
@@ -451,11 +493,14 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
     def _generate_cnn_tflite_predict(self) -> str:
         """Generate TFLite Micro inference for CNN (raw sensor window input)."""
         lines = []
-        lines.append("// ---- TFLite Micro Prediction (CNN: raw sensor window input) ----")
-        lines.append("// CNN operates directly on raw IMU windows — no feature extraction needed.")
+        lines.append(
+            "// ---- TFLite Micro Prediction (CNN: raw sensor window input) ----")
+        lines.append(
+            "// CNN operates directly on raw IMU windows — no feature extraction needed.")
         lines.append("")
         lines.append("#include <TensorFlowLite.h>")
-        lines.append("#include \"tensorflow/lite/micro/micro_mutable_op_resolver.h\"")
+        lines.append(
+            "#include \"tensorflow/lite/micro/micro_mutable_op_resolver.h\"")
         lines.append("#include \"tensorflow/lite/micro/micro_interpreter.h\"")
         lines.append("#include \"tensorflow/lite/schema/schema_generated.h\"")
         lines.append("")
@@ -474,31 +519,39 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append("    }")
         lines.extend(self._generate_resolver_code())
         lines.append("    static tflite::MicroInterpreter static_interpreter(")
-        lines.append("        model, resolver, tensor_arena, TENSOR_ARENA_SIZE, nullptr);")
+        lines.append(
+            "        model, resolver, tensor_arena, TENSOR_ARENA_SIZE, nullptr);")
         lines.append("    interpreter = &static_interpreter;")
-        lines.append("    TfLiteStatus allocate_status = interpreter->AllocateTensors();")
+        lines.append(
+            "    TfLiteStatus allocate_status = interpreter->AllocateTensors();")
         lines.append("    if (allocate_status != kTfLiteOk) {")
         lines.append("        HAR_LOG(\"AllocateTensors() failed\");")
         lines.append("        return false;")
         lines.append("    }")
         lines.append("    input_tensor = interpreter->input(0);")
         lines.append("    output_tensor = interpreter->output(0);")
-        lines.append(f"    HAR_LOG(\"TFLite CNN init OK. Arena used: %d / %d bytes\",")
-        lines.append(f"            interpreter->arena_used_bytes(), TENSOR_ARENA_SIZE);")
+        lines.append(
+            f"    HAR_LOG(\"TFLite CNN init OK. Arena used: %d / %d bytes\",")
+        lines.append(
+            f"            interpreter->arena_used_bytes(), TENSOR_ARENA_SIZE);")
         lines.append("    return true;")
         lines.append("}")
         lines.append("")
         lines.append("// CNN TFLite inference from raw sensor window.")
-        lines.append("// Input: sensor_data[WINDOW_SIZE][N_CHANNELS] — raw IMU readings.")
-        lines.append(f"int tflite_predict_window(float sensor_data[WINDOW_SIZE][N_CHANNELS], float probabilities[NUM_CLASSES]) {{")
+        lines.append(
+            "// Input: sensor_data[WINDOW_SIZE][N_CHANNELS] — raw IMU readings.")
+        lines.append(
+            f"int tflite_predict_window(float sensor_data[WINDOW_SIZE][N_CHANNELS], float probabilities[NUM_CLASSES]) {{")
         lines.append("    if (interpreter == nullptr) {")
         lines.append("        if (!tflite_init()) return -1;")
         lines.append("    }")
-        lines.append("    // Flatten [WINDOW_SIZE][N_CHANNELS] into the TFLite input tensor (shape: 1,WINDOW_SIZE,N_CHANNELS)")
+        lines.append(
+            "    // Flatten [WINDOW_SIZE][N_CHANNELS] into the TFLite input tensor (shape: 1,WINDOW_SIZE,N_CHANNELS)")
         lines.append("    int idx = 0;")
         lines.append("    for (int t = 0; t < WINDOW_SIZE; t++) {")
         lines.append("        for (int ch = 0; ch < N_CHANNELS; ch++) {")
-        lines.append("            input_tensor->data.f[idx++] = sensor_data[t][ch];")
+        lines.append(
+            "            input_tensor->data.f[idx++] = sensor_data[t][ch];")
         lines.append("        }")
         lines.append("    }")
         lines.append("    TfLiteStatus invoke_status = interpreter->Invoke();")
@@ -518,18 +571,23 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append("    return predicted_class;")
         lines.append("}")
         lines.append("")
-        lines.append("// High-level window prediction with confidence threshold.")
-        lines.append("// Returns predicted class id, or -1 if below CONFIDENCE_THRESHOLD.")
-        lines.append(f"int har_predict_from_window(float sensor_data[WINDOW_SIZE][N_CHANNELS], float* confidence) {{")
+        lines.append(
+            "// High-level window prediction with confidence threshold.")
+        lines.append(
+            "// Returns predicted class id, or -1 if below CONFIDENCE_THRESHOLD.")
+        lines.append(
+            f"int har_predict_from_window(float sensor_data[WINDOW_SIZE][N_CHANNELS], float* confidence) {{")
         lines.append("    if (sensor_data == NULL) {")
         lines.append("        if (confidence) *confidence = 0.0f;")
         lines.append("        return -1;")
         lines.append("    }")
         lines.append("    float probabilities[NUM_CLASSES];")
-        lines.append("    int predicted = tflite_predict_window(sensor_data, probabilities);")
+        lines.append(
+            "    int predicted = tflite_predict_window(sensor_data, probabilities);")
         lines.append("    float conf = 0.0f;")
         lines.append("    for (int i = 0; i < NUM_CLASSES; i++) {")
-        lines.append("        if (probabilities[i] > conf) conf = probabilities[i];")
+        lines.append(
+            "        if (probabilities[i] > conf) conf = probabilities[i];")
         lines.append("    }")
         lines.append("    if (confidence) *confidence = conf;")
         lines.append("    if (predicted < 0 || predicted >= NUM_CLASSES) {")
@@ -548,20 +606,26 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append("// ---- TFLite Utility Functions ----")
         lines.append("")
         lines.append("void tflite_print_info() {")
-        lines.append(f"    HAR_LOG(\"Model: TFLite Micro ({self.model_type})\");")
-        lines.append(f"    HAR_LOG(\"Model size: %u bytes\", g_har_model_len);")
-        lines.append(f"    HAR_LOG(\"Arena size: %d bytes\", TENSOR_ARENA_SIZE);")
-        lines.append(f"    HAR_LOG(\"Features: %d, Classes: %d\", NUM_FEATURES, NUM_CLASSES);")
+        lines.append(
+            f"    HAR_LOG(\"Model: TFLite Micro ({self.model_type})\");")
+        lines.append(
+            f"    HAR_LOG(\"Model size: %u bytes\", g_har_model_len);")
+        lines.append(
+            f"    HAR_LOG(\"Arena size: %d bytes\", TENSOR_ARENA_SIZE);")
+        lines.append(
+            f"    HAR_LOG(\"Features: %d, Classes: %d\", NUM_FEATURES, NUM_CLASSES);")
         if self._arena_size:
             lines.append(f"    if (interpreter != nullptr) {{")
-            lines.append(f"        HAR_LOG(\"Arena used: %d bytes\", interpreter->arena_used_bytes());")
+            lines.append(
+                f"        HAR_LOG(\"Arena used: %d bytes\", interpreter->arena_used_bytes());")
             lines.append(f"    }}")
         lines.append("}")
         lines.append("")
         lines.append("const char* tflite_get_class_name(int class_idx) {")
-        lines.append("    if (class_idx < 0 || class_idx >= NUM_CLASSES) return \"unknown\";")
+        lines.append(
+            "    if (class_idx < 0 || class_idx >= NUM_CLASSES) return \"unknown\";")
         lines.append("    return activity_names[class_idx];")
-        lines.append("}")  
+        lines.append("}")
         return '\n'.join(lines)
 
     def generate_example_sketch(self, header_filename: str = None) -> str:
@@ -583,7 +647,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         sketch.append(f" * Model type: {self.model_type}")
         sketch.append(f" * Classes: {', '.join(self.classes)}")
         sketch.append(f" * Features: {len(self.feature_names)}")
-        sketch.append(f" * Deployment approach: TensorFlow Lite for Microcontrollers")
+        sketch.append(
+            f" * Deployment approach: TensorFlow Lite for Microcontrollers")
         sketch.append(f" *")
         sketch.append(f" * Generated by HAR Edge Deployment Framework")
         sketch.append(f" */")
@@ -610,11 +675,13 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
 
         # Timing — use SAMPLING_RATE from header
         sketch.append(f"// Timing — SAMPLING_RATE is defined in the header")
-        sketch.append(f"const unsigned long SAMPLE_INTERVAL_US = 1000000UL / SAMPLING_RATE;")
+        sketch.append(
+            f"const unsigned long SAMPLE_INTERVAL_US = 1000000UL / SAMPLING_RATE;")
         sketch.append(f"unsigned long last_sample_time = 0;")
         sketch.append(f"")
 
-        sketch.append(f"// CONFIDENCE_THRESHOLD is defined in the header (default: {self.confidence_threshold:.2f})")
+        sketch.append(
+            f"// CONFIDENCE_THRESHOLD is defined in the header (default: {self.confidence_threshold:.2f})")
         sketch.append(f"")
 
         # Setup function
@@ -622,7 +689,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         sketch.append(f"    Serial.begin(115200);")
         sketch.append(f"    while (!Serial && millis() < 3000);")
         sketch.append(f"")
-        sketch.append(f"    Serial.println(\"HAR TFLite Micro - Initializing...\");")
+        sketch.append(
+            f"    Serial.println(\"HAR TFLite Micro - Initializing...\");")
         sketch.append(f"")
 
         # IMU init from base (includes Wire.begin, address fallback, diagnostics)
@@ -631,25 +699,64 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
 
         sketch.append(f"    // Initialize TFLite Micro")
         sketch.append(f"    if (!tflite_init()) {{")
-        sketch.append(f"        Serial.println(\"ERROR: TFLite initialization failed! Check TENSOR_ARENA_SIZE.\");")
-        sketch.append(f"        while (1) {{ delay(2000); Serial.println(\"TFLite init failed\"); }}")
+        sketch.append(
+            f"        Serial.println(\"ERROR: TFLite initialization failed! Check TENSOR_ARENA_SIZE.\");")
+        sketch.append(
+            f"        while (1) {{ delay(2000); Serial.println(\"TFLite init failed\"); }}")
         sketch.append(f"    }}")
         sketch.append(f"")
         sketch.append(f"    tflite_print_info();")
-        sketch.append(f"    Serial.println(\"Ready! Collecting sensor data...\");")
+        sketch.append(
+            f"    Serial.println(\"Ready! Collecting sensor data...\");")
         sketch.append(f"}}")
         sketch.append(f"")
 
         # Loop function
         sketch.append(f"void loop() {{")
         sketch.append(f"    unsigned long now = micros();")
-        sketch.append(f"    if (now - last_sample_time < SAMPLE_INTERVAL_US) return;")
+        sketch.append(
+            f"    if (now - last_sample_time < SAMPLE_INTERVAL_US) return;")
         sketch.append(f"    last_sample_time = now;")
         sketch.append(f"")
 
         # Sensor read from base (includes CONVERT_G_TO_MS2 multiplication)
         sketch.append(platform_code['sensor_read'])
         sketch.append(f"")
+
+        # On-device IIR filter (matches base generator behavior)
+        if self.enable_iir_filter:
+            sketch.append(f"    // Apply on-device IIR filter")
+            sketch.append(f"    #ifdef IIR_FILTER_ENABLED")
+            sketch.append(f"    {{")
+            sketch.append(
+                f"        float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};")
+            sketch.append(f"        iir_filter_sample(raw_sample);")
+            sketch.append(
+                f"        aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];")
+            sketch.append(
+                f"        gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];")
+            sketch.append(f"    }}")
+            sketch.append(f"    #endif")
+            sketch.append(f"")
+
+        # On-device Kalman filter (matches base generator behavior)
+        if self.enable_kalman_filter:
+            parity_note = 'exact parity with training' if self._has_kalman_parity(
+            ) else 'device-only — model trained without Kalman'
+            sketch.append(
+                f"    // Apply on-device Kalman filter ({parity_note})")
+            sketch.append(f"    #ifdef KALMAN_FILTER_ENABLED")
+            sketch.append(f"    {{")
+            sketch.append(
+                f"        float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};")
+            sketch.append(f"        kalman_filter_sample(raw_sample);")
+            sketch.append(
+                f"        aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];")
+            sketch.append(
+                f"        gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];")
+            sketch.append(f"    }}")
+            sketch.append(f"    #endif")
+            sketch.append(f"")
 
         sketch.append(f"    // Store in buffer")
         sketch.append(f"    sensor_buffer[sample_count][0] = aX;")
@@ -662,45 +769,48 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         sketch.append(f"")
 
         # Persistent prediction (survives across loop iterations)
-        sketch.append(f"    // Persistent last prediction — survives across loop iterations")
+        sketch.append(
+            f"    // Persistent last prediction — survives across loop iterations")
         sketch.append(f"    static const char* last_activity = NULL;")
         sketch.append(f"")
         sketch.append(f"    // Check if window is full")
         sketch.append(f"    if (sample_count >= WINDOW_SIZE) {{")
 
         if self.model_type == 'pytorch_cnn':
-            sketch.append(f"        // CNN TFLite: pass raw window directly, no feature extraction needed")
-            sketch.append(f"        float probabilities[NUM_CLASSES];")
-            sketch.append(f"        int predicted = tflite_predict_window(sensor_buffer, probabilities);")
+            sketch.append(
+                f"        // CNN TFLite: pass raw window directly, no feature extraction needed")
+            sketch.append(f"        float confidence = 0.0f;")
+            sketch.append(
+                f"        int predicted = har_predict_from_window(sensor_buffer, &confidence);")
         else:
-            sketch.append(f"        // Extract features from raw sensor window")
+            sketch.append(
+                f"        // Extract features from raw sensor window")
             sketch.append(f"        float features[NUM_FEATURES];")
-            sketch.append(f"        extract_features(sensor_buffer, WINDOW_SIZE, features);")
+            sketch.append(
+                f"        extract_features(sensor_buffer, WINDOW_SIZE, features);")
             sketch.append(f"")
-            sketch.append(f"        // Run inference — har_predict() applies StandardScaler internally")
-            sketch.append(f"        float probabilities[NUM_CLASSES];")
-            sketch.append(f"        int predicted = tflite_predict(features, probabilities);")
+            sketch.append(
+                f"        // Run inference — har_predict() applies StandardScaler internally")
+            sketch.append(f"        float confidence = 0.0f;")
+            sketch.append(
+                f"        int predicted = har_predict(features, &confidence);")
 
         sketch.append(f"")
-        sketch.append(f"        // Debug: print raw probabilities for each class")
-        sketch.append(f"        Serial.print(\"# PRED: class=\"); Serial.print(predicted);")
-        sketch.append(f"        Serial.print(\" probs=[\");")
-        sketch.append(f"        for (int i = 0; i < NUM_CLASSES; i++) {{")
-        sketch.append(f"            if (i > 0) Serial.print(\",\");")
-        sketch.append(f"            Serial.print(probabilities[i], 4);")
-        sketch.append(f"        }}")
-        sketch.append(f"        Serial.print(\"] name=\");")
-        sketch.append(f"        Serial.println(predicted >= 0 ? get_activity_name(predicted) : \"none\");")
-        sketch.append(f"")
-        sketch.append(f"        // Find max probability for confidence")
-        sketch.append(f"        float confidence = 0.0f;")
-        sketch.append(f"        for (int i = 0; i < NUM_CLASSES; i++) {{")
-        sketch.append(f"            if (probabilities[i] > confidence) confidence = probabilities[i];")
-        sketch.append(f"        }}")
+        sketch.append(
+            f"        // Debug: log prediction details (lines starting with # are ignored by parser)")
+        sketch.append(
+            f"        Serial.print(\"# PRED: class=\"); Serial.print(predicted);")
+        sketch.append(
+            f"        Serial.print(\" conf=\"); Serial.print(confidence, 4);")
+        sketch.append(f"        Serial.print(\" name=\");")
+        sketch.append(
+            f"        Serial.println(predicted >= 0 ? get_activity_name(predicted) : \"none\");")
         sketch.append(f"")
         sketch.append(f"        // Update persistent prediction")
-        sketch.append(f"        if (predicted >= 0 && confidence >= CONFIDENCE_THRESHOLD) {{")
-        sketch.append(f"            last_activity = get_activity_name(predicted);")
+        sketch.append(
+            f"        if (predicted >= 0 && confidence >= CONFIDENCE_THRESHOLD) {{")
+        sketch.append(
+            f"            last_activity = get_activity_name(predicted);")
         sketch.append(f"        }} else {{")
         sketch.append(f"            last_activity = \"unknown\";")
         sketch.append(f"        }}")
@@ -708,16 +818,19 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
 
         # Sliding window shift
         sketch.append(f"        // Slide window")
-        sketch.append(f"        int keep = WINDOW_SIZE - (int)buffer_index_shift;")
+        sketch.append(
+            f"        int keep = WINDOW_SIZE - (int)buffer_index_shift;")
         sketch.append(f"        for (int i = 0; i < keep; i++)")
         sketch.append(f"            for (int j = 0; j < N_CHANNELS; j++)")
-        sketch.append(f"                sensor_buffer[i][j] = sensor_buffer[i + (int)buffer_index_shift][j];")
+        sketch.append(
+            f"                sensor_buffer[i][j] = sensor_buffer[i + (int)buffer_index_shift][j];")
         sketch.append(f"        sample_count = keep;")
         sketch.append(f"    }}")
         sketch.append(f"")
 
         # Always output sensor CSV (for Device Test tab compatibility)
-        sketch.append(f"    // Sensor CSV output (for Device Test tab live plotting)")
+        sketch.append(
+            f"    // Sensor CSV output (for Device Test tab live plotting)")
         sketch.append(f"    Serial.print(aX, 4); Serial.print(\",\");")
         sketch.append(f"    Serial.print(aY, 4); Serial.print(\",\");")
         sketch.append(f"    Serial.print(aZ, 4); Serial.print(\",\");")
@@ -739,17 +852,22 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append(f"// ========================================")
         lines.append(f"// TFLite Model Placeholder")
         lines.append(f"// ========================================")
-        lines.append(f"// TensorFlow is required to convert the model to TFLite format.")
+        lines.append(
+            f"// TensorFlow is required to convert the model to TFLite format.")
         lines.append(f"// Install with: pip install tensorflow")
         lines.append(f"// Error: {error_msg}")
         lines.append(f"//")
-        lines.append(f"// After installing TensorFlow, regenerate the code to get")
+        lines.append(
+            f"// After installing TensorFlow, regenerate the code to get")
         lines.append(f"// the actual model byte array embedded here.")
         lines.append(f"// ========================================")
         lines.append(f"")
-        lines.append(f"// Placeholder model array — replace with actual conversion output")
-        lines.append(f"alignas(16) const unsigned char g_har_model[] = {{0x00}};")
+        lines.append(
+            f"// Placeholder model array — replace with actual conversion output")
+        lines.append(
+            f"alignas(16) const unsigned char g_har_model[] = {{0x00}};")
         lines.append(f"const unsigned int g_har_model_len = 0;")
         lines.append(f"")
-        lines.append(f"#warning \"TFLite model not converted — install tensorflow and regenerate\"")
+        lines.append(
+            f"#warning \"TFLite model not converted — install tensorflow and regenerate\"")
         return '\n'.join(lines)

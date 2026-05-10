@@ -3,6 +3,12 @@ Training Module Callbacks for Human Activity Recognition Framework
 Handles model training, evaluation, and deployment workflows
 """
 
+from deployment import generate_deployment_code, analyze_resource_requirements, generate_and_save_deployment_code
+from utils.model_training import EdgeMLModel, prepare_training_data, create_feature_vector
+from config.config import (
+    PERSISTENT_DIR, METADATA_FILE, MODELS_DIR,
+    get_model_path, get_models_metadata_path, get_training_data_path
+)
 import os
 import json
 import glob
@@ -26,25 +32,25 @@ import tempfile
 
 logger = logging.getLogger(__name__)
 
-from config.config import (
-    PERSISTENT_DIR, METADATA_FILE, MODELS_DIR,
-    get_model_path, get_models_metadata_path, get_training_data_path
-)
-from utils.model_training import EdgeMLModel, prepare_training_data, create_feature_vector
-from deployment import generate_deployment_code, analyze_resource_requirements, generate_and_save_deployment_code
 
+def _get_fe_train_files(training_dir, dataset_name=None):
+    """Return train files for a Feature Engineering run.
 
-def _get_fe_train_files(training_dir):
-    """Return train files for the most recent Feature Engineering run.
-
-    When FE metadata files exist in training_dir, select only the newest
-    ``*_fe_metadata.json`` dataset. This avoids mixing stale datasets from
-    previous FE runs (which can inflate class count in training/results).
+    Args:
+        training_dir: Path to the training directory.
+        dataset_name: If provided, load this specific FE dataset.
+            Otherwise, select the most recent ``*_fe_metadata.json`` dataset.
     """
+    if dataset_name:
+        candidate = os.path.join(training_dir, f'{dataset_name}_train.csv')
+        if os.path.exists(candidate):
+            return [candidate]
+
     fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
     if fe_meta_files:
         # Prefer the newest FE run, fallback to older FE runs if needed
-        fe_meta_files = sorted(fe_meta_files, key=os.path.getmtime, reverse=True)
+        fe_meta_files = sorted(
+            fe_meta_files, key=os.path.getmtime, reverse=True)
         for meta_file in fe_meta_files:
             name = os.path.basename(meta_file).replace('_fe_metadata.json', '')
             candidate = os.path.join(training_dir, f'{name}_train.csv')
@@ -53,6 +59,45 @@ def _get_fe_train_files(training_dir):
 
     # Fallback: no FE metadata → load all (backward compat)
     return glob.glob(os.path.join(training_dir, '*_train.csv'))
+
+
+def _list_fe_datasets(training_dir):
+    """List all available FE datasets with metadata.
+
+    Returns list of dicts with 'name', 'label', 'metadata' keys.
+    """
+    datasets = []
+    fe_meta_files = glob.glob(os.path.join(training_dir, '*_fe_metadata.json'))
+    FE_METHOD_LABELS = {
+        'orientation_invariant_time_only': 'OI Time-Only',
+        'orientation_invariant': 'OI + DFT',
+        'time_domain': 'Per-Axis Time',
+        'all': 'Per-Axis All',
+        'frequency_domain': 'Frequency Only',
+        'raw': 'Raw',
+    }
+    for meta_file in sorted(fe_meta_files, key=os.path.getmtime, reverse=True):
+        name = os.path.basename(meta_file).replace('_fe_metadata.json', '')
+        train_csv = os.path.join(training_dir, f'{name}_train.csv')
+        if not os.path.exists(train_csv):
+            continue
+        try:
+            with open(meta_file, 'r') as f:
+                meta = json.load(f)
+            method = meta.get('feature_method', '?')
+            n_feat = meta.get('num_features', '?')
+            labels = meta.get('selected_labels', [])
+            method_label = FE_METHOD_LABELS.get(method, method)
+            label_str = ', '.join(sorted(labels))
+            display = f"{method_label} ({n_feat}f) — {label_str}"
+            datasets.append({
+                'name': name,
+                'label': display,
+                'metadata': meta,
+            })
+        except Exception:
+            datasets.append({'name': name, 'label': name, 'metadata': {}})
+    return datasets
 
 
 def clean_label(x):
@@ -137,11 +182,12 @@ def load_trained_model_options(base_dir=None):
     return model_options
 
 
-def load_training_data_summary(base_dir=None):
+def load_training_data_summary(base_dir=None, dataset_name=None):
     """Load and display summary of available training data.
 
     Args:
         base_dir: Base persistent-data directory. Defaults to PERSISTENT_DIR.
+        dataset_name: If provided, load this specific FE dataset.
 
     Returns:
         dash.html.Div: A Dash HTML component showing dataset overview and
@@ -161,7 +207,8 @@ def load_training_data_summary(base_dir=None):
             ])
 
         # Find available datasets (prefer FE-produced files over stale splits)
-        train_files = _get_fe_train_files(training_dir)
+        train_files = _get_fe_train_files(
+            training_dir, dataset_name=dataset_name)
         if not train_files:
             return html.Div([
                 html.P("⚠️ No training data found. Please complete Feature Engineering first.",
@@ -173,15 +220,27 @@ def load_training_data_summary(base_dir=None):
         # Load FE metadata for feature method display
         fe_method_label = None
         fe_meta_info = {}
-        fe_meta_files = sorted(
-            glob.glob(os.path.join(training_dir, '*_fe_metadata.json')),
-            key=os.path.getmtime, reverse=True)
-        if fe_meta_files:
-            try:
-                with open(fe_meta_files[0], 'r') as f:
-                    fe_meta_info = json.load(f)
-            except Exception:
-                pass
+        if dataset_name:
+            # Load metadata for the selected dataset
+            specific_meta = os.path.join(
+                training_dir, f'{dataset_name}_fe_metadata.json')
+            if os.path.exists(specific_meta):
+                try:
+                    with open(specific_meta, 'r') as f:
+                        fe_meta_info = json.load(f)
+                except Exception:
+                    pass
+        if not fe_meta_info:
+            # Fallback: newest metadata
+            fe_meta_files = sorted(
+                glob.glob(os.path.join(training_dir, '*_fe_metadata.json')),
+                key=os.path.getmtime, reverse=True)
+            if fe_meta_files:
+                try:
+                    with open(fe_meta_files[0], 'r') as f:
+                        fe_meta_info = json.load(f)
+                except Exception:
+                    pass
 
         FE_METHOD_LABELS = {
             'orientation_invariant_time_only': '🧭 Orientation-Invariant Time-Domain (33 features)',
@@ -329,9 +388,12 @@ def load_training_data_summary(base_dir=None):
                 ] + ([
                     html.Span("  •  ", style={'color': '#ccc'}),
                     html.Strong("Preprocessing: "),
-                    html.Span("Kalman ✓" if fe_meta_info.get('preprocessing', {}).get('kalman_filter') else ""),
-                    html.Span(" LPF ✓" if fe_meta_info.get('preprocessing', {}).get('low_pass_filter') else ""),
-                    html.Span(" Savgol ✓" if fe_meta_info.get('preprocessing', {}).get('savgol_filter') else ""),
+                    html.Span("Kalman ✓" if fe_meta_info.get(
+                        'preprocessing', {}).get('kalman_filter') else ""),
+                    html.Span(" LPF ✓" if fe_meta_info.get(
+                        'preprocessing', {}).get('low_pass_filter') else ""),
+                    html.Span(" Savgol ✓" if fe_meta_info.get(
+                        'preprocessing', {}).get('savgol_filter') else ""),
                 ] if fe_meta_info.get('preprocessing') else []),
                     style={'margin': '0', 'text-align': 'center', 'color': '#495057', 'font-size': '13px'})
             ] if fe_meta_info else [
@@ -359,7 +421,6 @@ def load_training_data_summary(base_dir=None):
         )
 
 
-
 def register_callbacks(app):
     """Register all callbacks with the app."""
     @app.callback(
@@ -368,7 +429,8 @@ def register_callbacks(app):
          Output('optimize-hyperparams-btn', 'disabled'),
          Output('cross-validate-btn', 'disabled'),
          Output('trained-model-selector', 'options'),
-         Output('training-data-summary', 'children')],
+         Output('fe-dataset-selector', 'options'),
+         Output('fe-dataset-selector', 'value')],
         Input('tabs', 'value'),
         State('working-directory-store', 'data')
     )
@@ -381,12 +443,30 @@ def register_callbacks(app):
         # Load available trained models using helper function
         model_options = load_trained_model_options(base_dir)
 
-        # Load training data summary
-        data_summary = load_training_data_summary(base_dir)
+        # List FE datasets
+        training_dir = os.path.join(base_dir, 'training')
+        fe_datasets = _list_fe_datasets(
+            training_dir) if os.path.exists(training_dir) else []
+        fe_options = [{'label': d['label'], 'value': d['name']}
+                      for d in fe_datasets]
+        # Default to first (newest) dataset
+        fe_default = fe_options[0]['value'] if fe_options else None
 
         if tab == 'tab-4':  # Model Training tab
-            return False, False, False, False, model_options, data_summary
-        return True, True, True, True, model_options, data_summary
+            return False, False, False, False, model_options, fe_options, fe_default
+        return True, True, True, True, model_options, fe_options, fe_default
+
+    @app.callback(
+        Output('training-data-summary', 'children'),
+        Input('fe-dataset-selector', 'value'),
+        State('working-directory-store', 'data'),
+        prevent_initial_call=True
+    )
+    def update_training_summary_from_fe_selector(dataset_name, base_dir):
+        """Update the training data summary when a FE dataset is selected."""
+        if not base_dir:
+            base_dir = PERSISTENT_DIR
+        return load_training_data_summary(base_dir, dataset_name=dataset_name)
 
     def create_training_results_display(model_info, evaluation_results, y_test, model_type, training_time):
         """Create comprehensive training results display with detailed metrics."""
@@ -754,7 +834,8 @@ def register_callbacks(app):
                     ], style={'margin': '10px 0'}),
                     *(
                         [html.Div([
-                            html.Strong("⚠️ High rejection rate: ", style={'color': '#dc3545'}),
+                            html.Strong("⚠️ High rejection rate: ",
+                                        style={'color': '#dc3545'}),
                             html.Span(
                                 f"{d['n_rejected']}/{d['n_total']} test samples would be rejected on device. "
                                 "Model lacks confidence — consider more training data or simpler model."
@@ -826,10 +907,11 @@ def register_callbacks(app):
          Input('optimize-hyperparams-btn', 'n_clicks'),
          Input('cross-validate-btn', 'n_clicks')],
         [State('model-type-selector', 'value'),
-         State('working-directory-store', 'data')],
+         State('working-directory-store', 'data'),
+         State('fe-dataset-selector', 'value')],
         prevent_initial_call=True
     )
-    def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type, base_dir):
+    def handle_training_actions(train_clicks, optimize_clicks, cv_clicks, model_type, base_dir, fe_dataset_name):
         """Handle different training actions based on which button was clicked.
 
         Note: Features are pre-computed in Feature Engineering tab.
@@ -874,7 +956,8 @@ def register_callbacks(app):
                 ]), no_update)
 
             # Find available datasets (prefer FE-produced files over stale splits)
-            train_files = _get_fe_train_files(training_dir)
+            train_files = _get_fe_train_files(
+                training_dir, dataset_name=fe_dataset_name)
             if not train_files:
                 return (html.Div([
                     html.H4("❌ No training data found.",
@@ -902,8 +985,10 @@ def register_callbacks(app):
                 f"DEBUG: Total unique features across all files: {len(all_feature_cols)}")
 
             # Auto-detect feature configuration from actual column names
-            has_acc_mag = any(col.startswith('acc_mag_') for col in all_feature_cols)
-            has_gyro_mag = any(col.startswith('gyro_mag_') for col in all_feature_cols)
+            has_acc_mag = any(col.startswith('acc_mag_')
+                              for col in all_feature_cols)
+            has_gyro_mag = any(col.startswith('gyro_mag_')
+                               for col in all_feature_cols)
             has_per_axis = any(col.startswith(('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_'))
                                for col in all_feature_cols)
             has_frequency = any('dominant_frequency' in col or 'spectral_energy' in col
@@ -930,8 +1015,8 @@ def register_callbacks(app):
                     with open(fe_meta_file, 'r') as f:
                         fe_config = json.load(f)
                     logger.debug(f"Loaded FE metadata: window={fe_config.get('window_size_ms')}ms, "
-                          f"rate={fe_config.get('sampling_rate')}Hz, "
-                          f"method={fe_config.get('feature_method')}")
+                                 f"rate={fe_config.get('sampling_rate')}Hz, "
+                                 f"method={fe_config.get('feature_method')}")
                     # Also override feature_opts from FE metadata if present
                     if 'orientation_robust' in fe_config:
                         feature_opts['orientation_robust'] = fe_config['orientation_robust']
@@ -999,7 +1084,8 @@ def register_callbacks(app):
             test_df = pd.concat(all_test_dfs, ignore_index=True)
 
             # Debug: Check what's in the data
-            logger.debug(f"DEBUG: Combined {len(all_train_dfs)} training files")
+            logger.debug(
+                f"DEBUG: Combined {len(all_train_dfs)} training files")
             logger.debug(f"DEBUG: Train shape: {train_df.shape}")
             print(
                 f"DEBUG: Unique labels in train: {train_df['label'].unique()}")
@@ -1086,11 +1172,14 @@ def register_callbacks(app):
                             os.path.join(training_dir, f'{n}_raw_train.npy'))
                     ]
                 else:
-                    raw_train_files = glob.glob(os.path.join(training_dir, '*_raw_train.npy'))
+                    raw_train_files = glob.glob(
+                        os.path.join(training_dir, '*_raw_train.npy'))
                 if not raw_train_files:
                     return (html.Div([
-                        html.H4("❌ No raw window data found for CNN", style={'color': 'red'}),
-                        html.P("Please re-run Feature Engineering to generate raw window data."),
+                        html.H4("❌ No raw window data found for CNN",
+                                style={'color': 'red'}),
+                        html.P(
+                            "Please re-run Feature Engineering to generate raw window data."),
                     ]), no_update)
                 # Load and concatenate if multiple datasets
                 rw_trains, rw_tests, rw_vals = [], [], []
@@ -1098,23 +1187,29 @@ def register_callbacks(app):
                 for rf in raw_train_files:
                     prefix = rf.replace('_raw_train.npy', '')
                     rw_trains.append(np.load(rf))
-                    rl_trains.append(np.load(prefix + '_raw_train_labels.npy', allow_pickle=True))
+                    rl_trains.append(
+                        np.load(prefix + '_raw_train_labels.npy', allow_pickle=True))
                     test_f = prefix + '_raw_test.npy'
                     if os.path.exists(test_f):
                         rw_tests.append(np.load(test_f))
-                        rl_tests.append(np.load(prefix + '_raw_test_labels.npy', allow_pickle=True))
+                        rl_tests.append(
+                            np.load(prefix + '_raw_test_labels.npy', allow_pickle=True))
                     val_f = prefix + '_raw_val.npy'
                     if os.path.exists(val_f):
                         rw_vals.append(np.load(val_f))
-                        rl_vals.append(np.load(prefix + '_raw_val_labels.npy', allow_pickle=True))
+                        rl_vals.append(
+                            np.load(prefix + '_raw_val_labels.npy', allow_pickle=True))
 
                 X_train = np.concatenate(rw_trains, axis=0)
                 y_train = np.concatenate(rl_trains, axis=0)
-                X_test = np.concatenate(rw_tests, axis=0) if rw_tests else X_train[:1]
-                y_test = np.concatenate(rl_tests, axis=0) if rl_tests else y_train[:1]
+                X_test = np.concatenate(
+                    rw_tests, axis=0) if rw_tests else X_train[:1]
+                y_test = np.concatenate(
+                    rl_tests, axis=0) if rl_tests else y_train[:1]
                 X_val = np.concatenate(rw_vals, axis=0) if rw_vals else None
                 y_val = np.concatenate(rl_vals, axis=0) if rw_vals else None
-                print(f"CNN raw windows: train={X_train.shape}, test={X_test.shape}")
+                print(
+                    f"CNN raw windows: train={X_train.shape}, test={X_test.shape}")
 
             if button_id == 'start-training-btn':
                 return perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val, y_val, base_dir, feature_opts, fe_config)
@@ -1839,8 +1934,10 @@ def register_callbacks(app):
                         models_metadata = json.load(f)
                         model_info = models_metadata.get(model_filename, {})
 
-                logger.debug(f"DEBUG: Creating evaluation for {model_filename}")
-                logger.debug(f"DEBUG: model_info keys: {list(model_info.keys())}")
+                logger.debug(
+                    f"DEBUG: Creating evaluation for {model_filename}")
+                logger.debug(
+                    f"DEBUG: model_info keys: {list(model_info.keys())}")
                 print(
                     f"DEBUG: Has performance_metrics: {'performance_metrics' in model_info}")
 
@@ -2044,7 +2141,8 @@ def register_callbacks(app):
             f"DEBUG: model_info keys: {list(model_info.keys()) if model_info else 'None'}")
 
         if not model_info or 'performance_metrics' not in model_info:
-            logger.debug("DEBUG: No performance_metrics found, returning info message")
+            logger.debug(
+                "DEBUG: No performance_metrics found, returning info message")
             return html.Div([
                 html.H4("ℹ️ No detailed evaluation data available", style={
                     'color': '#6c757d', 'text-align': 'center', 'padding': '20px'
@@ -2381,7 +2479,8 @@ def register_callbacks(app):
                 if os.path.exists(full_path):
                     import shutil
                     shutil.rmtree(full_path)
-                    logger.debug(f"DEBUG: Removed generated code folder: {full_path}")
+                    logger.debug(
+                        f"DEBUG: Removed generated code folder: {full_path}")
             except Exception as e:
                 logger.debug(f"DEBUG: Error removing generated code: {e}")
 
@@ -2535,7 +2634,8 @@ def register_callbacks(app):
             # Get feature names - try from model first, then from training metadata
             feature_names = model.feature_names
             if not feature_names:
-                logger.debug("DEBUG: Feature names not in model, checking training metadata...")
+                logger.debug(
+                    "DEBUG: Feature names not in model, checking training metadata...")
                 # Try to get from any training metadata file
                 training_dir = os.path.join(PERSISTENT_DIR, 'training')
                 metadata_files = glob.glob(
@@ -2549,7 +2649,8 @@ def register_callbacks(app):
                             f"DEBUG: Found {len(feature_names)} feature names from training metadata")
 
             if not feature_names:
-                logger.debug("DEBUG: Still no feature names, loading from training file...")
+                logger.debug(
+                    "DEBUG: Still no feature names, loading from training file...")
                 # Last resort: load from FE-matched training CSV file
                 train_files = _get_fe_train_files(training_dir)
                 if train_files:
@@ -2588,7 +2689,8 @@ def register_callbacks(app):
     def generate_deployment_code_display(model_data, platform, optimization, model_filename):
         """Generate and display deployment code."""
         logger.debug(f"DEBUG: Starting code generation for {model_filename}")
-        logger.debug(f"DEBUG: Platform: {platform}, Optimization: {optimization}")
+        logger.debug(
+            f"DEBUG: Platform: {platform}, Optimization: {optimization}")
         logger.debug(f"DEBUG: Model data keys: {list(model_data.keys())}")
 
         try:
@@ -2663,7 +2765,8 @@ def register_callbacks(app):
                 ])
             ])
 
-            logger.debug("DEBUG: Created deployment summary with organized folder structure")
+            logger.debug(
+                "DEBUG: Created deployment summary with organized folder structure")
             return deployment_summary
 
         except Exception as e:
