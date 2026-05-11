@@ -57,6 +57,47 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         # Set to True when enumerate_ops() hits an unknown op
         self._use_all_ops_resolver = False
 
+    def _is_esp32_platform(self) -> bool:
+        """Check if target platform is ESP32-based (limited DRAM)."""
+        return self.platform in ('esp32', 'm5stack', 'esp_idf')
+
+    def _generate_arena_declaration(self) -> str:
+        """Generate tensor arena declaration, platform-aware.
+
+        ESP32/M5Stack: heap-allocate the arena (preferring PSRAM when
+        available) to avoid exhausting the ~320 KB DRAM with a large BSS
+        array.  Other platforms: simple static array.
+        """
+        if self._is_esp32_platform():
+            return (
+                "// Tensor arena — heap-allocated to avoid DRAM overflow on ESP32.\n"
+                "// Prefers PSRAM (ps_malloc) when available; falls back to regular malloc.\n"
+                "static uint8_t* tensor_arena = nullptr;\n"
+                "\n"
+                "static bool allocate_arena() {\n"
+                "    if (tensor_arena != nullptr) return true;\n"
+                "#if defined(BOARD_HAS_PSRAM) || defined(ESP_PSRAM_FOUND)\n"
+                "    tensor_arena = (uint8_t*)ps_malloc(TENSOR_ARENA_SIZE);\n"
+                "    if (tensor_arena) { HAR_LOG(\"Arena: PSRAM (%d bytes)\", TENSOR_ARENA_SIZE); return true; }\n"
+                "#endif\n"
+                "    tensor_arena = (uint8_t*)malloc(TENSOR_ARENA_SIZE);\n"
+                "    if (tensor_arena) { HAR_LOG(\"Arena: heap (%d bytes)\", TENSOR_ARENA_SIZE); return true; }\n"
+                "    HAR_LOG(\"ERROR: arena allocation failed (%d bytes)\", TENSOR_ARENA_SIZE);\n"
+                "    return false;\n"
+                "}\n"
+            )
+        return f"static uint8_t tensor_arena[TENSOR_ARENA_SIZE];\n"
+
+    def _generate_arena_init_check(self) -> list:
+        """Generate arena allocation call at the start of tflite_init() for ESP32."""
+        if self._is_esp32_platform():
+            return [
+                "    // Allocate tensor arena from heap / PSRAM",
+                "    if (!allocate_arena()) return false;",
+                "",
+            ]
+        return []
+
     def _load_representative_data(self):
         """Load real training data for INT8 quantization calibration.
 
@@ -153,12 +194,28 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
                 "Make sure 'model_object' is present in model_data."
             )
 
+        # Enrich model_params with the correct window_size_samples computed
+        # by the base generator from fe_config.  The converter needs this to
+        # build the Keras model with the right input shape — a mismatch causes
+        # a RESHAPE error during TFLite conversion/quantization calibration.
+        converter_params = dict(self.model_data.get('model_params', {}))
+        converter_params['window_size_samples'] = self.window_size
+        converter_params['n_channels'] = 6  # default, may be overridden below
+
+        # Propagate n_channels from fe_config or model_info
+        model_info = self.model_data.get('model_info', {})
+        fe_config = model_info.get('fe_config', {})
+        n_ch = (fe_config.get('num_channels')
+                or len(fe_config.get('sensor_columns', []))
+                or converter_params.get('n_channels', 6))
+        converter_params['n_channels'] = n_ch
+
         converter = TFLiteConverter(
             model_object=model_object,
             model_type=self.model_type,
             feature_names=self.feature_names,
             classes=self.classes,
-            model_params=self.model_data.get('model_params', {})
+            model_params=converter_params
         )
 
         # Load real representative data for INT8 quantization calibration.
@@ -172,8 +229,8 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
             representative_data=representative_data
         )
 
-        # Generate C array
-        self._tflite_c_array = converter.to_c_array('g_har_model')
+        # Generate C array (platform-aware: uses PROGMEM on ESP32 to keep DRAM free)
+        self._tflite_c_array = converter.to_c_array('g_har_model', platform=self.platform)
 
         # Enumerate actual ops used in the model for resolver generation
         self._tflite_ops = converter.enumerate_ops()
@@ -249,13 +306,19 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         return super().generate_implementation(header_filename)
 
     def _get_impl_includes(self) -> str:
-        """Add TFLite resolver include at the top level of the .cpp file."""
+        """Add TFLite Micro includes at the top level of the .cpp file."""
         base_includes = super()._get_impl_includes()
         if self._use_all_ops_resolver:
             resolver_include = '#include "tensorflow/lite/micro/all_ops_resolver.h"'
         else:
             resolver_include = '#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"'
-        return f"{base_includes}\n#include <TensorFlowLite.h>\n{resolver_include}"
+        tflite_includes = (
+            '#include <TensorFlowLite.h>\n'
+            '#include "tensorflow/lite/micro/micro_interpreter.h"\n'
+            '#include "tensorflow/lite/schema/schema_generated.h"\n'
+            f'{resolver_include}'
+        )
+        return f"{base_includes}\n{tflite_includes}"
 
     def _generate_cnn_tflite_implementation(self, header_filename=None) -> str:
         """CNN TFLite implementation: TFLite byte array + raw-window inference only.
@@ -273,7 +336,7 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
             f' */',
             f'',
             f'#include "{header_include}"',
-            f'#include <math.h>',
+            self._get_impl_includes(),
             f'',
             f'// Activity class names',
             f'const char* activity_names[NUM_CLASSES] = {{',
@@ -364,20 +427,15 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append(
             "// Feature extraction is handled by extract_features() from the base implementation")
         lines.append("")
-        lines.append("#include <TensorFlowLite.h>")
-        lines.append(
-            "#include \"tensorflow/lite/micro/micro_mutable_op_resolver.h\"")
-        lines.append("#include \"tensorflow/lite/micro/micro_interpreter.h\"")
-        lines.append("#include \"tensorflow/lite/schema/schema_generated.h\"")
-        lines.append("")
-        lines.append("// TFLite Micro globals")
+        lines.append("// TFLite Micro globals (headers included at the top of this file)")
         lines.append("static const tflite::Model* model = nullptr;")
         lines.append("static tflite::MicroInterpreter* interpreter = nullptr;")
         lines.append("static TfLiteTensor* input_tensor = nullptr;")
         lines.append("static TfLiteTensor* output_tensor = nullptr;")
-        lines.append(f"static uint8_t tensor_arena[TENSOR_ARENA_SIZE];")
+        lines.append(self._generate_arena_declaration())
         lines.append("")
         lines.append("bool tflite_init() {")
+        lines.extend(self._generate_arena_init_check())
         lines.append("    // Load model")
         lines.append("    model = tflite::GetModel(g_har_model);")
         lines.append("    if (model->version() != TFLITE_SCHEMA_VERSION) {")
@@ -498,20 +556,15 @@ class TFLiteMicroCodeGenerator(BaseCodeGenerator):
         lines.append(
             "// CNN operates directly on raw IMU windows — no feature extraction needed.")
         lines.append("")
-        lines.append("#include <TensorFlowLite.h>")
-        lines.append(
-            "#include \"tensorflow/lite/micro/micro_mutable_op_resolver.h\"")
-        lines.append("#include \"tensorflow/lite/micro/micro_interpreter.h\"")
-        lines.append("#include \"tensorflow/lite/schema/schema_generated.h\"")
-        lines.append("")
-        lines.append("// TFLite Micro globals")
+        lines.append("// TFLite Micro globals (headers included at the top of this file)")
         lines.append("static const tflite::Model* model = nullptr;")
         lines.append("static tflite::MicroInterpreter* interpreter = nullptr;")
         lines.append("static TfLiteTensor* input_tensor = nullptr;")
         lines.append("static TfLiteTensor* output_tensor = nullptr;")
-        lines.append(f"static uint8_t tensor_arena[TENSOR_ARENA_SIZE];")
+        lines.append(self._generate_arena_declaration())
         lines.append("")
         lines.append("bool tflite_init() {")
+        lines.extend(self._generate_arena_init_check())
         lines.append("    model = tflite::GetModel(g_har_model);")
         lines.append("    if (model->version() != TFLITE_SCHEMA_VERSION) {")
         lines.append("        HAR_LOG(\"Model schema version mismatch!\");")

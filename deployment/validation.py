@@ -896,7 +896,7 @@ def validate_before_deployment(model_data: Dict[str, Any],
     header_code = ""
     source_code = ""
     for fname, content in generated_files.items():
-        if fname.endswith('.h'):
+        if fname.endswith('.h') and fname != 'build_opt.h':
             header_code = content
         elif fname.endswith('.cpp') or fname.endswith('.c'):
             source_code = content

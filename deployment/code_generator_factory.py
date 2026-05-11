@@ -822,6 +822,14 @@ def _generate_tflite_files(generator, model_type: str, platform: str,
         sketch_filename: generator.generate_example_sketch(header_filename),
     }
 
+    # Arduino IDE build options: work around Arduino_TensorFlowLite
+    # stl_emulation.h const-member assignment bug with newer GCC versions.
+    # build_opt.h is automatically picked up by Arduino IDE 1.8.13+.
+    if platform in ('arduino', 'seeed_xiao', 'esp32', 'm5stack', 'teensy'):
+        # build_opt.h: each line is passed verbatim as a compiler flag.
+        # NO comments allowed — they would be treated as file paths.
+        files['build_opt.h'] = '-fpermissive\n'
+
     # Also save the raw .tflite model file if available
     if hasattr(generator, '_tflite_bytes') and generator._tflite_bytes:
         files[f"{base_name}.tflite"] = generator._tflite_bytes

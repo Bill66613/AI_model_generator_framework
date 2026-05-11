@@ -132,13 +132,16 @@ class CNNCodeGenerator(BaseCodeGenerator):
 #define CNN_BUF_SIZE   {buf_info['max_buf']}
 
 // Confidence threshold — prediction returns -1 when below this
-#define CONFIDENCE_THRESHOLD 0.6f
+#define CONFIDENCE_THRESHOLD {self.confidence_threshold:.2f}f
+
+{self._get_logging_macros()}
 
 // Public API
 void har_init(void);
 int  har_predict_from_window(float window[WINDOW_SIZE][N_CHANNELS], float* confidence);
 const char* get_activity_name(int class_id);
-
+{self._generate_iir_filter_declarations()}
+{self._generate_kalman_filter_declarations()}
 #endif /* HAR_CNN_MODEL_H */
 """
         return header
@@ -164,8 +167,8 @@ const char* get_activity_name(int class_id);
 const char* activity_names[NUM_CLASSES] = {{
     {', '.join(f'"{c}"' for c in self.classes)}
 }};
-
-{self._generate_weight_arrays()}
+{self._generate_iir_filter_implementation()}
+{self._generate_kalman_filter_implementation()}{self._generate_weight_arrays()}
 
 // ==================================================================
 // Generic layer functions
@@ -242,7 +245,7 @@ const char* get_activity_name(int class_id) {{
 {platform_code['defines']}
 
 // Circular buffer for sensor window
-static float sensor_window[WINDOW_SIZE][N_CHANNELS];
+{self._generate_sensor_window_declaration()}
 static int   sample_idx = 0;
 static bool  window_ready = false;
 unsigned long last_reading = 0;
@@ -253,7 +256,7 @@ void setup() {{
     while (!Serial)
         delay(10);
 
-    har_init();
+{self._generate_setup_allocations()}    har_init();
 
 {platform_code['imu_init']}
 
@@ -268,6 +271,24 @@ void loop() {{
         last_reading = current_time;
 
 {platform_code['sensor_read']}
+
+        // On-device signal filtering (applied per sample before buffering)
+        #ifdef IIR_FILTER_ENABLED
+        {{
+            float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};
+            iir_filter_sample(raw_sample);
+            aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];
+            gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];
+        }}
+        #endif
+        #ifdef KALMAN_FILTER_ENABLED
+        {{
+            float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};
+            kalman_filter_sample(raw_sample);
+            aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];
+            gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];
+        }}
+        #endif
 
         // Store into circular window
         sensor_window[sample_idx][0] = aX;
@@ -657,6 +678,46 @@ static void dense(const float *input, float *output,
                 max_buf = buf
         return {'max_buf': max_buf}
 
+    def _is_esp32_platform(self) -> bool:
+        """Check if target platform is ESP32-based (limited DRAM)."""
+        return self.platform in ('esp32', 'm5stack', 'esp_idf')
+
+    def _generate_sensor_window_declaration(self) -> str:
+        """Generate sensor window buffer declaration.
+
+        On ESP32 platforms, returns a pointer + allocation helper to avoid
+        DRAM BSS overflow. The sensor_window is allocated once in setup().
+        """
+        if self._is_esp32_platform():
+            return (
+                "// Heap-allocated sensor window (avoids DRAM BSS overflow on ESP32)\n"
+                "static float (*sensor_window)[N_CHANNELS] = nullptr;\n"
+                "\n"
+                "static bool allocate_sensor_window() {\n"
+                "    if (sensor_window != nullptr) return true;\n"
+                "    size_t bytes = WINDOW_SIZE * N_CHANNELS * sizeof(float);\n"
+                "#if defined(BOARD_HAS_PSRAM) || defined(ESP_PSRAM_FOUND)\n"
+                "    sensor_window = (float(*)[N_CHANNELS])ps_malloc(bytes);\n"
+                "    if (sensor_window) return true;\n"
+                "#endif\n"
+                "    sensor_window = (float(*)[N_CHANNELS])malloc(bytes);\n"
+                "    return sensor_window != nullptr;\n"
+                "}"
+            )
+        return "static float sensor_window[WINDOW_SIZE][N_CHANNELS];"
+
+    def _generate_setup_allocations(self) -> str:
+        """Generate heap allocation calls for setup() on ESP32 platforms."""
+        if self._is_esp32_platform():
+            return (
+                "    // Allocate sensor window from heap/PSRAM\n"
+                "    if (!allocate_sensor_window()) {\n"
+                "        Serial.println(\"ERROR: sensor window allocation failed!\");\n"
+                "        while (1) delay(1000);\n"
+                "    }\n\n"
+            )
+        return ""
+
     def _generate_forward_pass(self) -> str:
         """Generate the body of har_predict_from_window()."""
         lines: List[str] = []
@@ -664,8 +725,27 @@ static void dense(const float *input, float *output,
         is_quantized = self.quantization in ('int8', 'int16')
 
         # We ping-pong between two large buffers to avoid extra copies.
-        lines.append(f"    static float buf_a[CNN_BUF_SIZE];")
-        lines.append(f"    static float buf_b[CNN_BUF_SIZE];")
+        # On ESP32 platforms, heap-allocate to avoid DRAM BSS overflow.
+        if self._is_esp32_platform():
+            lines.append(f"    // Heap-allocated buffers (avoids DRAM BSS overflow on ESP32)")
+            lines.append(f"    // Prefer PSRAM when available (M5Stack has 8MB PSRAM)")
+            lines.append(f"    static float* buf_a = nullptr;")
+            lines.append(f"    static float* buf_b = nullptr;")
+            lines.append(f"    if (buf_a == nullptr) {{")
+            lines.append(f"#if defined(BOARD_HAS_PSRAM) || defined(ESP_PSRAM_FOUND)")
+            lines.append(f"        buf_a = (float*)ps_malloc(CNN_BUF_SIZE * sizeof(float));")
+            lines.append(f"        buf_b = (float*)ps_malloc(CNN_BUF_SIZE * sizeof(float));")
+            lines.append(f"#endif")
+            lines.append(f"        if (!buf_a) buf_a = (float*)malloc(CNN_BUF_SIZE * sizeof(float));")
+            lines.append(f"        if (!buf_b) buf_b = (float*)malloc(CNN_BUF_SIZE * sizeof(float));")
+            lines.append(f"        if (!buf_a || !buf_b) {{")
+            lines.append(f"            if (confidence) *confidence = 0.0f;")
+            lines.append(f"            return -1;")
+            lines.append(f"        }}")
+            lines.append(f"    }}")
+        else:
+            lines.append(f"    static float buf_a[CNN_BUF_SIZE];")
+            lines.append(f"    static float buf_b[CNN_BUF_SIZE];")
         lines.append(f"")
 
         # Copy input window into buf_a (flatten [WINDOW_SIZE][N_CHANNELS] → [WINDOW_SIZE * N_CHANNELS])

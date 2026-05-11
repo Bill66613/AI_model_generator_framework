@@ -438,13 +438,14 @@ const char* get_activity_name(int class_id) {{
     def _has_device_filter(self) -> bool:
         """Check if on-device IIR filter should be generated.
 
-        Only enabled when the user explicitly opts in AND
-        low-pass filtering was used during training.
+        Enabled when the user explicitly opts in via the deployment UI.
+        If training also used low-pass filtering, coefficients are matched
+        to the training pipeline. Otherwise, sensible defaults are used
+        (Butterworth, 5 Hz cutoff, order 2).
         NOTE: Training uses filtfilt (zero-phase) while on-device uses
         lfilter (causal). This creates a subtle parity gap.
         """
-        return (self.enable_iir_filter
-                and bool(self.preprocessing.get('low_pass_filter')))
+        return self.enable_iir_filter
 
     def _compute_iir_coefficients(self):
         """Compute 2nd-order IIR (Butterworth) coefficients for on-device filtering.
@@ -488,12 +489,17 @@ const char* get_activity_name(int class_id) {{
         b, a = result
         order = len(b) - 1  # filter order
 
+        training_used_lpf = bool(self.preprocessing.get('low_pass_filter'))
         cutoff = self.preprocessing.get('lpf_cutoff_hz', 5)
         prec = self.feature_precision
 
+        parity_comment = ('// Coefficients computed by scipy.signal.butter to match training pipeline'
+                          if training_used_lpf else
+                          '// NOTE: Training did NOT use low-pass filtering. Default coefficients (5Hz, order 2) are used.')
+
         lines = [
             f'// IIR Low-pass filter: Butterworth, cutoff={cutoff}Hz, order={order}, fs={self.sampling_rate}Hz',
-            f'// Coefficients computed by scipy.signal.butter to match training pipeline',
+            parity_comment,
             f'#define IIR_ORDER {order}',
             '',
             f'static const float iir_b[{len(b)}] = {{{", ".join(self._float_literal(v) for v in b)}}};',
