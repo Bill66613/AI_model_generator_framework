@@ -2231,7 +2231,7 @@ const int buffer_index_shift = (int)(WINDOW_SIZE * (1 - OVERLAP));""",
 
         # Validate model_type
         valid_model_types = ['random_forest', 'neural_network', 'svm',
-                             'pytorch_mlp', 'pytorch_cnn', 'arm_cortex_m']
+                             'pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d']
         if model_data['model_type'] not in valid_model_types:
             raise ModelDataError(f"Invalid model_type: '{model_data['model_type']}'. "
                                  f"Valid types: {valid_model_types}")

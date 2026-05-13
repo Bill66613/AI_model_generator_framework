@@ -17,6 +17,10 @@ from .zephyr_generator import ZephyrCodeGenerator
 from .cnn_generator import CNNCodeGenerator
 from .tflite_generator import TFLiteMicroCodeGenerator
 from .onnx_generator import ONNXRuntimeCodeGenerator
+from .v2 import HARCodeGenerator as HARCodeGeneratorV2
+
+# Model types that the v2 clean architecture supports
+_V2_SUPPORTED_MODELS = frozenset(['random_forest', 'neural_network', 'pytorch_mlp', 'svm'])
 
 # Valid deployment approaches
 DEPLOYMENT_APPROACHES = ('direct', 'tflite_micro', 'onnx_runtime')
@@ -732,6 +736,56 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         if 'model_object' in model_data:
             # If we have the actual model object, extract real parameters
             model_data = extract_real_model_parameters(model_data)
+
+        # ----------------------------------------------------------------
+        # v2 clean architecture for supported direct deployments
+        # ----------------------------------------------------------------
+
+        # ONNX Runtime requires a full OS (Linux/Windows) and the ONNX Runtime
+        # shared library.  It cannot be compiled for bare-metal microcontrollers.
+        _MICROCONTROLLER_PLATFORMS = frozenset([
+            'arduino', 'nano_33', 'mkr_imu', 'esp32',
+            'm5stack', 'm5stick', 'm5stickc', 'seeed_xiao', 'teensy', 'arm_cortex_m',
+        ])
+        if deployment_approach == 'onnx_runtime' and platform in _MICROCONTROLLER_PLATFORMS:
+            raise ValueError(
+                f"ONNX Runtime is not supported on microcontroller target '{platform}'. "
+                "ONNX Runtime requires a full OS with the runtime library installed "
+                "(Raspberry Pi, Jetson Nano, Linux/Windows PC). "
+                "Use 'direct' or 'tflite_micro' deployment for microcontrollers."
+            )
+
+        _v2_deployments = {'direct', 'tflite_micro', 'onnx_runtime'}
+        if (deployment_approach in _v2_deployments
+                and platform not in ('micropython', 'zephyr')
+                and model_type in _V2_SUPPORTED_MODELS):
+            # Build sketch/folder name matching create_output_folder_structure()
+            # so the .ino filename equals the folder name (Arduino IDE requirement)
+            num_features = len(model_data.get('feature_names', []))
+            num_classes = len(model_data.get('classes', []))
+            approach_prefix = {'tflite_micro': 'tflite_', 'onnx_runtime': 'onnx_'}.get(
+                deployment_approach, '')
+            base_name = (
+                f"har_{approach_prefix}{model_type}_{platform}"
+                f"_f{num_features}_c{num_classes}_{optimization}"
+            )
+            if quantization and quantization != 'none':
+                base_name += f"_{quantization}"
+            # Don't mutate the caller's dict
+            model_data = dict(model_data)
+            model_data['model_name'] = base_name
+            gen = HARCodeGeneratorV2(
+                model_data=model_data,
+                platform=platform,
+                optimization=optimization,
+                overlap=overlap,
+                confidence_threshold=confidence_threshold,
+                smoothing_window=smoothing_window,
+                quantization=quantization,
+                deployment_approach=deployment_approach,
+            )
+            return gen.generate_files()
+        # ----------------------------------------------------------------
 
         generator = CodeGeneratorFactory.create_generator(
             model_type, model_data, platform, optimization, overlap, quantization,

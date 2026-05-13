@@ -273,26 +273,27 @@ layout = html.Div([
                         style={'font-size': '12px', 'color': '#555', 'margin-bottom': '10px'}
                     ),
                     html.Div([
-                        html.Span("LPF filtfilt", style={
-                            'background': '#d4edda', 'color': '#155724',
+                        html.Span("LPF filtfilt", id='preproc-badge-lpf', style={
+                            'background': '#e9ecef', 'color': '#6c757d',
                             'padding': '3px 8px', 'border-radius': '4px',
                             'font-size': '11px', 'margin-right': '6px'}),
-                        html.Span("SavGol", style={
-                            'background': '#d4edda', 'color': '#155724',
+                        html.Span("SavGol", id='preproc-badge-savgol', style={
+                            'background': '#e9ecef', 'color': '#6c757d',
                             'padding': '3px 8px', 'border-radius': '4px',
                             'font-size': '11px', 'margin-right': '6px'}),
-                        html.Span("FFT brick-wall", style={
-                            'background': '#d4edda', 'color': '#155724',
+                        html.Span("FFT brick-wall", id='preproc-badge-fft', style={
+                            'background': '#e9ecef', 'color': '#6c757d',
                             'padding': '3px 8px', 'border-radius': '4px',
                             'font-size': '11px', 'margin-right': '6px'}),
-                        html.Span("Kalman", style={
-                            'background': '#d4edda', 'color': '#155724',
+                        html.Span("Kalman", id='preproc-badge-kalman', style={
+                            'background': '#e9ecef', 'color': '#6c757d',
                             'padding': '3px 8px', 'border-radius': '4px',
                             'font-size': '11px', 'margin-right': '6px'}),
                     ], style={'margin-bottom': '8px'}),
                     html.Div(
                         "✓ LPF uses per-window two-pass filtfilt (zero-phase) — exact parity with Python scipy.signal.filtfilt",
-                        style={'font-size': '11px', 'color': '#28a745', 'font-style': 'italic'}
+                        id='preproc-badge-status',
+                        style={'font-size': '11px', 'color': '#6c757d', 'font-style': 'italic'}
                     ),
                     html.Div(
                         "Select a model above to view its active preprocessing pipeline in the Model Info panel.",
