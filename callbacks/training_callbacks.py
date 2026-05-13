@@ -1154,7 +1154,7 @@ def register_callbacks(app):
             model = EdgeMLModel(model_type)
 
             # For CNN: load raw windowed data instead of features
-            if model_type == 'pytorch_cnn':
+            if model_type in ('pytorch_cnn', 'pytorch_cnn2d'):
                 training_dir = os.path.join(base_dir, 'training')
                 # Prefer raw files that match the active FE run
                 if train_files:

@@ -122,6 +122,73 @@ class HARCNN(nn.Module):
         return x
 
 
+class HARCNN2D(nn.Module):
+    """2D-CNN for HAR treating the sensor window as a time × channel image.
+
+    Input shape: (batch, window_size, n_channels)
+    Internally reshaped to (batch, 1, window_size, n_channels) so Conv2D
+    kernels learn both temporal patterns and cross-channel correlations.
+
+    Architecture (3-stage):
+      Stage 1 — temporal feature extraction (per-channel):
+        Conv2D(1 → 32,  k=5×1, pad=(2,0)) → BN → ReLU
+        Conv2D(32 → 64, k=5×1, pad=(2,0)) → BN → ReLU
+        MaxPool2D(2×1)   — halves time, keeps channel dim
+
+      Stage 2 — cross-channel fusion:
+        Conv2D(64 → 128, k=3×n_channels, pad=(1,0)) → BN → ReLU
+        (collapses channel dim → output shape: batch × 128 × T' × 1)
+
+      Stage 3 — classifier:
+        AdaptiveAvgPool2D(1×1) → Flatten(128) → Dropout → Dense(64) → ReLU → Dropout → Output
+
+    Advantages over 1D-CNN:
+      • Captures correlations between sensor axes (e.g. aX↔gX coupling)
+      • Stage-1 kernels are parameter-efficient: same as 1D per-axis Conv
+      • Stage-2 performs explicit sensor-fusion in one learnable operation
+    """
+
+    def __init__(self, window_size: int, n_channels: int, num_classes: int,
+                 dropout: float = 0.3):
+        super().__init__()
+        self.n_channels = n_channels
+
+        # Stage 1: temporal conv per-channel (kernel spans time, NOT channels)
+        self.conv1 = nn.Conv2d(1,  32, kernel_size=(5, 1), padding=(2, 0))
+        self.bn1   = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=(5, 1), padding=(2, 0))
+        self.bn2   = nn.BatchNorm2d(64)
+        self.pool  = nn.MaxPool2d(kernel_size=(2, 1))   # halve time only
+
+        # Stage 2: cross-channel fusion (kernel spans ALL channels)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=(3, n_channels), padding=(1, 0))
+        self.bn3   = nn.BatchNorm2d(128)
+
+        # Stage 3: classifier
+        self.gap  = nn.AdaptiveAvgPool2d((1, 1))        # global avg → (batch, 128, 1, 1)
+        self.drop = nn.Dropout(dropout)
+        self.fc1  = nn.Linear(128, 64)
+        self.fc2  = nn.Linear(64, num_classes)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        # x: (batch, window_size, n_channels)
+        x = x.unsqueeze(1)                  # → (batch, 1, window_size, n_channels)
+
+        x = self.relu(self.bn1(self.conv1(x)))  # (batch, 32, T, C)
+        x = self.relu(self.bn2(self.conv2(x)))  # (batch, 64, T, C)
+        x = self.pool(x)                        # (batch, 64, T/2, C)
+
+        x = self.relu(self.bn3(self.conv3(x)))  # (batch, 128, T/2, 1)
+
+        x = self.gap(x).flatten(1)              # (batch, 128)
+        x = self.drop(x)
+        x = self.relu(self.fc1(x))
+        x = self.drop(x)
+        x = self.fc2(x)
+        return x
+
+
 # ===================================================================
 # Trainer
 # ===================================================================
@@ -299,7 +366,8 @@ class PyTorchTrainer:
     def export_cnn_weights(self) -> Dict[str, Any]:
         """Export CNN weights for CNNCodeGenerator.
 
-        Returns a structured dict describing every layer.
+        Returns a structured dict describing every layer.  Handles both
+        Conv1d (HARCNN) and Conv2d (HARCNN2D) layers.
         """
         self.model.eval()
         layers: List[Dict[str, Any]] = []
@@ -318,11 +386,52 @@ class PyTorchTrainer:
                     "kernel_size": w.shape[2],
                     "padding": module.padding[0],
                 })
+            elif isinstance(module, nn.Conv2d):
+                w = module.weight.detach().cpu().numpy()  # (out_ch, in_ch, kH, kW)
+                b = module.bias.detach().cpu().numpy() if module.bias is not None else np.zeros(w.shape[0])
+                pad = module.padding
+                layers.append({
+                    "type": "conv2d",
+                    "name": name,
+                    "weights": w.tolist(),
+                    "bias": b.tolist(),
+                    "out_channels": w.shape[0],
+                    "in_channels": w.shape[1],
+                    "kernel_h": w.shape[2],
+                    "kernel_w": w.shape[3],
+                    "padding_h": pad[0] if isinstance(pad, tuple) else pad,
+                    "padding_w": pad[1] if isinstance(pad, tuple) else pad,
+                })
             elif isinstance(module, nn.MaxPool1d):
                 layers.append({
                     "type": "maxpool1d",
                     "name": name,
                     "kernel_size": module.kernel_size if isinstance(module.kernel_size, int) else module.kernel_size[0],
+                })
+            elif isinstance(module, nn.MaxPool2d):
+                ks = module.kernel_size
+                layers.append({
+                    "type": "maxpool2d",
+                    "name": name,
+                    "kernel_h": ks[0] if isinstance(ks, tuple) else ks,
+                    "kernel_w": ks[1] if isinstance(ks, tuple) else ks,
+                })
+            elif isinstance(module, nn.AdaptiveAvgPool2d):
+                layers.append({
+                    "type": "adaptive_avgpool2d",
+                    "name": name,
+                    "output_size": list(module.output_size),
+                })
+            elif isinstance(module, nn.BatchNorm2d):
+                layers.append({
+                    "type": "batchnorm2d",
+                    "name": name,
+                    "num_features": module.num_features,
+                    "weight": module.weight.detach().cpu().numpy().tolist(),
+                    "bias": module.bias.detach().cpu().numpy().tolist(),
+                    "running_mean": module.running_mean.detach().cpu().numpy().tolist(),
+                    "running_var": module.running_var.detach().cpu().numpy().tolist(),
+                    "eps": module.eps,
                 })
             elif isinstance(module, nn.Linear):
                 w = module.weight.detach().cpu().numpy()  # (out, in)

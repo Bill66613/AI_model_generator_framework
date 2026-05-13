@@ -977,15 +977,12 @@ def register_callbacks(app):
          State('deployment-stride', 'value'),
          State('deployment-confidence-threshold', 'value'),
          State('deployment-smoothing-window', 'value'),
-         State('deployment-iir-filter-enabled', 'value'),
-         State('deployment-kalman-filter-enabled', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
     def generate_embedded_code(n_clicks, model_filename, framework, target_board,
                                deployment_approach, optimization, quantization, stride,
-                               confidence_threshold, smoothing_window, iir_filter_enabled,
-                               kalman_filter_enabled, base_dir):
+                               confidence_threshold, smoothing_window, base_dir):
         """
         Generate embedded C/C++ code from the trained model using actual metadata.
         Model type is automatically detected from the selected model.
@@ -1113,15 +1110,12 @@ def register_callbacks(app):
 
             # Parse new deployment options
             smoothing_window = int(smoothing_window or 3)
-            enable_iir = 'enabled' in (iir_filter_enabled or [])
-            enable_kalman = 'enabled' in (kalman_filter_enabled or [])
 
             # Generate code using proper code generators
             generated_code_files = generate_deployment_code(
                 model_type, model_data, platform, optimization, overlap_fraction, quantization,
                 deployment_approach, confidence_threshold=confidence_threshold,
-                smoothing_window=smoothing_window, enable_iir_filter=enable_iir,
-                enable_kalman_filter=enable_kalman
+                smoothing_window=smoothing_window
             )
 
             # Filter out binary files (e.g., .onnx, .tflite) for text-based processing
@@ -1151,8 +1145,7 @@ def register_callbacks(app):
             saved_files = generate_and_save_deployment_code(
                 model_type, model_data, platform, output_dir, optimization, overlap_fraction, quantization,
                 deployment_approach, confidence_threshold=confidence_threshold,
-                smoothing_window=smoothing_window, enable_iir_filter=enable_iir,
-                enable_kalman_filter=enable_kalman
+                smoothing_window=smoothing_window
             )
 
             # Get the first generated file for preview (typically the sketch/example)

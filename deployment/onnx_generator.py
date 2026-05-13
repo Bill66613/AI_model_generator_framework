@@ -43,14 +43,10 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
                  optimization: str = 'balanced', overlap: float = 0.5,
                  quantization: str = 'none',
                  confidence_threshold: float = 0.6,
-                 smoothing_window: int = 1,
-                 enable_iir_filter: bool = False,
-                 enable_kalman_filter: bool = False):
+                 smoothing_window: int = 1):
         super().__init__(model_data, platform, optimization, overlap, quantization='none',
                          confidence_threshold=confidence_threshold,
-                         smoothing_window=smoothing_window,
-                         enable_iir_filter=enable_iir_filter,
-                         enable_kalman_filter=enable_kalman_filter)
+                         smoothing_window=smoothing_window)
         self.onnx_quantization = quantization
         self._onnx_bytes = None
         self._onnx_info = None
@@ -509,40 +505,8 @@ class ONNXRuntimeCodeGenerator(BaseCodeGenerator):
         sketch.append(platform_code['sensor_read'])
         sketch.append(f"")
 
-        # On-device IIR filter (matches base generator behavior)
-        if self.enable_iir_filter:
-            sketch.append(f"    // Apply on-device IIR filter")
-            sketch.append(f"    #ifdef IIR_FILTER_ENABLED")
-            sketch.append(f"    {{")
-            sketch.append(
-                f"        float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};")
-            sketch.append(f"        iir_filter_sample(raw_sample);")
-            sketch.append(
-                f"        aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];")
-            sketch.append(
-                f"        gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];")
-            sketch.append(f"    }}")
-            sketch.append(f"    #endif")
-            sketch.append(f"")
-
-        # On-device Kalman filter (matches base generator behavior)
-        if self.enable_kalman_filter:
-            parity_note = 'exact parity with training' if self._has_kalman_parity(
-            ) else 'device-only — model trained without Kalman'
-            sketch.append(
-                f"    // Apply on-device Kalman filter ({parity_note})")
-            sketch.append(f"    #ifdef KALMAN_FILTER_ENABLED")
-            sketch.append(f"    {{")
-            sketch.append(
-                f"        float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};")
-            sketch.append(f"        kalman_filter_sample(raw_sample);")
-            sketch.append(
-                f"        aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];")
-            sketch.append(
-                f"        gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];")
-            sketch.append(f"    }}")
-            sketch.append(f"    #endif")
-            sketch.append(f"")
+        # Preprocessing is now per-window inside extract_features() / iir_filtfilt_window()
+        # No per-sample filter application needed here.
 
         sketch.append(f"    // Store in buffer")
         sketch.append(f"    sensor_buffer[sample_count][0] = aX;")

@@ -252,7 +252,7 @@ def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
                     enhanced_data['pytorch_coefs'] = mlp_export['coefs_']
                     enhanced_data['pytorch_intercepts'] = mlp_export['intercepts_']
                     enhanced_data['pytorch_hidden_layer_sizes'] = mlp_export['hidden_layer_sizes']
-            elif model_obj.model_type == 'pytorch_cnn':
+            elif model_obj.model_type in ('pytorch_cnn', 'pytorch_cnn2d'):
                 # PyTorch CNN — export layer descriptions for CNNCodeGenerator
                 if hasattr(model_obj, '_pytorch_trainer'):
                     cnn_export = model_obj._pytorch_trainer.export_cnn_weights()
@@ -271,7 +271,7 @@ def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
             # Reorder parameters to match C++ feature extraction order
             # (skip for CNN which operates on raw sensor windows)
             feature_names = enhanced_data.get('feature_names', [])
-            if feature_names and model_obj.model_type not in ('pytorch_cnn',):
+            if feature_names and model_obj.model_type not in ('pytorch_cnn', 'pytorch_cnn2d'):
                 cpp_order = get_cpp_feature_order(feature_names)
                 reorder_indices = compute_feature_reorder_indices(feature_names, cpp_order)
                 if reorder_indices is not None:
@@ -570,6 +570,7 @@ class CodeGeneratorFactory:
         'neural_network': NeuralNetworkCodeGenerator,
         'pytorch_mlp': NeuralNetworkCodeGenerator,  # MLP weights exported in sklearn format
         'pytorch_cnn': CNNCodeGenerator,
+        'pytorch_cnn2d': CNNCodeGenerator,           # 2D-CNN shares same weight export format
         'svm': SVMCodeGenerator,
         'arm_cortex_m': ARMCortexMCodeGenerator,
         'micropython': MicroPythonCodeGenerator,
@@ -582,9 +583,7 @@ class CodeGeneratorFactory:
                          overlap: float = 0.5, quantization: str = 'none',
                          deployment_approach: str = 'direct',
                          confidence_threshold: float = 0.6,
-                         smoothing_window: int = 1,
-                         enable_iir_filter: bool = False,
-                         enable_kalman_filter: bool = False) -> BaseCodeGenerator:
+                         smoothing_window: int = 1) -> BaseCodeGenerator:
         """
         Create appropriate code generator based on model type, platform, and deployment approach.
 
@@ -621,17 +620,13 @@ class CodeGeneratorFactory:
                 return TFLiteMicroCodeGenerator(
                     model_data, platform, optimization, overlap, quantization,
                     confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
+                    smoothing_window=smoothing_window)
 
             if deployment_approach == 'onnx_runtime':
                 return ONNXRuntimeCodeGenerator(
                     model_data, platform, optimization, overlap, quantization,
                     confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
+                    smoothing_window=smoothing_window)
 
             # --- Direct code generation (default) ---
 
@@ -640,27 +635,21 @@ class CodeGeneratorFactory:
                 return cls._generators['arm_cortex_m'](
                     model_data, platform, optimization, overlap, quantization,
                     confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
+                    smoothing_window=smoothing_window)
 
             # For MicroPython platform, use MicroPython generator
             if platform == 'micropython':
                 return cls._generators['micropython'](
                     model_data, platform, optimization, overlap, quantization,
                     confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
+                    smoothing_window=smoothing_window)
 
             # For Zephyr RTOS platform, use Zephyr generator
             if platform == 'zephyr':
                 return cls._generators['zephyr'](
                     model_data, platform, optimization, overlap, quantization,
                     confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
+                    smoothing_window=smoothing_window)
 
             # For other platforms, use model-specific generators
             if model_type not in cls._generators:
@@ -673,9 +662,7 @@ class CodeGeneratorFactory:
             generator_class = cls._generators[model_type]
             return generator_class(model_data, platform, optimization, overlap, quantization,
                                    confidence_threshold=confidence_threshold,
-                                   smoothing_window=smoothing_window,
-                                   enable_iir_filter=enable_iir_filter,
-                                   enable_kalman_filter=enable_kalman_filter)
+                                   smoothing_window=smoothing_window)
 
         except (ValidationError, ModelDataError, OptimizationError) as e:
             # Re-raise validation errors with context
@@ -719,9 +706,7 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
                              overlap: float = 0.5, quantization: str = 'none',
                              deployment_approach: str = 'direct',
                              confidence_threshold: float = 0.6,
-                             smoothing_window: int = 1,
-                             enable_iir_filter: bool = False,
-                             enable_kalman_filter: bool = False) -> Dict[str, str]:
+                             smoothing_window: int = 1) -> Dict[str, str]:
     """
     Convenience function to generate deployment code with organized naming.
 
@@ -751,8 +736,7 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
         generator = CodeGeneratorFactory.create_generator(
             model_type, model_data, platform, optimization, overlap, quantization,
             deployment_approach, confidence_threshold=confidence_threshold,
-            smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter,
-            enable_kalman_filter=enable_kalman_filter)
+            smoothing_window=smoothing_window)
 
         # Create organized filenames
         # For alternative deployment approaches, generate files differently
@@ -927,9 +911,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
                                       quantization: str = 'none',
                                       deployment_approach: str = 'direct',
                                       confidence_threshold: float = 0.6,
-                                      smoothing_window: int = 1,
-                                      enable_iir_filter: bool = False,
-                                      enable_kalman_filter: bool = False) -> Dict[str, str]:
+                                      smoothing_window: int = 1) -> Dict[str, str]:
     """
     Generate deployment code and save to organized folder structure.
 
@@ -961,8 +943,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
     generated_code = generate_deployment_code(
         model_type, model_data, platform, optimization, overlap, quantization,
         deployment_approach, confidence_threshold=confidence_threshold,
-        smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter,
-        enable_kalman_filter=enable_kalman_filter)
+        smoothing_window=smoothing_window)
 
     # Save files and return file paths
     saved_files = {}

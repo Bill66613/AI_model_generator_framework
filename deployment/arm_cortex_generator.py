@@ -24,9 +24,7 @@ class ARMCortexMCodeGenerator(BaseCodeGenerator):
                  optimization: str = 'balanced', overlap: float = 0.5,
                  quantization: str = 'none',
                  confidence_threshold: float = 0.6,
-                 smoothing_window: int = 1,
-                 enable_iir_filter: bool = False,
-                 enable_kalman_filter: bool = False):
+                 smoothing_window: int = 1):
         # CNN models don't use traditional features — provide placeholders
         model_type = model_data.get('model_type', '')
         if model_type == 'pytorch_cnn' and not model_data.get('feature_names'):
@@ -36,9 +34,7 @@ class ARMCortexMCodeGenerator(BaseCodeGenerator):
 
         super().__init__(model_data, platform, optimization, overlap, quantization,
                          confidence_threshold=confidence_threshold,
-                         smoothing_window=smoothing_window,
-                         enable_iir_filter=enable_iir_filter,
-                         enable_kalman_filter=enable_kalman_filter)
+                         smoothing_window=smoothing_window)
         self.optimization_level = optimization
 
         # Create the inner model-specific generator to delegate prediction to

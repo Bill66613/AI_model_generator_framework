@@ -261,44 +261,45 @@ layout = html.Div([
 
             html.Hr(style={'border': '1px solid #e9ecef', 'margin': '15px 0'}),
 
-            # --- Sub-section D: On-device Signal Filters ---
+            # --- Sub-section D: On-device Signal Preprocessing (auto from training) ---
             html.Div([
                 html.H5("📡 On-device Signal Preprocessing", style={
-                    'font-size': '14px', 'color': '#495057', 'margin-bottom': '12px'}),
+                    'font-size': '14px', 'color': '#495057', 'margin-bottom': '10px'}),
 
                 html.Div([
-                    # IIR Filter
+                    html.Div(
+                        "Preprocessing is automatically read from training metadata — no manual selection needed. "
+                        "Signal filters are generated if and only if they were used during training.",
+                        style={'font-size': '12px', 'color': '#555', 'margin-bottom': '10px'}
+                    ),
                     html.Div([
-                        dcc.Checklist(
-                            id='deployment-iir-filter-enabled',
-                            options=[{'label': ' IIR low-pass filter (Butterworth)', 'value': 'enabled'}],
-                            value=[],
-                            style={'margin-bottom': '5px'}
-                        ),
-                        html.Div([
-                            html.Div("Per-sample Butterworth filter before buffering",
-                                     style={'margin-bottom': '3px'}),
-                            html.Div("⚠️ Training uses filtfilt (zero-phase); device uses causal lfilter — slight parity gap",
-                                     style={'color': '#ff9800'}),
-                        ], style={'font-size': '11px', 'color': '#666', 'margin-left': '25px', 'margin-bottom': '10px'}),
-                    ], style={'width': '48%', 'display': 'inline-block', 'vertical-align': 'top'}),
-
-                    # Kalman Filter
-                    html.Div([
-                        dcc.Checklist(
-                            id='deployment-kalman-filter-enabled',
-                            options=[{'label': ' Kalman filter (recommended)', 'value': 'enabled'}],
-                            value=[],
-                            style={'margin-bottom': '5px'}
-                        ),
-                        html.Div([
-                            html.Div("Constant-velocity Kalman filter per channel",
-                                     style={'margin-bottom': '3px'}),
-                            html.Div("✓ Causal — identical in training & deployment (no parity gap)",
-                                     style={'color': '#28a745'}),
-                        ], style={'font-size': '11px', 'color': '#666', 'margin-left': '25px', 'margin-bottom': '10px'}),
-                    ], style={'width': '48%', 'display': 'inline-block', 'margin-left': '4%', 'vertical-align': 'top'}),
-                ]),
+                        html.Span("LPF filtfilt", style={
+                            'background': '#d4edda', 'color': '#155724',
+                            'padding': '3px 8px', 'border-radius': '4px',
+                            'font-size': '11px', 'margin-right': '6px'}),
+                        html.Span("SavGol", style={
+                            'background': '#d4edda', 'color': '#155724',
+                            'padding': '3px 8px', 'border-radius': '4px',
+                            'font-size': '11px', 'margin-right': '6px'}),
+                        html.Span("FFT brick-wall", style={
+                            'background': '#d4edda', 'color': '#155724',
+                            'padding': '3px 8px', 'border-radius': '4px',
+                            'font-size': '11px', 'margin-right': '6px'}),
+                        html.Span("Kalman", style={
+                            'background': '#d4edda', 'color': '#155724',
+                            'padding': '3px 8px', 'border-radius': '4px',
+                            'font-size': '11px', 'margin-right': '6px'}),
+                    ], style={'margin-bottom': '8px'}),
+                    html.Div(
+                        "✓ LPF uses per-window two-pass filtfilt (zero-phase) — exact parity with Python scipy.signal.filtfilt",
+                        style={'font-size': '11px', 'color': '#28a745', 'font-style': 'italic'}
+                    ),
+                    html.Div(
+                        "Select a model above to view its active preprocessing pipeline in the Model Info panel.",
+                        style={'font-size': '11px', 'color': '#888', 'margin-top': '4px'}
+                    ),
+                ], style={'background': '#f8f9fa', 'border': '1px solid #dee2e6',
+                          'border-radius': '6px', 'padding': '12px'}),
             ]),
         ], style={
             'background': 'white',

@@ -30,8 +30,7 @@ class BaseCodeGenerator(ABC):
                  quantization: str = 'none',
                  confidence_threshold: float = 0.6,
                  smoothing_window: int = 1,
-                 enable_iir_filter: bool = False,
-                 enable_kalman_filter: bool = False):
+                 ):
         # Validate inputs before proceeding
         self._validate_model_data(model_data)
         self._validate_optimization(optimization)
@@ -46,9 +45,6 @@ class BaseCodeGenerator(ABC):
         self.overlap = max(0.0, min(0.99, overlap))  # Clamp between 0-99%
         self.confidence_threshold = max(0.0, min(1.0, confidence_threshold))
         self.smoothing_window = max(1, min(9, smoothing_window))
-        self.enable_iir_filter = enable_iir_filter
-        self.enable_kalman_filter = enable_kalman_filter
-
         # Quantization mode: 'none', 'int8', 'int16', 'float16'
         from .quantization import QUANTIZATION_MODES
         self.quantization = quantization if quantization in QUANTIZATION_MODES else 'none'
@@ -445,7 +441,10 @@ const char* get_activity_name(int class_id) {{
         NOTE: Training uses filtfilt (zero-phase) while on-device uses
         lfilter (causal). This creates a subtle parity gap.
         """
-        return self.enable_iir_filter
+        # Auto-detected from training preprocessing metadata — not a user choice at deploy time.
+        # parity: Python uses scipy.signal.filtfilt (zero-phase) on full window;
+        #         C++ uses per-window two-pass IIR (equivalent to filtfilt on a buffer).
+        return bool(self.preprocessing.get('low_pass_filter'))
 
     def _compute_iir_coefficients(self):
         """Compute 2nd-order IIR (Butterworth) coefficients for on-device filtering.
@@ -467,77 +466,117 @@ const char* get_activity_name(int class_id) {{
         return b, a
 
     def _generate_iir_filter_declarations(self) -> str:
-        """Generate IIR filter function declaration for the header."""
+        """Generate LPF filtfilt #define for the header (function is static, no declaration needed)."""
         if not self._has_device_filter():
             return ''
+        cutoff = self.preprocessing.get('lpf_cutoff_hz', 5)
+        order = self.preprocessing.get('lpf_order', 2)
         return (
-            '\n// On-device IIR low-pass filter (matches training preprocessing)\n'
-            '#define IIR_FILTER_ENABLED 1\n'
-            'void iir_filter_sample(float raw[N_CHANNELS]);\n'
-            'void iir_filter_reset(void);\n'
+            f'\n// LPF filtfilt preprocessing — zero-phase, parity with Python scipy.signal.filtfilt\n'
+            f'// Butterworth, cutoff={cutoff} Hz, order={order}, fs={self.sampling_rate} Hz\n'
+            f'#define LPF_FILTFILT_ENABLED 1\n'
         )
 
     def _generate_iir_filter_implementation(self) -> str:
-        """Generate C++ IIR filter implementation with embedded coefficients."""
+        """Generate per-window zero-phase IIR (filtfilt) implementation.
+
+        Two-pass forward-backward Butterworth filter applied to the full window
+        buffer.  Matches Python scipy.signal.filtfilt() exactly: same coefficients,
+        same two-pass strategy.  The parity gap from the old per-sample lfilter
+        approach is eliminated because the device also buffers the full window.
+        """
         if not self._has_device_filter():
             return ''
 
         result = self._compute_iir_coefficients()
         if result is None:
-            return '// WARNING: scipy not available — IIR filter coefficients not computed\n'
+            return '// WARNING: scipy not available — IIR filtfilt coefficients not computed\n'
 
         b, a = result
-        order = len(b) - 1  # filter order
-
-        training_used_lpf = bool(self.preprocessing.get('low_pass_filter'))
+        order = len(b) - 1
         cutoff = self.preprocessing.get('lpf_cutoff_hz', 5)
-        prec = self.feature_precision
 
-        parity_comment = ('// Coefficients computed by scipy.signal.butter to match training pipeline'
-                          if training_used_lpf else
-                          '// NOTE: Training did NOT use low-pass filtering. Default coefficients (5Hz, order 2) are used.')
+        b_str = ', '.join(self._float_literal(v) for v in b)
+        a_str = ', '.join(self._float_literal(v) for v in a)
 
-        lines = [
-            f'// IIR Low-pass filter: Butterworth, cutoff={cutoff}Hz, order={order}, fs={self.sampling_rate}Hz',
-            parity_comment,
-            f'#define IIR_ORDER {order}',
-            '',
-            f'static const float iir_b[{len(b)}] = {{{", ".join(self._float_literal(v) for v in b)}}};',
-            f'static const float iir_a[{len(a)}] = {{{", ".join(self._float_literal(v) for v in a)}}};',
-            '',
-            f'// Filter state: delay lines per channel',
-            f'static float iir_x_hist[N_CHANNELS][IIR_ORDER] = {{{{0}}}};  // input history',
-            f'static float iir_y_hist[N_CHANNELS][IIR_ORDER] = {{{{0}}}};  // output history',
-            '',
-            'void iir_filter_reset(void) {',
-            f'    for (int ch = 0; ch < N_CHANNELS; ch++) {{',
-            f'        for (int i = 0; i < IIR_ORDER; i++) {{',
-            '            iir_x_hist[ch][i] = 0.0f;',
-            '            iir_y_hist[ch][i] = 0.0f;',
-            '        }',
-            '    }',
-            '}',
-            '',
-            'void iir_filter_sample(float raw[N_CHANNELS]) {',
-            '    for (int ch = 0; ch < N_CHANNELS; ch++) {',
-            '        float x = raw[ch];',
-            '        float y = iir_b[0] * x;',
-            f'        for (int i = 1; i <= IIR_ORDER; i++) {{',
-            '            y += iir_b[i] * iir_x_hist[ch][i-1];',
-            '            y -= iir_a[i] * iir_y_hist[ch][i-1];',
-            '        }',
-            '        // Shift history',
-            f'        for (int i = IIR_ORDER - 1; i > 0; i--) {{',
-            '            iir_x_hist[ch][i] = iir_x_hist[ch][i-1];',
-            '            iir_y_hist[ch][i] = iir_y_hist[ch][i-1];',
-            '        }',
-            '        iir_x_hist[ch][0] = x;',
-            '        iir_y_hist[ch][0] = y;',
-            '        raw[ch] = y;',
-            '    }',
-            '}',
-        ]
-        return '\n'.join(lines) + '\n'
+        return f"""// LPF filtfilt: Butterworth zero-phase, cutoff={cutoff} Hz, order={order}, fs={self.sampling_rate} Hz
+// Two-pass (forward + backward) applied to the full window buffer.
+// Matches Python: scipy.signal.filtfilt(b, a, data, axis=0)
+#define IIR_ORDER {order}
+static const float iir_b[{len(b)}] = {{{b_str}}};
+static const float iir_a[{len(a)}] = {{{a_str}}};
+
+// Apply zero-phase IIR to a full window buffer in → out (may alias if in==out).
+// Allocates filter delay lines on the stack (2 * IIR_ORDER floats per channel).
+static void iir_filtfilt_window(float in[][N_CHANNELS], int n, float out[][N_CHANNELS]) {{
+    // Copy input to output so we can work in-place
+    for (int i = 0; i < n; i++)
+        for (int ch = 0; ch < N_CHANNELS; ch++)
+            out[i][ch] = in[i][ch];
+
+    float x_hist[N_CHANNELS][IIR_ORDER];
+    float y_hist[N_CHANNELS][IIR_ORDER];
+
+    // ---- Forward pass ----
+    for (int ch = 0; ch < N_CHANNELS; ch++)
+        for (int k = 0; k < IIR_ORDER; k++) {{ x_hist[ch][k] = 0.0f; y_hist[ch][k] = 0.0f; }}
+
+    for (int i = 0; i < n; i++) {{
+        for (int ch = 0; ch < N_CHANNELS; ch++) {{
+            float x = out[i][ch];
+            float y = iir_b[0] * x;
+            for (int k = 1; k <= IIR_ORDER; k++) {{
+                y += iir_b[k] * x_hist[ch][k-1];
+                y -= iir_a[k] * y_hist[ch][k-1];
+            }}
+            for (int k = IIR_ORDER - 1; k > 0; k--) {{
+                x_hist[ch][k] = x_hist[ch][k-1];
+                y_hist[ch][k] = y_hist[ch][k-1];
+            }}
+            x_hist[ch][0] = x; y_hist[ch][0] = y;
+            out[i][ch] = y;
+        }}
+    }}
+
+    // ---- Reverse buffer in-place ----
+    for (int i = 0; i < n / 2; i++)
+        for (int ch = 0; ch < N_CHANNELS; ch++) {{
+            float tmp = out[i][ch];
+            out[i][ch] = out[n-1-i][ch];
+            out[n-1-i][ch] = tmp;
+        }}
+
+    // ---- Backward pass (on reversed signal) ----
+    for (int ch = 0; ch < N_CHANNELS; ch++)
+        for (int k = 0; k < IIR_ORDER; k++) {{ x_hist[ch][k] = 0.0f; y_hist[ch][k] = 0.0f; }}
+
+    for (int i = 0; i < n; i++) {{
+        for (int ch = 0; ch < N_CHANNELS; ch++) {{
+            float x = out[i][ch];
+            float y = iir_b[0] * x;
+            for (int k = 1; k <= IIR_ORDER; k++) {{
+                y += iir_b[k] * x_hist[ch][k-1];
+                y -= iir_a[k] * y_hist[ch][k-1];
+            }}
+            for (int k = IIR_ORDER - 1; k > 0; k--) {{
+                x_hist[ch][k] = x_hist[ch][k-1];
+                y_hist[ch][k] = y_hist[ch][k-1];
+            }}
+            x_hist[ch][0] = x; y_hist[ch][0] = y;
+            out[i][ch] = y;
+        }}
+    }}
+
+    // ---- Reverse back ----
+    for (int i = 0; i < n / 2; i++)
+        for (int ch = 0; ch < N_CHANNELS; ch++) {{
+            float tmp = out[i][ch];
+            out[i][ch] = out[n-1-i][ch];
+            out[n-1-i][ch] = tmp;
+        }}
+}}
+
+"""
 
     # ── Kalman filter generation ─────────────────────────────────────────
 
@@ -549,10 +588,8 @@ const char* get_activity_name(int class_id) {{
         causal — so it's safe to add at deployment even if training
         didn't use it (model receives cleaner input, generally beneficial).
         """
-        return self.enable_kalman_filter
-
-    def _has_kalman_parity(self) -> bool:
-        """Return True if Kalman was also used during training (exact parity)."""
+        # Auto-detected from training preprocessing metadata.
+        # Per-window batch Kalman: state re-initialized from window[0] each call.
         return bool(self.preprocessing.get('kalman_filter'))
 
     # ── FFT low-pass filter generation ──────────────────────────────────
@@ -624,18 +661,15 @@ static void fft_lowpass_window(float in[][N_CHANNELS], int n, float out[][N_CHAN
 """
 
     def _generate_kalman_filter_declarations(self) -> str:
-        """Generate Kalman filter function declarations for the header."""
+        """Generate Kalman filter #define for the header (function is static)."""
         if not self._has_kalman_filter():
             return ''
-        if self._has_kalman_parity():
-            comment = '// On-device Kalman filter (exact parity with training preprocessing)'
-        else:
-            comment = '// On-device Kalman filter (device-only — training did not use Kalman)'
+        q = self.preprocessing.get('kalman_process_noise', 1e-3)
+        r = self.preprocessing.get('kalman_measurement_noise', 1e-1)
         return (
-            f'\n{comment}\n'
-            '#define KALMAN_FILTER_ENABLED 1\n'
-            'void kalman_filter_sample(float raw[N_CHANNELS]);\n'
-            'void kalman_filter_reset(void);\n'
+            f'\n// Kalman filter preprocessing — per-window, matches Python utils/data_processing.py\n'
+            f'// Constant-velocity model, Q_scale={q}, R={r}, fs={self.sampling_rate} Hz\n'
+            f'#define KALMAN_FILTER_ENABLED 1\n'
         )
 
     # ── Savitzky-Golay filter generation ────────────────────────────────
@@ -694,11 +728,12 @@ static void savgol_smooth_window(float in[][N_CHANNELS], int samples, float out[
 """
 
     def _generate_kalman_filter_implementation(self) -> str:
-        """Generate C++ Kalman filter implementation.
+        """Generate per-window batch Kalman filter (static internal function).
 
-        Implements a constant-velocity 1D Kalman filter per channel,
-        matching the Python ``kalman_filter()`` in ``utils/data_processing.py``.
-        State: [position, velocity].  Observation: position only.
+        Implements a constant-velocity 1D Kalman filter per channel applied to
+        the full window buffer in one call.  State is re-initialized from the
+        first sample of each window — matches Python training's first-sample init
+        (``x = [z[0], 0]``).  Causal forward-only like the Python version.
         """
         if not self._has_kalman_filter():
             return ''
@@ -708,78 +743,52 @@ static void savgol_smooth_window(float in[][N_CHANNELS], int samples, float out[
         fs = self.sampling_rate
         dt = 1.0 / fs
 
-        # Pre-compute constant Q matrix entries
         q00 = q * (dt ** 3) / 3.0
         q01 = q * (dt ** 2) / 2.0
         q11 = q * dt
 
-        parity_note = ('identical to Python training pipeline'
-                       if self._has_kalman_parity()
-                       else 'device-only — model trained without Kalman')
-        lines = [
-            f'// Kalman filter: constant-velocity model, Q_scale={q}, R={r}, fs={fs}Hz',
-            f'// Causal (forward-only) — {parity_note}',
-            f'#define KALMAN_DT {self._float_literal(dt)}',
-            f'',
-            f'// Per-channel Kalman state',
-            f'static float kalman_x[N_CHANNELS][2];   // [position, velocity]',
-            f'static float kalman_P[N_CHANNELS][2][2]; // error covariance',
-            f'static uint8_t kalman_initialized[N_CHANNELS]; // lazy-init flag (0=false, 1=true)',
-            f'',
-            f'// Process noise covariance (constant)',
-            f'static const float kalman_Q[2][2] = {{',
-            f'    {{{self._float_literal(q00)}, {self._float_literal(q01)}}},',
-            f'    {{{self._float_literal(q01)}, {self._float_literal(q11)}}}',
-            f'}};',
-            f'static const float kalman_R = {self._float_literal(r)};',
-            f'',
-            f'void kalman_filter_reset(void) {{',
-            f'    for (int ch = 0; ch < N_CHANNELS; ch++) {{',
-            f'        kalman_initialized[ch] = 0;',
-            f'    }}',
-            f'}}',
-            f'',
-            f'void kalman_filter_sample(float raw[N_CHANNELS]) {{',
-            f'    for (int ch = 0; ch < N_CHANNELS; ch++) {{',
-            f'        // --- Lazy-init from first measurement (matches Python: x = [z[0], 0]) ---',
-            f'        if (!kalman_initialized[ch]) {{',
-            f'            kalman_x[ch][0] = raw[ch];',
-            f'            kalman_x[ch][1] = 0.0f;',
-            f'            kalman_P[ch][0][0] = kalman_R;',
-            f'            kalman_P[ch][0][1] = 0.0f;',
-            f'            kalman_P[ch][1][0] = 0.0f;',
-            f'            kalman_P[ch][1][1] = kalman_R;',
-            f'            kalman_initialized[ch] = 1;',
-            f'        }}',
-            f'',
-            f'        // --- Predict ---',
-            f'        float x0 = kalman_x[ch][0] + KALMAN_DT * kalman_x[ch][1];',
-            f'        float x1 = kalman_x[ch][1];',
-            f'',
-            f'        float P00 = kalman_P[ch][0][0] + KALMAN_DT * (kalman_P[ch][1][0] + kalman_P[ch][0][1]) + KALMAN_DT * KALMAN_DT * kalman_P[ch][1][1] + kalman_Q[0][0];',
-            f'        float P01 = kalman_P[ch][0][1] + KALMAN_DT * kalman_P[ch][1][1] + kalman_Q[0][1];',
-            f'        float P10 = kalman_P[ch][1][0] + KALMAN_DT * kalman_P[ch][1][1] + kalman_Q[1][0];',
-            f'        float P11 = kalman_P[ch][1][1] + kalman_Q[1][1];',
-            f'',
-            f'        // --- Update ---',
-            f'        float S = P00 + kalman_R;',
-            f'        float K0 = P00 / S;',
-            f'        float K1 = P10 / S;',
-            f'        float y = raw[ch] - x0;',
-            f'',
-            f'        kalman_x[ch][0] = x0 + K0 * y;',
-            f'        kalman_x[ch][1] = x1 + K1 * y;',
-            f'',
-            f'        kalman_P[ch][0][0] = (1.0f - K0) * P00;',
-            f'        kalman_P[ch][0][1] = (1.0f - K0) * P01;',
-            f'        kalman_P[ch][1][0] = P10 - K1 * P00;',
-            f'        kalman_P[ch][1][1] = P11 - K1 * P01;',
-            f'',
-            f'        raw[ch] = kalman_x[ch][0];  // filtered output',
-            f'    }}',
-            f'}}',
-        ]
-        return '\n'.join(lines) + '\n'
+        return f"""// Kalman filter: constant-velocity model per channel, per-window batch.
+// Q_scale={q}, R={r}, fs={fs} Hz, dt={dt:.6f} s
+// State re-initialised from window[0] each call — matches Python training init.
+static const float kalman_Q[2][2] = {{
+    {{{self._float_literal(q00)}, {self._float_literal(q01)}}},
+    {{{self._float_literal(q01)}, {self._float_literal(q11)}}}
+}};
+static const float KALMAN_R_VAL = {self._float_literal(r)};
+static const float KALMAN_DT_VAL = {self._float_literal(dt)};
+
+static void kalman_filter_window(float in[][N_CHANNELS], int n, float out[][N_CHANNELS]) {{
+    for (int ch = 0; ch < N_CHANNELS; ch++) {{
+        // Initialise from first sample (matches Python: x = [z[0], 0])
+        float x0 = in[0][ch];
+        float x1 = 0.0f;
+        float P00 = KALMAN_R_VAL, P01 = 0.0f, P10 = 0.0f, P11 = KALMAN_R_VAL;
+
+        for (int i = 0; i < n; i++) {{
+            // --- Predict ---
+            float px0 = x0 + KALMAN_DT_VAL * x1;
+            float px1 = x1;
+            float pP00 = P00 + KALMAN_DT_VAL * (P10 + P01) + KALMAN_DT_VAL * KALMAN_DT_VAL * P11 + kalman_Q[0][0];
+            float pP01 = P01 + KALMAN_DT_VAL * P11 + kalman_Q[0][1];
+            float pP10 = P10 + KALMAN_DT_VAL * P11 + kalman_Q[1][0];
+            float pP11 = P11 + kalman_Q[1][1];
+            // --- Update ---
+            float S = pP00 + KALMAN_R_VAL;
+            float K0 = pP00 / S;
+            float K1 = pP10 / S;
+            float innov = in[i][ch] - px0;
+            x0 = px0 + K0 * innov;
+            x1 = px1 + K1 * innov;
+            P00 = (1.0f - K0) * pP00;
+            P01 = (1.0f - K0) * pP01;
+            P10 = pP10 - K1 * pP00;
+            P11 = pP11 - K1 * pP01;
+            out[i][ch] = x0;
+        }}
+    }}
+}}
+
+"""
 
     def _get_logging_macros(self) -> str:
         """Generate platform-portable logging macros.
@@ -1107,10 +1116,14 @@ int extract_frequency_features(float* signal, int samples, float sampling_rate,
 
 """
 
+        if self._has_device_filter():
+            code += self._generate_iir_filter_implementation()
         if self._has_savgol_filter():
             code += self._generate_savgol_filter_code()
         if self._has_fft_filter():
             code += self._generate_fft_filter_code()
+        if self._has_kalman_filter():
+            code += self._generate_kalman_filter_implementation()
 
         code += """// Forward declaration for helper function
 int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx);
@@ -1128,8 +1141,13 @@ void extract_features(float sensor_data[][N_CHANNELS], int samples, float featur
         return;
     }
 
-    // Data pointer: apply preprocessing filters (SG, FFT) in sequence
+    // Data pointer: apply preprocessing chain (LPF → SavGol → FFT → Kalman)
     float (*d)[N_CHANNELS] = sensor_data;
+    #ifdef LPF_FILTFILT_ENABLED
+    static float _lpf_buf[WINDOW_SIZE][N_CHANNELS];
+    iir_filtfilt_window(d, samples, _lpf_buf);
+    d = _lpf_buf;
+    #endif
     #ifdef SAVGOL_ENABLED
     static float _sg_buf[WINDOW_SIZE][N_CHANNELS];
     savgol_smooth_window(d, samples, _sg_buf);
@@ -1139,6 +1157,11 @@ void extract_features(float sensor_data[][N_CHANNELS], int samples, float featur
     static float _fft_buf[WINDOW_SIZE][N_CHANNELS];
     fft_lowpass_window(d, samples, _fft_buf);
     d = _fft_buf;
+    #endif
+    #ifdef KALMAN_FILTER_ENABLED
+    static float _kalman_buf[WINDOW_SIZE][N_CHANNELS];
+    kalman_filter_window(d, samples, _kalman_buf);
+    d = _kalman_buf;
     #endif
 
     // Temporary arrays for magnitude values
@@ -1432,10 +1455,12 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         use_double = self.optimization == 'accuracy'
         acc_type = 'double' if use_double else 'float'
 
+        iir_code = self._generate_iir_filter_implementation() if self._has_device_filter() else ''
         savgol_code = self._generate_savgol_filter_code() if self._has_savgol_filter() else ''
         fft_code = self._generate_fft_filter_code() if self._has_fft_filter() else ''
+        kalman_code = self._generate_kalman_filter_implementation() if self._has_kalman_filter() else ''
 
-        return savgol_code + fft_code + f"""void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]) {{
+        return iir_code + savgol_code + fft_code + kalman_code + f"""void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]) {{
     // Per-axis feature extraction — 15 features per axis × 6 axes = 90 features
     // MUST match training feature extraction exactly regardless of optimization level.
     // Optimization: {self.optimization.upper()} ({'double-precision' if use_double else 'single-precision'} accumulation)
@@ -1446,8 +1471,13 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         return;
     }}
 
-    // Data pointer: apply preprocessing filters (SG, FFT) in sequence
+    // Data pointer: apply preprocessing chain (LPF → SavGol → FFT → Kalman)
     float (*d)[N_CHANNELS] = sensor_data;
+    #ifdef LPF_FILTFILT_ENABLED
+    static float _lpf_buf[WINDOW_SIZE][N_CHANNELS];
+    iir_filtfilt_window(d, samples, _lpf_buf);
+    d = _lpf_buf;
+    #endif
     #ifdef SAVGOL_ENABLED
     static float _sg_buf[WINDOW_SIZE][N_CHANNELS];
     savgol_smooth_window(d, samples, _sg_buf);
@@ -1457,6 +1487,11 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
     static float _fft_buf[WINDOW_SIZE][N_CHANNELS];
     fft_lowpass_window(d, samples, _fft_buf);
     d = _fft_buf;
+    #endif
+    #ifdef KALMAN_FILTER_ENABLED
+    static float _kalman_buf[WINDOW_SIZE][N_CHANNELS];
+    kalman_filter_window(d, samples, _kalman_buf);
+    d = _kalman_buf;
     #endif
 
     int feature_idx = 0;
@@ -1833,12 +1868,6 @@ void setup() {{
 
     // Initialize HAR model
     har_init();
-    #ifdef IIR_FILTER_ENABLED
-    iir_filter_reset();
-    #endif
-    #ifdef KALMAN_FILTER_ENABLED
-    kalman_filter_reset();
-    #endif
 
 {platform_code['imu_init']}
 
@@ -1855,25 +1884,8 @@ void loop() {{
 
 {platform_code['sensor_read']}
 
-        // Apply on-device IIR filter (matches training preprocessing)
-        #ifdef IIR_FILTER_ENABLED
-        {{
-            float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};
-            iir_filter_sample(raw_sample);
-            aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];
-            gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];
-        }}
-        #endif
-
-        // Apply on-device Kalman filter ({'exact parity with training' if self._has_kalman_parity() else 'device-only — model trained without Kalman'})
-        #ifdef KALMAN_FILTER_ENABLED
-        {{
-            float raw_sample[N_CHANNELS] = {{aX, aY, aZ, gX, gY, gZ}};
-            kalman_filter_sample(raw_sample);
-            aX = raw_sample[0]; aY = raw_sample[1]; aZ = raw_sample[2];
-            gX = raw_sample[3]; gY = raw_sample[4]; gZ = raw_sample[5];
-        }}
-        #endif
+        // Preprocessing (LPF, SavGol, FFT, Kalman) is applied per-window
+        // inside extract_features() — no per-sample filter calls needed here.
 
         // Store in buffer
         sensor_buffer[buffer_index][0] = aX;

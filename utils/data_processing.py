@@ -4,7 +4,7 @@ import pandas as pd
 import base64
 import io
 from sklearn.model_selection import train_test_split
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, filtfilt
 
 from config.config import SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE
 
@@ -67,7 +67,7 @@ def low_pass_filter(data, cutoff=5, fs=None, order=2):
     nyquist = 0.5 * fs
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    return pd.DataFrame(lfilter(b, a, data, axis=0), columns=data.columns)
+    return pd.DataFrame(filtfilt(b, a, data, axis=0), columns=data.columns)
 
 
 def fft_lowpass_filter(data, cutoff=10, fs=None):

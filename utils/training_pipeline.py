@@ -80,7 +80,7 @@ def create_model(model_type: str, **kwargs) -> EdgeMLModel:
 
     Args:
         model_type: One of 'random_forest', 'svm', 'neural_network',
-                    'pytorch_mlp', 'pytorch_cnn'
+                    'pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'
         **kwargs: Model-specific hyperparameters
 
     Returns:
@@ -91,7 +91,7 @@ def create_model(model_type: str, **kwargs) -> EdgeMLModel:
     """
     supported_models = [
         'random_forest', 'svm', 'neural_network',
-        'pytorch_mlp', 'pytorch_cnn',
+        'pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d',
     ]
 
     if model_type not in supported_models:
