@@ -216,3 +216,25 @@ def get_models_metadata_path(base_dir=None):
     if os.path.exists(old_path) and not os.path.exists(new_path):
         return old_path
     return new_path
+
+
+def resolve_working_dir(stored_path=None) -> str:
+    """Resolve a stored working-directory value to an absolute path.
+
+    The ``working-directory-store`` dcc.Store may contain either:
+    * An **absolute** path  (e.g. ``D:\\projects\\data``) — returned unchanged.
+    * A **relative** path   (e.g. ``persistent_data`` or ``my_project/data``)
+      — resolved relative to the application's ROOT_DIR so the project remains
+      portable when the whole folder is moved to another machine or drive.
+    * ``None`` / empty      — falls back to the default ``PERSISTENT_DIR``.
+
+    All callbacks should use ``resolve_working_dir(base_dir)`` instead of the
+    pattern ``if not base_dir: base_dir = PERSISTENT_DIR``.
+    """
+    if not stored_path:
+        return str(PERSISTENT_DIR)
+    p = Path(stored_path)
+    if p.is_absolute():
+        return str(p)
+    # Relative path: resolve against the application root
+    return str((ROOT_DIR / p).resolve())

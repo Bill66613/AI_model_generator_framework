@@ -7,7 +7,8 @@ from deployment import generate_deployment_code, analyze_resource_requirements, 
 from utils.model_training import EdgeMLModel, prepare_training_data, create_feature_vector
 from config.config import (
     PERSISTENT_DIR, METADATA_FILE, MODELS_DIR,
-    get_model_path, get_models_metadata_path, get_training_data_path
+    get_model_path, get_models_metadata_path, get_training_data_path,
+    resolve_working_dir
 )
 import os
 import json
@@ -127,8 +128,7 @@ def save_model_metadata(model_filename, model_info, base_dir=None):
         model_info: Dict with model info (model_type, timestamp, test_accuracy, etc.).
         base_dir: Base persistent-data directory. Defaults to PERSISTENT_DIR.
     """
-    if not base_dir:
-        base_dir = PERSISTENT_DIR
+    base_dir = resolve_working_dir(base_dir)
 
     models_dir = os.path.join(base_dir, 'models')
     # Ensure models directory exists
@@ -159,8 +159,7 @@ def load_trained_model_options(base_dir=None):
         list[dict]: List of dicts with 'label' and 'value' keys suitable for
         Dash dropdown ``options`` property.
     """
-    if not base_dir:
-        base_dir = PERSISTENT_DIR
+    base_dir = resolve_working_dir(base_dir)
 
     model_options = []
     try:
@@ -193,8 +192,7 @@ def load_training_data_summary(base_dir=None, dataset_name=None):
         dash.html.Div: A Dash HTML component showing dataset overview and
         activity class distribution, or a warning message if no data is found.
     """
-    if not base_dir:
-        base_dir = PERSISTENT_DIR
+    base_dir = resolve_working_dir(base_dir)
 
     try:
         training_dir = os.path.join(base_dir, 'training')
@@ -437,8 +435,7 @@ def register_callbacks(app):
     def enable_training_components(tab, base_dir):
         """Enable training components when training tab is active and load trained models."""
         # Use stored base directory or default to PERSISTENT_DIR
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         # Load available trained models using helper function
         model_options = load_trained_model_options(base_dir)
@@ -464,8 +461,7 @@ def register_callbacks(app):
     )
     def update_training_summary_from_fe_selector(dataset_name, base_dir):
         """Update the training data summary when a FE dataset is selected."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         return load_training_data_summary(base_dir, dataset_name=dataset_name)
 
     def create_training_results_display(model_info, evaluation_results, y_test, model_type, training_time):
@@ -928,8 +924,7 @@ def register_callbacks(app):
                         style={'color': 'orange'})
             ]), no_update)
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         # Feature opts for metadata (training uses pre-computed features from CSV)
         # Auto-detect feature configuration from actual feature column names
@@ -1231,14 +1226,12 @@ def register_callbacks(app):
 
     def perform_basic_training(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None, base_dir=None, feature_opts=None, fe_config=None):
         """Perform basic model training with optional validation set."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         if feature_opts is None:
             feature_opts = {'orientation_robust': True,
                             'include_per_axis': False, 'include_frequency': True}
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         start_time = time.time()
 
@@ -1324,8 +1317,7 @@ def register_callbacks(app):
 
     def perform_hyperparameter_optimization(model, X_train, X_test, y_train, y_test, model_type, X_val=None, y_val=None, base_dir=None, feature_opts=None, fe_config=None):
         """Perform hyperparameter optimization with optional validation set."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         if feature_opts is None:
             feature_opts = {'orientation_robust': True,
@@ -1584,8 +1576,7 @@ def register_callbacks(app):
 
     def perform_cross_validation(model, X_train, y_train, model_type, base_dir=None, feature_opts=None, fe_config=None):
         """Perform cross-validation analysis and optionally save the trained model."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         if feature_opts is None:
             feature_opts = {'orientation_robust': True,
@@ -2943,8 +2934,7 @@ def register_callbacks(app):
 
     def get_training_session_stats(base_dir=None):
         """Get current training session statistics."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         try:
             # Load trained models metadata

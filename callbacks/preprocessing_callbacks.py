@@ -12,7 +12,8 @@ from config.config import (
     PERSISTENT_DIR, METADATA_FILE, DATASETS_DIR, WINDOWS_DIR, TRAINING_DIR, MODELS_DIR,
     SENSOR_COLUMNS, ACCEL_COLUMNS, GYRO_COLUMNS,
     DEFAULT_SAMPLING_RATE, get_sampling_rate_from_metadata,
-    get_dataset_path, get_window_path, get_window_pattern, get_training_data_path
+    get_dataset_path, get_window_path, get_window_pattern, get_training_data_path,
+    resolve_working_dir
 )
 from utils.data_processing import clean_data, low_pass_filter, detect_sensor_columns
 
@@ -191,8 +192,7 @@ def register_callbacks(app):
     def populate_dataset_selector(tab, base_dir):
         """Populate the dataset selector with available datasets."""
         if tab == 'tab-2':
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
             if os.path.exists(metadata_file):
                 with open(metadata_file, 'r') as f:
@@ -213,8 +213,7 @@ def register_callbacks(app):
         if not dataset_name:
             return {}, html.Div("Select a dataset to view status", style={'color': '#6c757d', 'font-style': 'italic'})
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
         with open(metadata_file, 'r') as f:
@@ -441,8 +440,7 @@ def register_callbacks(app):
         if not dataset_name:
             return no_update, no_update, no_update
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         datasets_dir = os.path.join(base_dir, 'datasets')
 
         file_path = os.path.join(datasets_dir, dataset_name)
@@ -565,8 +563,7 @@ def register_callbacks(app):
         if not (dataset_name and processed_figure):
             return {}
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         datasets_dir = os.path.join(base_dir, 'datasets')
 
         df = pd.DataFrame(cleaned_smoothed)
@@ -607,8 +604,7 @@ def register_callbacks(app):
         if not (dataset_name and time_window_span):
             return {}, []
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
         with open(metadata_file, 'r') as f:
@@ -887,8 +883,7 @@ def register_callbacks(app):
             current_windows = []
 
         # Load dataset info for window calculations
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
         with open(metadata_file, 'r') as f:
@@ -1058,8 +1053,7 @@ def register_callbacks(app):
             return no_update, no_update
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -1351,8 +1345,7 @@ def register_callbacks(app):
 
         try:
             # Load data
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -1606,8 +1599,7 @@ def register_callbacks(app):
             all_selected_data = []
 
             # Use working directory for window storage
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             windows_dir = os.path.join(base_dir, 'windows')
             os.makedirs(windows_dir, exist_ok=True)
 
@@ -1746,8 +1738,7 @@ def register_callbacks(app):
 
         print("Current windows:", current_windows)
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
         with open(metadata_file, 'r') as f:
@@ -2005,8 +1996,7 @@ def register_callbacks(app):
             return [], None
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2236,8 +2226,7 @@ def register_callbacks(app):
                 f"Deleted {'sliding' if is_sliding else 'manual'} window file: {selected_file_path}")
 
             # Update metadata
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2338,8 +2327,7 @@ def register_callbacks(app):
                     print(f"Deleted: {file_path}")
 
             # Update metadata to remove references to deleted files
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2586,8 +2574,7 @@ def register_callbacks(app):
             return no_update
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:

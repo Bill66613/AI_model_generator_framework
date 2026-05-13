@@ -12,7 +12,7 @@ import serial.tools.list_ports
 from pathlib import Path
 import traceback
 
-from config.config import MODELS_DIR, PERSISTENT_DIR, get_model_path, get_models_metadata_path
+from config.config import MODELS_DIR, PERSISTENT_DIR, get_model_path, get_models_metadata_path, resolve_working_dir
 from utils.model_training import EdgeMLModel
 from utils.toolchain_discovery import (
     find_arduino_cli, find_platformio_cli, get_tool_version,
@@ -558,8 +558,7 @@ def register_callbacks(app):
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             models_metadata_file = os.path.join(
@@ -660,8 +659,7 @@ def register_callbacks(app):
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             models_metadata_file = os.path.join(
@@ -1005,8 +1003,7 @@ def register_callbacks(app):
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             models_metadata_file = os.path.join(
@@ -1366,8 +1363,7 @@ def register_callbacks(app):
         if tab != 'tab-5':
             return no_update
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         generated_dir = os.path.join(base_dir, 'generated')
 
         if not os.path.isdir(generated_dir):
@@ -1618,8 +1614,7 @@ def register_callbacks(app):
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             models_metadata_file = os.path.join(

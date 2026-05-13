@@ -15,7 +15,7 @@ import glob
 
 from config.config import (
     PERSISTENT_DIR, METADATA_FILE, WINDOWS_DIR,
-    SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE
+    SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE, resolve_working_dir
 )
 from utils.model_training import extract_time_domain_features, extract_frequency_domain_features, create_feature_vector
 from utils.data_augmentation import augment_windows, AUGMENTATION_METHODS
@@ -35,8 +35,7 @@ def register_callbacks(app):
         Uses the working directory from the store.
         """
         # Use stored base directory or default to PERSISTENT_DIR
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         metadata_file = os.path.join(base_dir, 'metadata.json')
         if not os.path.exists(metadata_file):
@@ -81,8 +80,7 @@ def register_callbacks(app):
             return html.Div("No labels selected", style={'color': '#999', 'font-style': 'italic'})
 
         # Use stored base directory or default to PERSISTENT_DIR
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         metadata_file = os.path.join(base_dir, 'metadata.json')
         if not os.path.exists(metadata_file):
@@ -229,13 +227,18 @@ def register_callbacks(app):
         [Output('global-test-split-display', 'children'),
          Output('execute-feature-engineering-btn', 'disabled')],
         [Input('global-train-split', 'value'),
-         Input('global-val-split', 'value')]
+         Input('global-val-split', 'value'),
+         Input('split-mode-selector', 'value')]
     )
-    def calculate_test_split(train_ratio, val_ratio):
+    def calculate_test_split(train_ratio, val_ratio, split_mode):
         """
         Calculate and display the test split percentage.
-        Disables the execute button when the split is invalid.
+        Disables the execute button when the split is invalid (auto mode only).
         """
+        # In manual mode the ratios are irrelevant — never disable the button
+        if split_mode == 'manual':
+            return "—", False
+
         if train_ratio is None or val_ratio is None:
             return "--", True
 
@@ -282,6 +285,188 @@ def register_callbacks(app):
         )
 
     @app.callback(
+        Output('auto-split-panel', 'style'),
+        Output('manual-split-panel', 'style'),
+        Input('split-mode-selector', 'value'),
+    )
+    def toggle_split_panels(mode):
+        """Show/hide auto vs manual split panels."""
+        if mode == 'manual':
+            return {'display': 'none'}, {'display': 'block'}
+        return {'display': 'block'}, {'display': 'none'}
+
+    @app.callback(
+        Output('manual-split-table-container', 'children'),
+        Output('manual-split-store', 'data'),
+        Output('manual-split-summary', 'children'),
+        Input('load-manual-split-btn', 'n_clicks'),
+        Input('auto-assign-remaining-btn', 'n_clicks'),
+        State('activity-labels-selector', 'value'),
+        State('working-directory-store', 'data'),
+        State('manual-split-store', 'data'),
+        prevent_initial_call=True
+    )
+    def load_manual_split_windows(load_clicks, auto_clicks, selected_labels, base_dir, existing_assignments):
+        """
+        Populate the manual-split table with all windows from selected labels.
+        Each row shows: window filename, label, and a split-assignment dropdown.
+        Existing assignments are preserved on refresh.
+        """
+        if not selected_labels:
+            return (
+                html.P("⚠️ Select at least one activity label first.",
+                       style={'color': '#ff9800', 'font-style': 'italic'}),
+                existing_assignments or {},
+                ""
+            )
+
+        base_dir = resolve_working_dir(base_dir)
+        metadata_file = os.path.join(base_dir, 'metadata.json')
+        if not os.path.exists(metadata_file):
+            return (
+                html.P("No metadata found.", style={'color': '#dc3545'}),
+                existing_assignments or {},
+                ""
+            )
+
+        try:
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+        except Exception as e:
+            return html.P(f"Error reading metadata: {e}", style={'color': '#dc3545'}), existing_assignments or {}, ""
+
+        assignments = dict(existing_assignments or {})
+
+        # Collect all window files across selected labels
+        rows = []
+        for dataset_name, dataset_info in metadata.items():
+            label = dataset_info.get('label', dataset_name.replace('.csv', ''))
+            if label not in selected_labels:
+                continue
+            for wf in dataset_info.get('dragged_samples', []):
+                if os.path.exists(wf):
+                    rows.append({'path': wf, 'label': label,
+                                 'filename': os.path.basename(wf)})
+
+        if not rows:
+            return (
+                html.P("No windows found for selected labels.",
+                       style={'color': '#ff9800', 'font-style': 'italic'}),
+                assignments,
+                ""
+            )
+
+        # If "Auto-assign remaining" was clicked, distribute unassigned windows
+        triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else ''
+        if triggered_id == 'auto-assign-remaining-btn':
+            unassigned = [r for r in rows if assignments.get(r['path'], 'unassigned') == 'unassigned']
+            # Stratified 70/15/15 among unassigned per label
+            import math, random
+            label_groups = {}
+            for r in unassigned:
+                label_groups.setdefault(r['label'], []).append(r['path'])
+            for lbl, paths in label_groups.items():
+                random.shuffle(paths)
+                n = len(paths)
+                n_train = max(1, math.floor(n * 0.70))
+                n_val = max(0, math.floor(n * 0.15))
+                for i, p in enumerate(paths):
+                    if i < n_train:
+                        assignments[p] = 'train'
+                    elif i < n_train + n_val:
+                        assignments[p] = 'val'
+                    else:
+                        assignments[p] = 'test'
+
+        # Build DataTable rows
+        table_rows = []
+        for r in rows:
+            table_rows.append({
+                'filename': r['filename'],
+                'label': r['label'],
+                'split': assignments.get(r['path'], 'unassigned'),
+                'path': r['path'],
+            })
+
+        table = dash_table.DataTable(
+            id='manual-split-datatable',
+            data=table_rows,
+            columns=[
+                {'name': 'Filename', 'id': 'filename', 'editable': False},
+                {'name': 'Label', 'id': 'label', 'editable': False},
+                {
+                    'name': 'Assign to Set',
+                    'id': 'split',
+                    'editable': True,
+                    'presentation': 'dropdown',
+                },
+                {'name': 'path', 'id': 'path', 'editable': False},
+            ],
+            dropdown={
+                'split': {
+                    'options': [
+                        {'label': '🏋️ Train', 'value': 'train'},
+                        {'label': '🔍 Val', 'value': 'val'},
+                        {'label': '🧪 Test', 'value': 'test'},
+                        {'label': '— Unassigned', 'value': 'unassigned'},
+                    ]
+                }
+            },
+            style_cell={'textAlign': 'left', 'padding': '8px',
+                        'overflow': 'hidden', 'textOverflow': 'ellipsis', 'maxWidth': '300px'},
+            style_header={'backgroundColor': '#2E86AB', 'color': 'white', 'fontWeight': 'bold'},
+            style_data_conditional=[
+                {'if': {'filter_query': '{split} = "train"'}, 'backgroundColor': '#e8f5e9'},
+                {'if': {'filter_query': '{split} = "val"'}, 'backgroundColor': '#fff8e1'},
+                {'if': {'filter_query': '{split} = "test"'}, 'backgroundColor': '#e3f2fd'},
+                {'if': {'filter_query': '{split} = "unassigned"'}, 'backgroundColor': '#fafafa', 'color': '#999'},
+            ],
+            style_data={'whiteSpace': 'normal'},
+            page_size=20,
+            sort_action='native',
+            filter_action='native',
+            tooltip_duration=None,
+            column_selectable=False,
+            row_selectable='multi',
+            selected_rows=[],
+        )
+
+        summary = _build_manual_split_summary(table_rows)
+        return table, assignments, summary
+
+    @app.callback(
+        Output('manual-split-store', 'data', allow_duplicate=True),
+        Output('manual-split-summary', 'children', allow_duplicate=True),
+        Input('manual-split-datatable', 'data'),
+        prevent_initial_call=True
+    )
+    def sync_manual_split_store(table_data):
+        """Sync DataTable edits back into the manual-split-store."""
+        if not table_data:
+            return {}, ""
+        assignments = {row['path']: row['split'] for row in table_data if row.get('path')}
+        return assignments, _build_manual_split_summary(table_data)
+
+    def _build_manual_split_summary(table_rows):
+        """Return a small badge row showing Train/Val/Test/Unassigned counts."""
+        counts = {'train': 0, 'val': 0, 'test': 0, 'unassigned': 0}
+        for r in table_rows:
+            counts[r.get('split', 'unassigned')] = counts.get(r.get('split', 'unassigned'), 0) + 1
+        total = sum(counts.values())
+        badge_style = lambda bg: {
+            'display': 'inline-block', 'padding': '4px 12px', 'border-radius': '12px',
+            'font-weight': 'bold', 'margin-right': '8px', 'font-size': '13px',
+            'background': bg, 'color': 'white'
+        }
+        return html.Div([
+            html.Span(f"🏋️ Train: {counts['train']}", style=badge_style('#28a745')),
+            html.Span(f"🔍 Val: {counts['val']}", style=badge_style('#ffc107')),
+            html.Span(f"🧪 Test: {counts['test']}", style=badge_style('#17a2b8')),
+            html.Span(f"— Unassigned: {counts['unassigned']}", style=badge_style('#6c757d')),
+            html.Span(f" / {total} total", style={'color': '#555', 'font-size': '13px'}),
+        ])
+
+    @app.callback(
         [Output('feature-engineering-results', 'children'),
          Output('engineered-dataset-stats', 'children'),
          Output('engineered-dataset-store', 'data')],
@@ -299,14 +484,17 @@ def register_callbacks(app):
          State('augmentation-methods', 'value'),
          State('augmentation-factor', 'value'),
          State('augmentation-static-labels', 'value'),
-         State('preprocessing-config', 'data')],
+         State('preprocessing-config', 'data'),
+         State('split-mode-selector', 'value'),
+         State('manual-split-store', 'data')],
         prevent_initial_call=True
     )
     def execute_feature_engineering(n_clicks, selected_labels, feature_method,
                                     normalization_method, target_window_size, sampling_rate,
                                     train_ratio, val_ratio, random_state, base_dir,
                                     augmentation_enabled, aug_methods, aug_factor,
-                                    aug_static_labels_str, preprocess_config):
+                                    aug_static_labels_str, preprocess_config,
+                                    split_mode, manual_assignments):
         """
         Main feature engineering executor.
         Applies consistent settings across all selected activity labels.
@@ -327,21 +515,28 @@ def register_callbacks(app):
             return html.Div("⚠️ Please select at least one activity label",
                             style={'color': '#ff9800', 'padding': '15px'}), "", {}
 
-        # Validate split ratios
-        if train_ratio is None or val_ratio is None:
-            return html.Div("⚠️ Please set train and validation split ratios",
-                            style={'color': '#ff9800', 'padding': '15px'}), "", {}
-        test_ratio = 1.0 - train_ratio - val_ratio
-        if test_ratio < 0.01:
-            return html.Div(
-                f"⚠️ Invalid split: Train ({train_ratio*100:.0f}%) + "
-                f"Val ({val_ratio*100:.0f}%) leaves no room for test set",
-                style={'color': '#dc3545', 'padding': '15px'}), "", {}
+        # Validate split ratios (only needed for auto mode)
+        if split_mode != 'manual':
+            if train_ratio is None or val_ratio is None:
+                return html.Div("⚠️ Please set train and validation split ratios",
+                                style={'color': '#ff9800', 'padding': '15px'}), "", {}
+            test_ratio = 1.0 - train_ratio - val_ratio
+            if test_ratio < 0.01:
+                return html.Div(
+                    f"⚠️ Invalid split: Train ({train_ratio*100:.0f}%) + "
+                    f"Val ({val_ratio*100:.0f}%) leaves no room for test set",
+                    style={'color': '#dc3545', 'padding': '15px'}), "", {}
+        else:
+            # Provide defaults so downstream code can still access these variables
+            if train_ratio is None:
+                train_ratio = 0.7
+            if val_ratio is None:
+                val_ratio = 0.15
+            test_ratio = 1.0 - train_ratio - val_ratio
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
@@ -352,6 +547,7 @@ def register_callbacks(app):
             # Step 1: Load all windows from all selected labels
             all_windows = []
             all_labels = []
+            all_window_paths = []   # parallel list of source file paths (for manual split)
             label_window_counts = {}
 
             for dataset_name, dataset_info in metadata.items():
@@ -365,6 +561,7 @@ def register_callbacks(app):
                         df_window = pd.read_csv(window_file)
                         all_windows.append(df_window)
                         all_labels.append(label)
+                        all_window_paths.append(window_file)
 
                     label_window_counts[label] = label_window_counts.get(
                         label, 0) + len(window_files)
@@ -390,8 +587,9 @@ def register_callbacks(app):
             padded_windows = []
             padding_stats = {'padded': 0, 'discarded': 0, 'original_size': 0}
 
-            temp_labels = []  # Track labels for non-discarded windows
-            for df_window, lbl in zip(all_windows, all_labels):
+            temp_labels = []   # Track labels for non-discarded windows
+            temp_paths  = []   # Track source paths for non-discarded windows
+            for df_window, lbl, wpath in zip(all_windows, all_labels, all_window_paths):
                 current_size = len(df_window)
                 if current_size < min_window_samples:
                     # Discard windows that are too short
@@ -417,8 +615,10 @@ def register_callbacks(app):
 
                 padding_stats['original_size'] = current_size
                 temp_labels.append(lbl)
+                temp_paths.append(wpath)
 
             all_labels = temp_labels
+            _window_paths_for_manual = temp_paths  # used in Step 4 manual split
 
             if not padded_windows:
                 return html.Div(
@@ -552,33 +752,91 @@ def register_callbacks(app):
             raw_labels = np.array(all_labels)
 
             # Step 4: Split AFTER combining (prevents data leakage)
-            test_ratio = 1.0 - train_ratio - val_ratio
+            # Two modes: auto (ratio-based) or manual (per-window assignments)
+            if split_mode == 'manual' and manual_assignments:
+                # --- Manual split ---
+                # Map each window file path → set assignment.
+                # The window_file_paths list was built in Step 1 (in the same
+                # order as padded_windows after augmentation – augmented copies
+                # are not individually tracked, so we append them to 'train').
+                n_original = original_window_count  # before augmentation
 
-            # Use indices to keep raw windows in sync with feature splits
-            indices = np.arange(len(X))
+                # Build per-sample assignment arrays (original windows only)
+                idx_train, idx_val, idx_test = [], [], []
+                for i, wpath in enumerate(_window_paths_for_manual):
+                    assigned = manual_assignments.get(wpath, 'unassigned')
+                    if assigned == 'train':
+                        idx_train.append(i)
+                    elif assigned == 'val':
+                        idx_val.append(i)
+                    elif assigned == 'test':
+                        idx_test.append(i)
+                    # 'unassigned' → excluded
 
-            # First split: train+val vs test
-            idx_trainval, idx_test, y_trainval, y_test = train_test_split(
-                indices, y, test_size=test_ratio, random_state=random_state, stratify=y
-            )
-            X_trainval, X_test = X[idx_trainval], X[idx_test]
-            rw_trainval, rw_test = raw_windows[idx_trainval], raw_windows[idx_test]
+                # Augmented copies (indices >= n_original) always go to train
+                n_aug = len(X) - n_original
+                idx_train.extend(range(n_original, n_original + n_aug))
 
-            # Second split: train vs val
-            if val_ratio > 0:
-                val_ratio_adjusted = val_ratio / (train_ratio + val_ratio)
-                sub_idx_train, sub_idx_val, y_train, y_val = train_test_split(
-                    np.arange(len(X_trainval)), y_trainval,
-                    test_size=val_ratio_adjusted,
-                    random_state=random_state, stratify=y_trainval
-                )
-                X_train, X_val = X_trainval[sub_idx_train], X_trainval[sub_idx_val]
-                rw_train, rw_val = rw_trainval[sub_idx_train], rw_trainval[sub_idx_val]
+                if not idx_train and not idx_test:
+                    return html.Div(
+                        "⚠️ Manual split: no windows assigned to Train or Test. "
+                        "Please assign windows in Step 4 before running.",
+                        style={'color': '#dc3545', 'padding': '15px'}), "", {}
+
+                # Fall back to auto if user only assigned train (no test)
+                if not idx_test:
+                    return html.Div(
+                        "⚠️ Manual split: no windows assigned to Test set. "
+                        "Assign at least one window to Test.",
+                        style={'color': '#dc3545', 'padding': '15px'}), "", {}
+
+                idx_train = np.array(idx_train)
+                idx_val   = np.array(idx_val)   if idx_val   else np.array([], dtype=int)
+                idx_test  = np.array(idx_test)
+
+                X_train, y_train = X[idx_train], y[idx_train]
+                X_val,   y_val   = (X[idx_val], y[idx_val]) if len(idx_val) else (np.array([]), np.array([]))
+                X_test,  y_test  = X[idx_test], y[idx_test]
+                rw_train = raw_windows[idx_train]
+                rw_val   = raw_windows[idx_val]   if len(idx_val) else np.array([])
+                rw_test  = raw_windows[idx_test]
+
+                # Compute effective ratios for metadata
+                total_assigned = len(idx_train) + len(idx_val) + len(idx_test)
+                train_ratio  = len(idx_train) / total_assigned if total_assigned else 0.7
+                val_ratio    = len(idx_val)   / total_assigned if total_assigned else 0.15
+                test_ratio   = len(idx_test)  / total_assigned if total_assigned else 0.15
+                split_note   = "manual"
             else:
-                X_train, y_train = X_trainval, y_trainval
-                rw_train = rw_trainval
-                X_val, y_val = np.array([]), np.array([])
-                rw_val = np.array([])
+                # --- Auto split (ratio-based) ---
+                test_ratio = 1.0 - train_ratio - val_ratio
+
+                # Use indices to keep raw windows in sync with feature splits
+                indices = np.arange(len(X))
+
+                # First split: train+val vs test
+                idx_trainval, idx_test, y_trainval, y_test = train_test_split(
+                    indices, y, test_size=test_ratio, random_state=random_state, stratify=y
+                )
+                X_trainval, X_test = X[idx_trainval], X[idx_test]
+                rw_trainval, rw_test = raw_windows[idx_trainval], raw_windows[idx_test]
+
+                # Second split: train vs val
+                if val_ratio > 0:
+                    val_ratio_adjusted = val_ratio / (train_ratio + val_ratio)
+                    sub_idx_train, sub_idx_val, y_train, y_val = train_test_split(
+                        np.arange(len(X_trainval)), y_trainval,
+                        test_size=val_ratio_adjusted,
+                        random_state=random_state, stratify=y_trainval
+                    )
+                    X_train, X_val = X_trainval[sub_idx_train], X_trainval[sub_idx_val]
+                    rw_train, rw_val = rw_trainval[sub_idx_train], rw_trainval[sub_idx_val]
+                else:
+                    X_train, y_train = X_trainval, y_trainval
+                    rw_train = rw_trainval
+                    X_val, y_val = np.array([]), np.array([])
+                    rw_val = np.array([])
+                split_note = "auto"
 
             # Step 5: Save results to files
             # Create training directory if it doesn't exist
@@ -693,6 +951,7 @@ def register_callbacks(app):
                 'val_split': val_ratio,
                 'test_split': test_ratio,
                 'random_state': random_state,
+                'split_mode': split_note,
                 'augmentation': {
                     'enabled': aug_stats is not None and 'error' not in (aug_stats or {}),
                     'methods': aug_methods if aug_stats else [],
@@ -794,6 +1053,12 @@ def register_callbacks(app):
             else:
                 aug_li = html.Li("Data augmentation: OFF")
 
+            split_desc = (
+                f"Manual ({len(idx_train)} train / {len(idx_val)} val / {len(idx_test)} test)"
+                if split_note == 'manual'
+                else f"Auto {train_ratio*100:.0f}% / {val_ratio*100:.0f}% / {test_ratio*100:.0f}%"
+            )
+
             success_msg = html.Div([
                 html.H4("✅ Feature Engineering Complete!",
                         style={'color': '#28a745'}),
@@ -808,8 +1073,7 @@ def register_callbacks(app):
                         f"Features extracted: {len(feature_names)} features using '{feature_method}' method"),
                     html.Li(
                         f"Normalization: {normalization_method.title() if normalization_method != 'none' else 'None'}"),
-                    html.Li(
-                        f"Train/Val/Test split: {train_ratio*100:.0f}% / {val_ratio*100:.0f}% / {test_ratio*100:.0f}%"),
+                    html.Li(f"Train/Val/Test split: {split_desc}"),
                     html.Li(f"Random state: {random_state}"),
                     html.Li([html.Strong("💾 Saved to: "), f"{training_dir}\\"])
                 ])
