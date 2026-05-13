@@ -1,9 +1,10 @@
 # utils/data_processing.py
+import numpy as np
 import pandas as pd
 import base64
 import io
 from sklearn.model_selection import train_test_split
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, lfilter
 
 from config.config import SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE
 
@@ -66,7 +67,36 @@ def low_pass_filter(data, cutoff=5, fs=None, order=2):
     nyquist = 0.5 * fs
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    return pd.DataFrame(filtfilt(b, a, data, axis=0), columns=data.columns)
+    return pd.DataFrame(lfilter(b, a, data, axis=0), columns=data.columns)
+
+
+def fft_lowpass_filter(data, cutoff=10, fs=None):
+    """Apply a brick-wall FFT low-pass filter column-wise.
+
+    Computes the real FFT of each numeric column, zeroes out all frequency
+    bins at or above *cutoff* Hz, then applies the inverse FFT.  This is an
+    ideal (brick-wall) low-pass filter with no phase distortion and no
+    filter-order trade-offs.
+
+    Matches the device C++ ``fft_lowpass_window()`` exactly: both keep bins
+    0 .. ceil(cutoff * N / fs) - 1 and discard the rest.
+
+    Args:
+        data: DataFrame of numeric columns.
+        cutoff: Cutoff frequency in Hz (first bin to zero out).
+        fs: Sampling frequency in Hz.  Defaults to ``DEFAULT_SAMPLING_RATE``.
+    """
+    if fs is None:
+        fs = DEFAULT_SAMPLING_RATE
+    result = data.copy()
+    n = len(data)
+    cutoff_bin = max(1, int(np.ceil(cutoff * n / fs)))
+    for col in data.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns:
+        x = data[col].values.astype(float)
+        X = np.fft.rfft(x)          # bins 0 .. N//2
+        X[cutoff_bin:] = 0.0        # zero bins >= cutoff_bin
+        result[col] = np.fft.irfft(X, n=n)
+    return result
 
 
 def kalman_filter(data, process_noise=1e-3, measurement_noise=1e-1, fs=None):

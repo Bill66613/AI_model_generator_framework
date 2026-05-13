@@ -555,6 +555,74 @@ const char* get_activity_name(int class_id) {{
         """Return True if Kalman was also used during training (exact parity)."""
         return bool(self.preprocessing.get('kalman_filter'))
 
+    # ── FFT low-pass filter generation ──────────────────────────────────
+
+    def _has_fft_filter(self) -> bool:
+        """Return True if training used FFT brick-wall low-pass filtering."""
+        return bool(self.preprocessing.get('fft_filter'))
+
+    def _generate_fft_filter_code(self) -> str:
+        """Generate C++ per-window FFT brick-wall low-pass filter.
+
+        Uses Direct DFT + IDFT, keeping only bins 0 .. cutoff_bin-1 per
+        channel.  This exactly matches the Python training step:
+            numpy.fft.rfft → X[cutoff_bin:] = 0 → numpy.fft.irfft
+
+        The computation cost is O(N * cutoff_bin) per channel.  For
+        cutoff=10 Hz, N=200, fs=100 Hz: cutoff_bin=20 → ~24 K FP ops
+        for all 6 channels, well within the ESP32 budget.
+        """
+        cutoff_hz = float(self.preprocessing.get('fft_cutoff_hz', 10))
+        n = self.window_size
+        fs = self.sampling_rate
+        import math
+        cutoff_bin = max(1, math.ceil(cutoff_hz * n / fs))
+
+        return f"""// FFT brick-wall low-pass filter (matches Python numpy.fft training preprocessing)
+// Cutoff: {cutoff_hz} Hz → bin {cutoff_bin} (N={n}, fs={fs} Hz)
+// Keeps bins 0..{cutoff_bin - 1}; zeroes bins {cutoff_bin}..N/2.
+#define FFT_FILTER_ENABLED 1
+#define FFT_CUTOFF_BIN {cutoff_bin}
+
+// Apply FFT low-pass filter in-place on a copy.
+// Forward DFT (only cutoff_bin bins computed) + IDFT using conjugate symmetry.
+static void fft_lowpass_window(float in[][N_CHANNELS], int n, float out[][N_CHANNELS]) {{
+    // Scratch arrays for positive-frequency DFT bins (static → BSS, no stack pressure)
+    static float X_re[FFT_CUTOFF_BIN];
+    static float X_im[FFT_CUTOFF_BIN];
+    const float two_pi_over_n = 6.283185307f / (float)n;
+    const float inv_n         = 1.0f / (float)n;
+
+    for (int ch = 0; ch < N_CHANNELS; ch++) {{
+        // --- Forward DFT: compute only bins 0 .. FFT_CUTOFF_BIN-1 ---
+        for (int k = 0; k < FFT_CUTOFF_BIN; k++) {{
+            float re = 0.0f, im = 0.0f;
+            float angle_step = two_pi_over_n * (float)k;
+            for (int i = 0; i < n; i++) {{
+                float angle = angle_step * (float)i;
+                re += in[i][ch] * cosf(angle);
+                im -= in[i][ch] * sinf(angle);
+            }}
+            X_re[k] = re;
+            X_im[k] = im;
+        }}
+
+        // --- Inverse DFT (conjugate symmetry for real output) ---
+        // x[i] = (1/N) * [ X_re[0] + 2 * sum_{{k=1}}^{{cutoff_bin-1}} (X_re[k]*cos - X_im[k]*sin) ]
+        for (int i = 0; i < n; i++) {{
+            float val = X_re[0];  // DC term (k=0, always real)
+            float n_step = two_pi_over_n * (float)i;
+            for (int k = 1; k < FFT_CUTOFF_BIN; k++) {{
+                float angle = (float)k * n_step;
+                val += 2.0f * (X_re[k] * cosf(angle) - X_im[k] * sinf(angle));
+            }}
+            out[i][ch] = val * inv_n;
+        }}
+    }}
+}}
+
+"""
+
     def _generate_kalman_filter_declarations(self) -> str:
         """Generate Kalman filter function declarations for the header."""
         if not self._has_kalman_filter():
@@ -569,6 +637,61 @@ const char* get_activity_name(int class_id) {{
             'void kalman_filter_sample(float raw[N_CHANNELS]);\n'
             'void kalman_filter_reset(void);\n'
         )
+
+    # ── Savitzky-Golay filter generation ────────────────────────────────
+
+    def _has_savgol_filter(self) -> bool:
+        """Return True if training used Savitzky-Golay smoothing."""
+        return bool(self.preprocessing.get('savgol_filter'))
+
+    def _generate_savgol_filter_code(self) -> str:
+        """Generate C++ Savitzky-Golay FIR helper applied per window buffer.
+
+        Computes SG coefficients via scipy to exactly match training's
+        ``scipy.signal.savgol_filter()``.  Applied as a symmetric convolution
+        with edge-clamping to the full window buffer before feature extraction.
+        Edge-clamping matches scipy's ``mode='nearest'`` (< 2 samples differ
+        from ``mode='interp'`` for a 200-sample window — negligible).
+        """
+        window_length = int(self.preprocessing.get('savgol_window_length', 5))
+        polyorder = int(self.preprocessing.get('savgol_polyorder', 2))
+        try:
+            from scipy.signal import savgol_coeffs
+            coeffs = savgol_coeffs(window_length, polyorder)
+        except ImportError:
+            return '// WARNING: scipy not available — Savitzky-Golay filter not generated\n'
+
+        half_win = window_length // 2
+        coeffs_str = ', '.join(f'{c:.8f}f' for c in coeffs)
+
+        return f"""// Savitzky-Golay window smoothing (matches training preprocessing)
+// Parameters: window_length={window_length}, polyorder={polyorder}
+// FIR coefficients: [{coeffs_str}]
+// Applied to the full window buffer before feature extraction.
+#define SAVGOL_ENABLED 1
+#define SAVGOL_WINDOW_LEN {window_length}
+#define SAVGOL_HALF_WIN   {half_win}
+
+static const float savgol_kernel[SAVGOL_WINDOW_LEN] = {{{coeffs_str}}};
+
+// Apply SG smoothing in-place on a copy; writes result into out[][].
+// Edge handling: clamp (repeat first/last value) — matches scipy nearest mode.
+static void savgol_smooth_window(float in[][N_CHANNELS], int samples, float out[][N_CHANNELS]) {{
+    for (int i = 0; i < samples; i++) {{
+        for (int ch = 0; ch < N_CHANNELS; ch++) {{
+            float acc = 0.0f;
+            for (int k = 0; k < SAVGOL_WINDOW_LEN; k++) {{
+                int src = i - SAVGOL_HALF_WIN + k;
+                if (src < 0)       src = 0;
+                if (src >= samples) src = samples - 1;
+                acc += savgol_kernel[k] * in[src][ch];
+            }}
+            out[i][ch] = acc;
+        }}
+    }}
+}}
+
+"""
 
     def _generate_kalman_filter_implementation(self) -> str:
         """Generate C++ Kalman filter implementation.
@@ -968,6 +1091,11 @@ int extract_frequency_features(float* signal, int samples, float sampling_rate,
 
 """
 
+        if self._has_savgol_filter():
+            code += self._generate_savgol_filter_code()
+        if self._has_fft_filter():
+            code += self._generate_fft_filter_code()
+
         code += """// Forward declaration for helper function
 int extract_magnitude_stats(float* mag, int samples, float* features, int start_idx);
 
@@ -984,6 +1112,19 @@ void extract_features(float sensor_data[][N_CHANNELS], int samples, float featur
         return;
     }
 
+    // Data pointer: apply preprocessing filters (SG, FFT) in sequence
+    float (*d)[N_CHANNELS] = sensor_data;
+    #ifdef SAVGOL_ENABLED
+    static float _sg_buf[WINDOW_SIZE][N_CHANNELS];
+    savgol_smooth_window(d, samples, _sg_buf);
+    d = _sg_buf;
+    #endif
+    #ifdef FFT_FILTER_ENABLED
+    static float _fft_buf[WINDOW_SIZE][N_CHANNELS];
+    fft_lowpass_window(d, samples, _fft_buf);
+    d = _fft_buf;
+    #endif
+
     // Temporary arrays for magnitude values
     float acc_mag[WINDOW_SIZE];
     float gyro_mag[WINDOW_SIZE];
@@ -995,28 +1136,28 @@ void extract_features(float sensor_data[][N_CHANNELS], int samples, float featur
     float ax_mean = 0.0f, ay_mean = 0.0f, az_mean = 0.0f;
     float gx_mean = 0.0f, gy_mean = 0.0f, gz_mean = 0.0f;
     for (int i = 0; i < samples; i++) {
-        ax_mean += sensor_data[i][0];
-        ay_mean += sensor_data[i][1];
-        az_mean += sensor_data[i][2];
-        gx_mean += sensor_data[i][3];
-        gy_mean += sensor_data[i][4];
-        gz_mean += sensor_data[i][5];
+        ax_mean += d[i][0];
+        ay_mean += d[i][1];
+        az_mean += d[i][2];
+        gx_mean += d[i][3];
+        gy_mean += d[i][4];
+        gz_mean += d[i][5];
     }
     ax_mean /= (float)samples; ay_mean /= (float)samples; az_mean /= (float)samples;
     gx_mean /= (float)samples; gy_mean /= (float)samples; gz_mean /= (float)samples;
 
     // Calculate centered magnitude vectors
-    float prev_ax = sensor_data[0][0];
-    float prev_ay = sensor_data[0][1];
-    float prev_az = sensor_data[0][2];
+    float prev_ax = d[0][0];
+    float prev_ay = d[0][1];
+    float prev_az = d[0][2];
 
     for (int i = 0; i < samples; i++) {
-        float ax = sensor_data[i][0];
-        float ay = sensor_data[i][1];
-        float az = sensor_data[i][2];
-        float gx = sensor_data[i][3];
-        float gy = sensor_data[i][4];
-        float gz = sensor_data[i][5];
+        float ax = d[i][0];
+        float ay = d[i][1];
+        float az = d[i][2];
+        float gx = d[i][3];
+        float gy = d[i][4];
+        float gz = d[i][5];
 
         // Centered magnitudes (gravity/bias removed)
         float cax = ax - ax_mean, cay = ay - ay_mean, caz = az - az_mean;
@@ -1202,7 +1343,10 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         use_double = self.optimization == 'accuracy'
         acc_type = 'double' if use_double else 'float'
 
-        return f"""void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]) {{
+        savgol_code = self._generate_savgol_filter_code() if self._has_savgol_filter() else ''
+        fft_code = self._generate_fft_filter_code() if self._has_fft_filter() else ''
+
+        return savgol_code + fft_code + f"""void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]) {{
     // Per-axis feature extraction — 15 features per axis × 6 axes = 90 features
     // MUST match training feature extraction exactly regardless of optimization level.
     // Optimization: {self.optimization.upper()} ({'double-precision' if use_double else 'single-precision'} accumulation)
@@ -1213,6 +1357,19 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         return;
     }}
 
+    // Data pointer: apply preprocessing filters (SG, FFT) in sequence
+    float (*d)[N_CHANNELS] = sensor_data;
+    #ifdef SAVGOL_ENABLED
+    static float _sg_buf[WINDOW_SIZE][N_CHANNELS];
+    savgol_smooth_window(d, samples, _sg_buf);
+    d = _sg_buf;
+    #endif
+    #ifdef FFT_FILTER_ENABLED
+    static float _fft_buf[WINDOW_SIZE][N_CHANNELS];
+    fft_lowpass_window(d, samples, _fft_buf);
+    d = _fft_buf;
+    #endif
+
     int feature_idx = 0;
 
     // For each sensor axis (aX, aY, aZ, gX, gY, gZ)
@@ -1220,7 +1377,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         // Copy data for sorting (used for median and quartiles)
         float sorted_data[WINDOW_SIZE];
         for (int i = 0; i < samples; i++) {{
-            sorted_data[i] = sensor_data[i][axis];
+            sorted_data[i] = d[i][axis];
         }}
 
         // Insertion sort — O(n²) worst case but fast for small/partially-sorted arrays
@@ -1236,15 +1393,15 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
 
         // Statistical calculations
         {acc_type} sum = 0, sum_sq = 0;
-        float min_val = sensor_data[0][axis];
-        float max_val = sensor_data[0][axis];
+        float min_val = d[0][axis];
+        float max_val = d[0][axis];
 
         for (int i = 0; i < samples; i++) {{
-            {acc_type} val = ({acc_type})sensor_data[i][axis];
+            {acc_type} val = ({acc_type})d[i][axis];
             sum += val;
             sum_sq += val * val;
-            if (sensor_data[i][axis] < min_val) min_val = sensor_data[i][axis];
-            if (sensor_data[i][axis] > max_val) max_val = sensor_data[i][axis];
+            if (d[i][axis] < min_val) min_val = d[i][axis];
+            if (d[i][axis] > max_val) max_val = d[i][axis];
         }}
 
         float n = (float)samples;
@@ -1288,7 +1445,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
 
         float m3_sum = 0.0f, m4_sum = 0.0f;
         for (int i = 0; i < samples; i++) {{
-            float z = (sensor_data[i][axis] - mean) / (pop_std + 1e-7f);
+            float z = (d[i][axis] - mean) / (pop_std + 1e-7f);
             float z2 = z * z;
             m3_sum += z * z2;
             m4_sum += z2 * z2;
@@ -1316,7 +1473,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         // Zero-crossings (signal crosses zero)
         int zero_crossings = 0;
         for (int i = 1; i < samples; i++) {{
-            if (sensor_data[i-1][axis] * sensor_data[i][axis] < 0)
+            if (d[i-1][axis] * d[i][axis] < 0)
                 zero_crossings++;
         }}
         features[feature_idx++] = (float)zero_crossings;        // 13: zero_crossings
@@ -1324,7 +1481,7 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
         // Mean-crossing rate (normalised)
         int mean_crossings = 0;
         for (int i = 1; i < samples; i++) {{
-            if ((sensor_data[i-1][axis] - mean) * (sensor_data[i][axis] - mean) < 0)
+            if ((d[i-1][axis] - mean) * (d[i][axis] - mean) < 0)
                 mean_crossings++;
         }}
         features[feature_idx++] = (float)mean_crossings / n;    // 14: mean_crossing_rate
