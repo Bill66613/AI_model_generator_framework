@@ -1086,6 +1086,22 @@ int extract_frequency_features(float* signal, int samples, float sampling_rate,
     features[idx++] = spec_skew;
     features[idx++] = spec_kurt;
 
+    // 10: Power spectral entropy — spread of spectral energy across bins.
+    // Low entropy = dominant periodic activity; high entropy = broadband/erratic.
+    {
+        float spec_entropy = 0.0f;
+        if (mag_sum > 0.0f) {
+            float inv_total = 1.0f / mag_sum;
+            for (int k = 0; k < half_n; k++) {
+                float p = dft_mag[k] * inv_total;
+                if (p > 1e-12f) {
+                    spec_entropy -= p * log2f(p);
+                }
+            }
+        }
+        features[idx++] = spec_entropy;
+    }
+
     return idx;
 }
 
@@ -1101,10 +1117,10 @@ int extract_magnitude_stats(float* mag, int samples, float* features, int start_
 
 void extract_features(float sensor_data[][N_CHANNELS], int samples, float features[]) {
     // Orientation-robust features (magnitude-based)
-    // Time-domain: 15 stats x 2 magnitudes + 3 jerk = 33 features
+    // Time-domain: 15 stats x 2 magnitudes + 3 jerk + 8 additional = 41 features
 """
         if include_frequency:
-            code += "    // Frequency-domain: 10 features x 2 magnitudes = 20 features (total: 53)\n"
+            code += "    // Frequency-domain: 11 features x 2 magnitudes = 22 features (total: 63)\n"
 
         code += """
     if (samples <= 1) {
@@ -1200,6 +1216,79 @@ void extract_features(float sensor_data[][N_CHANNELS], int samples, float featur
     features[idx++] = jerk_mean;
     features[idx++] = jerk_std;
     features[idx++] = jerk_max;
+
+    // Gyro jerk magnitude: rate of change of angular velocity (3 features)
+    // Captures rotational acceleration — wrist snaps, stance/swing transitions.
+    float gjerk_sum = 0.0f, gjerk_sum_sq = 0.0f, gjerk_max = -1e9f;
+    for (int i = 1; i < samples; i++) {
+        float dgx = d[i][3] - d[i-1][3];
+        float dgy = d[i][4] - d[i-1][4];
+        float dgz = d[i][5] - d[i-1][5];
+        float gj = sqrtf(dgx*dgx + dgy*dgy + dgz*dgz);
+        gjerk_sum += gj;
+        gjerk_sum_sq += gj * gj;
+        if (gj > gjerk_max) gjerk_max = gj;
+    }
+    float gjerk_mean = (n_jerk > 0) ? (gjerk_sum / (float)n_jerk) : 0.0f;
+    float gjerk_var  = (n_jerk > 0) ? ((gjerk_sum_sq / (float)n_jerk) - gjerk_mean * gjerk_mean) : 0.0f;
+    float gjerk_std  = sqrtf(gjerk_var > 0.0f ? gjerk_var : 0.0f);
+    features[idx++] = gjerk_mean;
+    features[idx++] = gjerk_std;
+    features[idx++] = gjerk_max;
+
+    // Signal Magnitude Area (SMA): mean(|aX|+|aY|+|aZ|) from raw axes (1 feature)
+    // Discriminates sedentary vs active; body/back and ankle wear.
+    {
+        float sma_sum = 0.0f;
+        for (int i = 0; i < samples; i++) {
+            sma_sum += fabsf(d[i][0]) + fabsf(d[i][1]) + fabsf(d[i][2]);
+        }
+        features[idx++] = sma_sum / (float)samples;
+    }
+
+    // Tilt angles from mean accelerometer (gravity/static component) (2 features)
+    // pitch = atan2(ax_mean, sqrt(ay_mean^2+az_mean^2)) in degrees
+    // roll  = atan2(ay_mean, az_mean) in degrees
+    features[idx++] = atan2f(ax_mean, sqrtf(ay_mean*ay_mean + az_mean*az_mean)) * 57.295779513f;
+    features[idx++] = atan2f(ay_mean, az_mean) * 57.295779513f;
+
+    // Autocorrelation of acc_mag at lag 1 (1 feature)
+    // High value = smooth/repetitive; low/negative = erratic/impact.
+    {
+        float am_mean = 0.0f;
+        for (int i = 0; i < samples; i++) am_mean += acc_mag[i];
+        am_mean /= (float)samples;
+        float am_var = 0.0f;
+        for (int i = 0; i < samples; i++) {
+            float diff_v = acc_mag[i] - am_mean;
+            am_var += diff_v * diff_v;
+        }
+        am_var /= (float)samples;
+        float autocorr = 1.0f;
+        if (am_var > 1e-10f) {
+            float cov = 0.0f;
+            for (int i = 0; i < samples - 1; i++) {
+                cov += (acc_mag[i] - am_mean) * (acc_mag[i+1] - am_mean);
+            }
+            autocorr = (cov / (float)samples) / am_var;
+        }
+        features[idx++] = autocorr;
+    }
+
+    // Jerk peak count: local maxima of acc_jerk_mag above (mean+0.5*std) (1 feature)
+    // Captures gesture cadence (wrist wear) and step count (ankle wear).
+    {
+        float jp_threshold = jerk_mean + 0.5f * jerk_std;
+        int peak_count = 0;
+        for (int i = 1; i < n_jerk - 1; i++) {
+            if (jerk_mag[i] > jerk_mag[i-1] &&
+                jerk_mag[i] > jerk_mag[i+1] &&
+                jerk_mag[i] > jp_threshold) {
+                peak_count++;
+            }
+        }
+        features[idx++] = (float)peak_count;
+    }
 """
         # Insert frequency feature extraction after jerk features
         if include_frequency:

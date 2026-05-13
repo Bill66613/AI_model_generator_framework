@@ -77,17 +77,32 @@ def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
             name = f'acc_jerk_mag_{suffix}'
             if name in feature_set:
                 cpp_order.append(name)
-    
-    # Frequency-domain features (DFT on magnitudes) - 10 features per signal
+
+    # Gyro jerk magnitude features (after acc_jerk_mag)
+    has_gyro_jerk = any(f.startswith('gyro_jerk_mag_') for f in feature_set)
+    if has_gyro_jerk:
+        for suffix in ['mean', 'std', 'max']:
+            name = f'gyro_jerk_mag_{suffix}'
+            if name in feature_set:
+                cpp_order.append(name)
+
+    # Scalar features extracted after jerk blocks
+    for scalar_feat in ['acc_sma', 'tilt_pitch', 'tilt_roll',
+                        'acc_mag_autocorr_lag1', 'acc_jerk_mag_peak_count']:
+        if scalar_feat in feature_set:
+            cpp_order.append(scalar_feat)
+
+    # Frequency-domain features (DFT on magnitudes) - 11 features per signal
     # Order matches C extract_frequency_features(): dominant_frequency,
     # dominant_frequency_magnitude, spectral_centroid, energy_low_freq,
     # energy_mid_freq, energy_high_freq, spectral_rolloff,
-    # spectral_rms, spectral_skewness, spectral_kurtosis
+    # spectral_rms, spectral_skewness, spectral_kurtosis, spectral_entropy
     freq_stats = [
         'dominant_frequency', 'dominant_frequency_magnitude',
         'spectral_centroid', 'energy_low_freq', 'energy_mid_freq',
         'energy_high_freq', 'spectral_rolloff',
-        'spectral_rms', 'spectral_skewness', 'spectral_kurtosis'
+        'spectral_rms', 'spectral_skewness', 'spectral_kurtosis',
+        'spectral_entropy'
     ]
     has_acc_freq = any(f.startswith('acc_mag_dominant_') or f.startswith('acc_mag_spectral_') 
                        or f.startswith('acc_mag_energy_low') for f in feature_set)

@@ -106,17 +106,17 @@ layout = html.Div([
                     dcc.Dropdown(
                         id='global-feature-selection',
                         options=[
-                            {'label': '🧭 Orientation-Invariant Time-Domain ONLY (RECOMMENDED) - 33 features',
+                            {'label': '🧭 Orientation-Invariant Time-Domain ONLY - 41 features',
                              'value': 'orientation_invariant_time_only'},
-                            {'label': '🧭 Orientation-Invariant + DFT (Deployable) - 53 features',
+                            {'label': '🧭 Orientation-Invariant + DFT - 63 features',
                              'value': 'orientation_invariant'},
-                            {'label': '🎯 Per-Axis Time-Domain (Deployable) - 90 features',
+                            {'label': '🎯 Per-Axis Time-Domain - 90 features',
                              'value': 'time_domain'},
-                            {'label': '🎯 Per-Axis All + FFT (⚠️ per-axis freq NOT deployable) - 156 features',
+                            {'label': '🎯 Per-Axis All + FFT - 156 features',
                              'value': 'all'},
-                            {'label': '🌊 Per-Axis Frequency Only (⚠️ NOT deployable) - 66 features',
+                            {'label': '🌊 Per-Axis Frequency Only - 66 features',
                              'value': 'frequency_domain'},
-                            {'label': '📊 Raw Sensor Axes (Deployable) - 6 features',
+                            {'label': '📊 Raw Sensor Axes - 6 features',
                              'value': 'raw'}
                         ],
                         value='orientation_invariant_time_only',
@@ -126,7 +126,7 @@ layout = html.Div([
                     ),
                     html.Div([
                         html.Strong("⚠️ Note: "),
-                        "Orientation-robust DFT (53 features) ",
+                        "Orientation-robust DFT (63 features) ",
                         html.Strong("is fully deployable"),
                         " — code generators emit a lightweight sin/cos DFT. ",
                         "Only ",

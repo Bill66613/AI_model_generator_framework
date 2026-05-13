@@ -178,6 +178,68 @@ def extract_orientation_invariant_features(
         features['acc_jerk_mag_std'] = np.std(acc_jerk_mag)
         features['acc_jerk_mag_max'] = np.max(acc_jerk_mag)
 
+    # -------------------------------------------------------------------
+    # Additional features for multi-location HAR improvement
+    # -------------------------------------------------------------------
+
+    # Gyro jerk magnitude (rate of change of angular velocity)
+    # Captures rotational acceleration — wrist rotation snaps (blocking vs hooking),
+    # ankle stance/swing phase transitions, trunk rotation in body wear.
+    if len(gyro_cols) >= 2:
+        gyro_jerk_mag = np.sqrt(
+            sum(np.diff(df[c].values) ** 2 for c in gyro_cols))
+        features['gyro_jerk_mag_mean'] = np.mean(gyro_jerk_mag)
+        features['gyro_jerk_mag_std'] = np.std(gyro_jerk_mag)
+        features['gyro_jerk_mag_max'] = np.max(gyro_jerk_mag)
+
+    # Signal Magnitude Area (SMA): mean(|aX| + |aY| + |aZ|) using raw (uncentered) axes.
+    # Widely used in HAR literature; discriminates sedentary vs active, especially
+    # effective for body/back wear and ankle wear where total movement intensity matters.
+    if len(accel_cols) >= 1:
+        raw_accel_sum = sum(np.abs(df[c].values) for c in accel_cols)
+        features['acc_sma'] = float(np.mean(raw_accel_sum))
+
+    # Tilt angles from static (mean) accelerometer component.
+    # Estimates device orientation/inclination relative to gravity vector.
+    # Key for body/back wear (seated vs standing posture), ankle wear (foot angle),
+    # and any scenario where device orientation is informative.
+    if len(accel_cols) >= 3:
+        ax_m = df[accel_cols[0]].values.mean()
+        ay_m = df[accel_cols[1]].values.mean()
+        az_m = df[accel_cols[2]].values.mean()
+        features['tilt_pitch'] = float(
+            np.degrees(np.arctan2(ax_m, np.sqrt(ay_m ** 2 + az_m ** 2))))
+        features['tilt_roll'] = float(np.degrees(np.arctan2(ay_m, az_m)))
+
+    # Autocorrelation of acc_mag at lag 1 (periodicity and signal smoothness).
+    # High value ≈ smooth/repetitive motion (walking, running);
+    # Low/negative value ≈ erratic/impact motion (jumping, punching).
+    if len(acc_mag) > 1:
+        ac_mean = np.mean(acc_mag)
+        ac_var = np.var(acc_mag)
+        if ac_var > 1e-10:
+            features['acc_mag_autocorr_lag1'] = float(
+                np.sum((acc_mag[:-1] - ac_mean) * (acc_mag[1:] - ac_mean))
+                / (len(acc_mag) * ac_var)
+            )
+        else:
+            features['acc_mag_autocorr_lag1'] = 1.0
+
+    # Jerk peak count: number of local maxima above (mean + 0.5 × std) in acc_jerk_mag.
+    # Captures gesture cadence (wrist wear: punch/block repetitions),
+    # step count per window (ankle wear: walking/running cadence).
+    if len(accel_cols) >= 2:
+        jerk_for_peaks = np.sqrt(
+            sum(np.diff(df[c].values) ** 2 for c in accel_cols))
+        jm = np.mean(jerk_for_peaks)
+        js = np.std(jerk_for_peaks)
+        threshold = jm + 0.5 * js
+        features['acc_jerk_mag_peak_count'] = int(np.sum(
+            (jerk_for_peaks[1:-1] > jerk_for_peaks[:-2]) &
+            (jerk_for_peaks[1:-1] > jerk_for_peaks[2:]) &
+            (jerk_for_peaks[1:-1] > threshold)
+        ))
+
     return pd.DataFrame([features])
 
 
@@ -263,6 +325,17 @@ def extract_frequency_magnitude_features(
         features[f'{name}_spectral_rms'] = spec_rms
         features[f'{name}_spectral_skewness'] = spec_skew
         features[f'{name}_spectral_kurtosis'] = spec_kurt
+
+        # Power spectral entropy (spread of spectral energy across frequency bins).
+        # Low entropy = energy concentrated at dominant frequency (rhythmic activity);
+        # High entropy = broadband energy spread (erratic/complex motion).
+        total = np.sum(fft_magnitude_pos)
+        if total > 0:
+            probs = fft_magnitude_pos / total
+            probs_nz = probs[probs > 1e-12]
+            features[f'{name}_spectral_entropy'] = float(-np.sum(probs_nz * np.log2(probs_nz)))
+        else:
+            features[f'{name}_spectral_entropy'] = 0.0
 
     return pd.DataFrame([features])
 
@@ -423,9 +496,9 @@ def create_feature_vector(
         DataFrame with extracted features
 
     Feature Counts:
-        - Magnitude only (robust): 33 features (no FFT) or 53 features (with FFT)
+        - Magnitude only (robust): 41 features (no FFT) or 63 features (with FFT)
         - Per-axis only: 90 features (no FFT) or 156 features (with FFT)
-        - Both: ~123 features (no FFT) or ~209 features (with FFT)
+        - Both: ~131 features (no FFT) or ~219 features (with FFT)
     """
     if sensor_cols is None:
         sensor_cols = list(SENSOR_COLUMNS)

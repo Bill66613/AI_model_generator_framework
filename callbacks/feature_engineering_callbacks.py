@@ -173,20 +173,26 @@ def register_callbacks(app):
         n_axes = n_accel + n_gyro
         n_mag_groups = (1 if n_accel > 0 else 0) + (1 if n_gyro > 0 else 0)
         jerk_feats = 3 if n_accel >= 2 else 0
-        # DFT features per magnitude group (7 spectral + 3 shape stats)
-        freq_per_mag = 10
+        gyro_jerk_feats = 3 if n_gyro >= 2 else 0
+        # Scalar extras: acc_sma (1) + tilt_pitch + tilt_roll (2) + autocorr_lag1 (1) + peak_count (1) = 5
+        scalar_extras = (1 if n_accel >= 1 else 0) + (2 if n_accel >= 3 else 0) + (1 if n_accel > 1 else 0) + (1 if n_accel >= 2 else 0)
+        # DFT features per magnitude group (10 spectral + spectral_entropy = 11)
+        freq_per_mag = 11
+        # Total time-domain features for orientation_invariant modes
+        oi_time = 15 * n_mag_groups + jerk_feats + gyro_jerk_feats + scalar_extras
 
         feature_counts = {
             'orientation_invariant_time_only': (
-                f'{15 * n_mag_groups + jerk_feats} features',
-                f'Orientation-robust centered magnitudes: 15 stats x {n_mag_groups} magnitudes'
-                f'{f" + {jerk_feats} jerk stats" if jerk_feats else ""}. '
+                f'{oi_time} features',
+                f'Orientation-robust magnitudes: 15 stats × {n_mag_groups} mag'
+                f' + {jerk_feats} acc-jerk + {gyro_jerk_feats} gyro-jerk + {scalar_extras} scalar extras'
+                f' (SMA, tilt, autocorr, peak count). '
                 'RECOMMENDED for deployment — fully deployable to all targets (C / C++ / MicroPython).'
             ),
             'orientation_invariant': (
-                f'{15 * n_mag_groups + jerk_feats + freq_per_mag * n_mag_groups} features',
-                f'Orientation-robust centered magnitudes ({15 * n_mag_groups + jerk_feats} time) '
-                f'+ DFT on magnitudes ({freq_per_mag * n_mag_groups} freq). '
+                f'{oi_time + freq_per_mag * n_mag_groups} features',
+                f'Orientation-robust time ({oi_time}) '
+                f'+ DFT on magnitudes ({freq_per_mag * n_mag_groups} freq, incl. spectral entropy). '
                 'Fully deployable — on-device DFT uses only sin/cos, no FFT library needed.'
             ),
             'time_domain': (
@@ -665,7 +671,7 @@ def register_callbacks(app):
                 # Map feature_method to create_feature_vector parameters
                 if feature_method == 'orientation_invariant_time_only':
                     # Orientation-robust magnitude features - TIME DOMAIN ONLY
-                    # 33 features (deployable to C++ devices)
+                    # 41 features (deployable to C++ devices)
                     # RECOMMENDED for deployment
                     feature_df = create_feature_vector(
                         df_window, sensor_cols, sampling_rate,
@@ -675,7 +681,7 @@ def register_callbacks(app):
                     )
                 elif feature_method == 'orientation_invariant':
                     # Orientation-robust magnitude features + FFT
-                    # 53 features (33 time + 20 freq)
+                    # 63 features (41 time + 22 freq)
                     # Deployable in C++: orientation-robust magnitude FFT features
                     # (per-axis FFT modes remain non-deployable)
                     feature_df = create_feature_vector(

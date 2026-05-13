@@ -241,8 +241,8 @@ def load_training_data_summary(base_dir=None, dataset_name=None):
                     pass
 
         FE_METHOD_LABELS = {
-            'orientation_invariant_time_only': '🧭 Orientation-Invariant Time-Domain (33 features)',
-            'orientation_invariant': '🧭 Orientation-Invariant + DFT (53 features)',
+            'orientation_invariant_time_only': '🧭 Orientation-Invariant Time-Domain (41 features)',
+            'orientation_invariant': '🧭 Orientation-Invariant + DFT (63 features)',
             'time_domain': '🎯 Per-Axis Time-Domain (90 features)',
             'all': '🎯 Per-Axis All + FFT (156 features)',
             'frequency_domain': '🌊 Per-Axis Frequency Only (66 features)',
