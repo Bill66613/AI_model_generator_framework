@@ -2,7 +2,7 @@
 \label{chap:results}
 
 \section{Tổng Quan}
-Phần này trình bày kết quả thực nghiệm xác thực hiệu quả của framework đề xuất cho việc tạo các mô hình AI cho nhận dạng hoạt động con người dựa trên biên. Chúng tôi đánh giá theo hai lớp: (1) chất lượng pipeline mô hình độc lập nền tảng, và (2) khả năng triển khai đa thiết bị của hệ thống tạo mã. Cụ thể, các phân tích bao gồm: độ chính xác mô hình và hiệu suất theo từng lớp, tác động của các chiến lược cân bằng lớp, ma trận đích triển khai được hỗ trợ, đặc điểm triển khai biên (thời gian suy luận, sử dụng bộ nhớ, tiêu thụ điện năng), và so sánh với các phương pháp cơ sở và nền tảng thương mại. Tất cả các thử nghiệm sử dụng tập dữ liệu HAR được mô tả trong Mục 3.7.1, bao gồm dữ liệu đối tượng đơn được thu thập trên năm lớp hoạt động như một chứng minh khái niệm về khả năng của framework. Các số đo độ trễ, bộ nhớ và điện năng được đo trên Seeed XIAO nRF52840 như một nền tảng tham chiếu thuộc lớp ARM Cortex-M4F; do đó chúng được dùng để minh họa tính khả thi phần cứng chứ không đại diện đồng nhất cho toàn bộ ma trận đích mà framework hỗ trợ. Xác thực đa đối tượng trên các quần thể đa dạng vẫn là công việc tương lai cần thiết cho các tuyên bố tổng quát hóa.
+Phần này trình bày kết quả thực nghiệm xác thực hiệu quả của framework đề xuất cho việc tạo các mô hình AI cho nhận dạng hoạt động con người dựa trên biên. Đánh giá được thực hiện theo hai lớp: (1) chất lượng pipeline mô hình độc lập nền tảng, và (2) khả năng triển khai đa thiết bị của hệ thống tạo mã. Cụ thể, các phân tích bao gồm: độ chính xác mô hình và hiệu suất theo từng lớp, tác động của các chiến lược cân bằng lớp, ma trận đích triển khai được hỗ trợ, đặc điểm triển khai biên (thời gian suy luận, sử dụng bộ nhớ, tiêu thụ điện năng), và so sánh với các phương pháp cơ sở và nền tảng thương mại. Tất cả các thử nghiệm sử dụng tập dữ liệu HAR được mô tả trong Mục 3.7.1, bao gồm dữ liệu đối tượng đơn được thu thập trên năm lớp hoạt động như một chứng minh khái niệm về khả năng của framework. Các số đo độ trễ, bộ nhớ và điện năng được đo trên Seeed XIAO nRF52840 như một nền tảng tham chiếu thuộc lớp ARM Cortex-M4F; do đó chúng được dùng để minh họa tính khả thi phần cứng chứ không đại diện đồng nhất cho toàn bộ ma trận đích mà framework hỗ trợ. Xác thực đa đối tượng trên các quần thể đa dạng vẫn là công việc tương lai cần thiết cho các tuyên bố tổng quát hóa.
 
 \section{Hiệu Suất Huấn Luyện Mô Hình}
 
@@ -79,7 +79,7 @@ Ma trận nhầm lẫn tiết lộ:
 \section{Tác Động của Cân Bằng Lớp}
 
 \subsection{Nghiên Cứu Loại Bỏ}
-Để định lượng hiệu quả của cân bằng trọng số lớp, chúng tôi đã tiến hành nghiên cứu loại bỏ so sánh các mô hình được huấn luyện có và không có tham số \texttt{class\_weight='balanced'}. Bảng \ref{tab:class_balance_ablation} cho thấy kết quả cho Random Forest và SVM.
+Để định lượng hiệu quả của cân bằng trọng số lớp, một nghiên cứu loại bỏ được tiến hành để so sánh các mô hình được huấn luyện có và không có tham số \texttt{class\_weight='balanced'}. Bảng \ref{tab:class_balance_ablation} cho thấy kết quả cho Random Forest và SVM.
 
 \begin{table}[H]
     \centering
@@ -238,7 +238,7 @@ Tối ưu hóa chế độ Power (số học điểm cố định, lấy mẫu g
 \subsection{So Sánh với Các Nền Tảng Thương Mại}
 Bảng \ref{tab:commercial_comparison} so sánh framework đề xuất với Edge Impulse và triển khai TensorFlow Lite thủ công.
 
-\textbf{Lưu ý về Phương pháp}: Các số liệu độ chính xác và thời gian suy luận so sánh cho Edge Impulse (94.8\%, 15ms), TensorFlow Lite (96.5\%, 11ms) và SensiML (93.1\%, 18ms) là các ước tính dựa trên các kết quả benchmark đã công bố từ các nhiệm vụ HAR tương tự được báo cáo trong tài liệu và tài liệu nhà cung cấp \cite{web:Edge_Impulse, warden2019tinyml}. Kiểm tra trực tiếp trên tập dữ liệu đối tượng đơn cụ thể của chúng tôi không được thực hiện do giới hạn thời gian và tài nguyên. Các số liệu của framework chúng tôi (96.2\%, 12ms) được đo trực tiếp trên tập dữ liệu xác thực được mô tả trong Mục 3.7.
+\textbf{Lưu ý về Phương pháp}: Các số liệu độ chính xác và thời gian suy luận so sánh cho Edge Impulse (94.8\%, 15ms), TensorFlow Lite (96.5\%, 11ms) và SensiML (93.1\%, 18ms) là các ước tính dựa trên các kết quả benchmark đã công bố từ các nhiệm vụ HAR tương tự được báo cáo trong tài liệu và tài liệu nhà cung cấp \cite{web:Edge_Impulse, warden2019tinyml}. Kiểm tra trực tiếp trên tập dữ liệu đối tượng đơn cụ thể được thu thập không được thực hiện do giới hạn thời gian và tài nguyên. Các số liệu của framework này (96.2\%, 12ms) được đo trực tiếp trên tập dữ liệu xác thực được mô tả trong Mục 3.7.
 
 \begin{table}[H]
     \centering
@@ -246,7 +246,7 @@ Bảng \ref{tab:commercial_comparison} so sánh framework đề xuất với Edg
     \small
     \begin{tabular}{@{}lcccc@{}}
         \toprule
-        Tiêu Chí & Của Chúng Tôi & Edge Impulse & TFLite & SensiML \\ 
+        Tiêu Chí & Framework Này & Edge Impulse & TFLite & SensiML \\ 
         \midrule
         Chi phí & Miễn phí & \$20-100/tháng & Miễn phí & \$99-500/tháng \\
         Tiền xử lý & Tương tác & Tự động (hạn chế) & Code & Tự động \\
@@ -258,14 +258,14 @@ Bảng \ref{tab:commercial_comparison} so sánh framework đề xuất với Edg
         Suy luận & 12 ms & 15 ms$^*$ & 11 ms$^*$ & 18 ms$^*$ \\
         \bottomrule
     \end{tabular}
-    \small{$^*$Ước tính từ tài liệu; không kiểm tra trên tập dữ liệu của chúng tôi}
+    \small{$^*$Ước tính từ tài liệu; không kiểm tra trên tập dữ liệu thu thập được}
     \label{tab:commercial_comparison}
 \end{table}
 
 Các yếu tố phân biệt chính:
 \begin{itemize}
     \item \textbf{Chi Phí}: Chỉ framework đề xuất và TFLite miễn phí; các nền tảng thương mại tính phí \$20-500/tháng
-    \item \textbf{Tiền Xử Lý}: Giao diện cửa sổ kéo thả mới lạ độc nhất với framework của chúng tôi; những cái khác yêu cầu coding hoặc chấp nhận tự động hóa hộp đen
+    \item \textbf{Tiền Xử Lý}: Giao diện cửa sổ kéo thả mới lạ độc nhất với framework này; những cái khác yêu cầu coding hoặc chấp nhận tự động hóa hộp đen
     \item \textbf{Độ Chính Xác}: So sánh với triển khai thủ công chuyên gia (96.2\% vs 96.5\%), vượt trội các nền tảng thương mại 1.4-3.1\%
     \item \textbf{Khả Năng Tiếp Cận}: Khớp với dễ sử dụng của Edge Impulse trong khi cung cấp tính minh bạch và kiểm soát đầy đủ
     \item \textbf{Tính Linh Hoạt}: Hỗ trợ ML cổ điển (RF, SVM) bị tránh bởi các nền tảng tập trung neural, cho phép triển khai trên các thiết bị bị giới hạn cực kỳ

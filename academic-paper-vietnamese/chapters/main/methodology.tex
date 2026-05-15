@@ -145,7 +145,7 @@ Cửa sổ 1,5 giây cung cấp ngữ cảnh thời gian đầy đủ để bắ
 \subsection{Bộ Đặc trưng}
 Cho mỗi cửa sổ và mỗi trục cảm biến (tổng cộng 6 trục), framework trích xuất 15 đặc trưng thống kê miền thời gian. Các đặc trưng miền tần số đã được cố ý loại trừ sau khi xác định các vấn đề tương đồng huấn luyện-triển khai: các triển khai FFT khác nhau đáng kể giữa Python (NumPy) và C++ nhúng (xấp xỉ hoặc ARM CMSIS-DSP), dẫn đến sự khác biệt giá trị đặc trưng làm suy giảm độ chính xác mô hình đã triển khai.
 
-\textbf{Lý do Loại trừ Đặc trưng FFT}: Trong khi các đặc trưng miền tần số (năng lượng phổ, tần số thống trị, entropy phổ) thường được sử dụng trong tài liệu HAR \cite{banos2014wisdm}, chúng giới thiệu các thách thức triển khai đáng kể. FFT NumPy của Python sử dụng các thuật toán dấu phẩy động độ chính xác kép được tối ưu hóa cao (backends FFTPACK/FFTW), trong khi C++ nhúng thường dựa vào các xấp xỉ điểm cố định hoặc các thư viện đặc thù cho nền tảng (ARM CMSIS-DSP) với độ chính xác số khác nhau. Các thử nghiệm sơ bộ cho thấy rằng các cửa sổ đầu vào giống hệt nhau tạo ra các phổ độ lớn FFT khác nhau 5-15\% giữa Python và C++, khiến các mô hình đã huấn luyện phân loại sai 8-12\% cửa sổ trong triển khai mặc dù độ chính xác huấn luyện 95\%+. "Không khớp huấn luyện-triển khai" này là một vấn đề quan trọng nhưng ít được báo cáo trong edge ML \cite{banbury2021mlperf}. Bằng cách hạn chế các đặc trưng miền thời gian với các tính toán dạng đóng xác định (trung bình, phương sai, v.v.), chúng tôi đảm bảo trích xuất đặc trưng giống hệt bit trên các nền tảng, loại bỏ chế độ lỗi này. Tỷ lệ qua không và tỷ lệ qua trung bình phục vụ như các proxy tần số, bắt giữ thông tin tuần hoàn mà không có chi phí FFT.
+\textbf{Lý do Loại trừ Đặc trưng FFT}: Trong khi các đặc trưng miền tần số (năng lượng phổ, tần số thống trị, entropy phổ) thường được sử dụng trong tài liệu HAR \cite{banos2014wisdm}, chúng giới thiệu các thách thức triển khai đáng kể. FFT NumPy của Python sử dụng các thuật toán dấu phẩy động độ chính xác kép được tối ưu hóa cao (backends FFTPACK/FFTW), trong khi C++ nhúng thường dựa vào các xấp xỉ điểm cố định hoặc các thư viện đặc thù cho nền tảng (ARM CMSIS-DSP) với độ chính xác số khác nhau. Các thử nghiệm sơ bộ cho thấy rằng các cửa sổ đầu vào giống hệt nhau tạo ra các phổ độ lớn FFT khác nhau 5-15\% giữa Python và C++, khiến các mô hình đã huấn luyện phân loại sai 8-12\% cửa sổ trong triển khai mặc dù độ chính xác huấn luyện 95\%+. "Không khớp huấn luyện-triển khai" này là một vấn đề quan trọng nhưng ít được báo cáo trong edge ML \cite{banbury2021mlperf}. Bằng cách hạn chế các đặc trưng miền thời gian với các tính toán dạng đóng xác định (trung bình, phương sai, v.v.), hệ thống đảm bảo trích xuất đặc trưng giống hệt bit trên các nền tảng, loại bỏ chế độ lỗi này. Tỷ lệ qua không và tỷ lệ qua trung bình phục vụ như các proxy tần số, bắt giữ thông tin tuần hoàn mà không có chi phí FFT.
 
 \textbf{Các Đặc trưng Miền Thời gian (15 mỗi trục):}
 \begin{itemize}
@@ -237,7 +237,7 @@ Trong triển khai thực tế, thiết bị biên thường ghi nhận các chu
 
 Giá trị $\tau = 0{,}6$ được chọn để cân bằng giữa tỷ lệ từ chối và tỷ lệ dương tính giả: với bài toán 5 lớp, xác suất ngẫu nhiên là 20\%, do đó $\tau = 0{,}6$ yêu cầu mô hình tin cậy gấp 3 lần ngẫu nhiên.
 
-\textbf{So sánh với nền tảng thương mại}: Edge Impulse cung cấp chức năng ``anomaly detection'' yêu cầu huấn luyện một khối riêng biệt trên dữ liệu bổ sung. Cách tiếp cận của chúng tôi trích xuất tin cậy trực tiếp từ đầu ra mô hình hiện có---không tốn thêm bộ nhớ, không yêu cầu dữ liệu huấn luyện bổ sung, và tích hợp tự nhiên vào quy trình suy luận đã có.
+\textbf{So sánh với nền tảng thương mại}: Edge Impulse cung cấp chức năng ``anomaly detection'' yêu cầu huấn luyện một khối riêng biệt trên dữ liệu bổ sung. Cách tiếp cận được đề xuất trích xuất tin cậy trực tiếp từ đầu ra mô hình hiện có---không tốn thêm bộ nhớ, không yêu cầu dữ liệu huấn luyện bổ sung, và tích hợp tự nhiên vào quy trình suy luận đã có.
 
 \section{Huấn luyện Mô hình Học máy}
 
@@ -473,7 +473,7 @@ Quyết định sử dụng tạo mã trực tiếp được lập luận bởi 
 Trên các vi điều khiển lớp wearable như Seeed XIAO nRF52840 (1MB flash, 256KB RAM), mỗi KB đều quan trọng. TFLite Micro interpreter chiếm khoảng 150--250KB flash \cite{warden2019tinyml, ray2023tinyml_survey}---tương đương 15--25\% tổng flash khả dụng---chỉ riêng runtime, trước khi tính trọng số mô hình. Phương pháp trực tiếp loại bỏ hoàn toàn overhead này: một mô hình Neural Network chỉ chiếm 95KB (trọng số + logic suy luận + trích xuất đặc trưng), để lại $>$900KB cho firmware ứng dụng và giúp việc chuyển sang các board cùng lớp tài nguyên trở nên khả thi hơn.
 
 \paragraph{(2) Minh bạch và Khả năng Xác minh}
-Một bài học quan trọng từ phát triển framework (xem Phần~\ref{sec:training_deployment_parity}) là \textit{khả năng kiểm tra mã suy luận đã tạo là yêu cầu thiết yếu}, không phải tính năng tùy chọn. Khi phát hiện lỗi zero-padding và sai lệch công thức kurtosis, chúng tôi có thể truy vết trực tiếp đến mã C++ đã tạo, so sánh từng dòng với triển khai Python, và sửa chữa. Với runtime đóng gói (TFLite Micro) hoặc trình biên dịch đóng (EON Compiler), quá trình gỡ lỗi này sẽ không thể thực hiện---lỗi sẽ biểu hiện như ``mô hình hoạt động kém trên thiết bị'' mà không có cách xác định nguyên nhân gốc.
+Một bài học quan trọng từ phát triển framework (xem Phần~\ref{sec:training_deployment_parity}) là \textit{khả năng kiểm tra mã suy luận đã tạo là yêu cầu thiết yếu}, không phải tính năng tùy chọn. Khi phát hiện lỗi zero-padding và sai lệch công thức kurtosis, có thể truy vết trực tiếp đến mã C++ đã tạo, so sánh từng dòng với triển khai Python, và sửa chữa. Với runtime đóng gói (TFLite Micro) hoặc trình biên dịch đóng (EON Compiler), quá trình gỡ lỗi này sẽ không thể thực hiện---lỗi sẽ biểu hiện như ``mô hình hoạt động kém trên thiết bị'' mà không có cách xác định nguyên nhân gốc.
 
 Khả năng xác minh này đặc biệt quan trọng cho ứng dụng y tế và an toàn, nơi các tiêu chuẩn quy định (FDA, IEC 62304) yêu cầu khả năng truy vết và kiểm toán đầy đủ cho mọi thành phần phần mềm liên quan đến quyết định lâm sàng.
 
@@ -648,7 +648,7 @@ Hiệu suất triển khai biên được đo qua:
 Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: suy luận $<$ 100ms mỗi cửa sổ (cho phép cập nhật 10Hz thời gian thực), flash $<$ 500KB (để lại khoảng trống cho mã ứng dụng), SRAM $<$ 128KB (50\% của 256KB có sẵn), điện năng $<$ 50mW trung bình (hỗ trợ hoạt động pin nhiều giờ).
 
 \subsection{Các So sánh Cơ sở}
-Để đặt hiệu suất framework trong ngữ cảnh, chúng tôi so sánh với:
+Để đặt hiệu suất framework trong ngữ cảnh, kết quả được so sánh với:
 \begin{enumerate}
     \item \textbf{Edge Impulse}: Nền tảng thương mại với quy trình tự động (áp dụng giới hạn gói miễn phí)
     \item \textbf{Triển khai TensorFlow Lite Thủ công}: Đại diện cho triển khai tùy chỉnh cấp độ chuyên gia
