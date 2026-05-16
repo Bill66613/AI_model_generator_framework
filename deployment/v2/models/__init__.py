@@ -50,6 +50,16 @@ def create_model_block(
     if model_type in ("svm",):
         return SVMModelBlock(model_data, feature_names, classes, precision)
 
+    if model_type in ("pytorch_cnn", "pytorch_cnn2d"):
+        from .cnn import CNNModelBlock
+        return CNNModelBlock(
+            model_data, feature_names, classes, precision,
+            window_size=window_size,
+            sampling_rate=sampling_rate,
+            platform=platform,
+            quantization=quantization,
+        )
+
     # Fallback: minimal stub that compiles but always returns class 0
     return _StubModelBlock(model_data, feature_names, classes, precision, model_type)
 

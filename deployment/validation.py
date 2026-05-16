@@ -440,15 +440,31 @@ class DeploymentValidator:
 
         # ---- Check 1: HAR_NUM_FEATURES matches model ----
         m = re.search(r'#define HAR_NUM_FEATURES\s+(\d+)', config_h)
+        model_type_v2 = model_data.get('model_type', '')
+        is_cnn = model_type_v2 in ('pytorch_cnn', 'pytorch_cnn2d')
         if m:
             cpp_n = int(m.group(1))
-            py_n = len(model_data.get('feature_names') or [])
-            if py_n > 0 and cpp_n != py_n:
-                report['issues'].append(
-                    f"HAR_NUM_FEATURES mismatch: C++={cpp_n}, Python={py_n}")
-                report['passed'] = False
+            if is_cnn:
+                # For CNN, HAR_NUM_FEATURES = WINDOW_SIZE * N_CHANNELS (flattened window).
+                # Derive expected value from HAR_WINDOW_SIZE * len(raw feature_names).
+                ws_m = re.search(r'#define HAR_WINDOW_SIZE\s+(\d+)', config_h)
+                n_ch = len(model_data.get('feature_names') or []) or 6
+                expected_cnn_n = (int(ws_m.group(1)) * n_ch) if ws_m else None
+                if expected_cnn_n is not None and cpp_n != expected_cnn_n:
+                    report['issues'].append(
+                        f"HAR_NUM_FEATURES mismatch: C++={cpp_n}, "
+                        f"expected {expected_cnn_n} (WINDOW_SIZE*N_CHANNELS)")
+                    report['passed'] = False
+                else:
+                    report['checks_passed'].append(f"HAR_NUM_FEATURES={cpp_n} ✓")
             else:
-                report['checks_passed'].append(f"HAR_NUM_FEATURES={cpp_n} ✓")
+                py_n = len(model_data.get('feature_names') or [])
+                if py_n > 0 and cpp_n != py_n:
+                    report['issues'].append(
+                        f"HAR_NUM_FEATURES mismatch: C++={cpp_n}, Python={py_n}")
+                    report['passed'] = False
+                else:
+                    report['checks_passed'].append(f"HAR_NUM_FEATURES={cpp_n} ✓")
         else:
             report['issues'].append("HAR_NUM_FEATURES not found in har_config.h")
             report['passed'] = False
@@ -466,20 +482,30 @@ class DeploymentValidator:
                 report['checks_passed'].append(f"HAR_NUM_CLASSES={cpp_c} ✓")
 
         # ---- Check 3: Scaler arrays present in har_classifier.cpp ----
-        if 'SCALER_MEANS' in classifier_cpp:
-            report['checks_passed'].append("SCALER_MEANS array present ✓")
+        # CNN models intentionally skip scaler (raw sensor values pass through)
+        if is_cnn:
+            if 'No scaler arrays needed' in classifier_cpp or 'CNN mode' in classifier_cpp:
+                report['checks_passed'].append("CNN scaler bypass confirmed ✓")
+            elif 'SCALER_MEANS' in classifier_cpp:
+                report['warnings'].append(
+                    "CNN model has SCALER_MEANS — unnecessary but not harmful if identity")
+            # Not an error for CNN to lack scaler arrays
         else:
-            report['issues'].append("SCALER_MEANS[] not found in har_classifier.cpp")
-            report['passed'] = False
+            if 'SCALER_MEANS' in classifier_cpp:
+                report['checks_passed'].append("SCALER_MEANS array present ✓")
+            else:
+                report['issues'].append("SCALER_MEANS[] not found in har_classifier.cpp")
+                report['passed'] = False
 
-        if 'SCALER_STDS' in classifier_cpp:
-            report['checks_passed'].append("SCALER_STDS array present ✓")
-        else:
-            report['issues'].append("SCALER_STDS[] not found in har_classifier.cpp")
-            report['passed'] = False
+            if 'SCALER_STDS' in classifier_cpp:
+                report['checks_passed'].append("SCALER_STDS array present ✓")
+            else:
+                report['issues'].append("SCALER_STDS[] not found in har_classifier.cpp")
+                report['passed'] = False
 
         # ---- Check 4: Scaler count matches feature count ----
-        means_match = re.search(r'SCALER_MEANS\[HAR_NUM_FEATURES\]\s*=\s*\{([^}]+)\}', classifier_cpp, re.DOTALL)
+        # Skip for CNN (no scaler arrays)
+        means_match = re.search(r'SCALER_MEANS\[HAR_NUM_FEATURES\]\s*=\s*\{([^}]+)\}', classifier_cpp, re.DOTALL) if not is_cnn else None
         if means_match:
             vals = [v.strip().rstrip('f') for v in means_match.group(1).split(',') if v.strip()]
             py_n = len(model_data.get('feature_means') or [])
@@ -514,12 +540,17 @@ class DeploymentValidator:
                 report['warnings'].append(
                     "Model has per-axis features but har_features.cpp may not iterate axes")
 
-        if not has_mag and not has_per_axis and feature_names:
+        is_cnn_features = all(str(n).startswith('cnn_in_') for n in feature_names) if feature_names else False
+        if is_cnn or is_cnn_features:
+            report['checks_passed'].append("CNN window-flatten feature extraction ✓")
+        elif not has_mag and not has_per_axis and feature_names:
             report['warnings'].append(
                 "Could not detect feature extraction mode from feature names")
 
         # ---- Check 6: Parity — division-by-zero guard in scaler ----
-        if '1e-7f' in classifier_cpp or '0.0001f' in classifier_cpp or '1e-6f' in classifier_cpp:
+        if is_cnn:
+            report['checks_passed'].append("CNN mode: no scaler division needed ✓")
+        elif '1e-7f' in classifier_cpp or '0.0001f' in classifier_cpp or '1e-6f' in classifier_cpp:
             report['checks_passed'].append("Zero-std guard present in scaler ✓")
         else:
             report['warnings'].append(

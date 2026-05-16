@@ -33,6 +33,18 @@ def create_platform_sketch(
         "arm_cortex_m",  # treated as generic Arduino-C++
     }
 
+    if p == "zephyr":
+        from .zephyr import ZephyrSketch
+        return ZephyrSketch(
+            platform=p,
+            sketch_name=sketch_name,
+            classes=classes,
+            window_size=window_size,
+            sampling_rate=sampling_rate,
+            overlap=overlap,
+            smoothing_window=smoothing_window,
+        )
+
     if p in ARDUINO_FAMILY:
         return ArduinoSketch(
             platform=p,

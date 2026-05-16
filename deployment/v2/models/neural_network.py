@@ -142,7 +142,8 @@ void har_model_predict(
         # Path 1: pytorch_mlp export
         if "pytorch_coefs" in model_data and "pytorch_intercepts" in model_data:
             coefs = [np.array(c).tolist() for c in model_data["pytorch_coefs"]]
-            intercepts = [np.array(b).tolist() for b in model_data["pytorch_intercepts"]]
+            intercepts = [np.array(b).tolist()
+                          for b in model_data["pytorch_intercepts"]]
             return coefs, intercepts
 
         # Path 2: sklearn-style dict

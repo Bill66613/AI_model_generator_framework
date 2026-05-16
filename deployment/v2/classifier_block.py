@@ -29,6 +29,7 @@ class ClassifierBlock:
         smoothing_window: int,
         precision: int,
         platform: str,
+        skip_scaler: bool = False,
     ):
         self.feature_names = feature_names
         self.feature_means = feature_means
@@ -38,6 +39,7 @@ class ClassifierBlock:
         self.smoothing_window = smoothing_window
         self.precision = precision
         self.platform = platform
+        self.skip_scaler = skip_scaler
 
     def generate(self) -> Tuple[str, str]:
         return self._header(), self._impl()
@@ -95,9 +97,21 @@ void har_reset_smoothing(void);
         n_cls = len(self.classes)
         prec = self.precision
 
-        # Scaler arrays
-        means_vals = ", ".join(f"{v:.{prec}f}f" for v in self.feature_means)
-        stds_vals = ", ".join(f"{v:.{prec}f}f" for v in self.feature_stds)
+        # Scaler arrays (skip for CNN — saves flash)
+        if self.skip_scaler:
+            scaler_arrays = "/* No scaler arrays needed for CNN (raw sensor input) */"
+        else:
+            means_vals = ", ".join(f"{v:.{prec}f}f" for v in self.feature_means)
+            stds_vals = ", ".join(f"{v:.{prec}f}f" for v in self.feature_stds)
+            scaler_arrays = f"""\
+/* ---- StandardScaler parameters (extracted from trained model) ---- */
+static const float SCALER_MEANS[HAR_NUM_FEATURES] = {{
+    {means_vals}
+}};
+
+static const float SCALER_STDS[HAR_NUM_FEATURES] = {{
+    {stds_vals}
+}};"""
 
         # Class name table
         class_names = ", ".join(f'"{c}"' for c in self.classes)
@@ -114,14 +128,7 @@ void har_reset_smoothing(void);
 #include "har_model.h"
 {includes}
 
-/* ---- StandardScaler parameters (extracted from trained model) ---- */
-static const float SCALER_MEANS[HAR_NUM_FEATURES] = {{
-    {means_vals}
-}};
-
-static const float SCALER_STDS[HAR_NUM_FEATURES] = {{
-    {stds_vals}
-}};
+{scaler_arrays}
 
 /* ---- Class name table ---- */
 const char *HAR_CLASS_NAMES[HAR_NUM_CLASSES] = {{{class_names}}};
@@ -135,15 +142,10 @@ const char *har_get_class_name(int class_id) {{
 /* ---- Scaler: (x - mean) / std  applied in-place ---- */
 static void _apply_scaler(float *features) {{
     for (int i = 0; i < HAR_NUM_FEATURES; i++) {{
-        /* Replace NaN/Inf with 0 before scaling */
+        /* Replace NaN/Inf with 0 */
         if (features[i] != features[i] || features[i] > 1e30f || features[i] < -1e30f)
             features[i] = 0.0f;
-        float std = SCALER_STDS[i];
-        if (std < 1e-7f) std = 1.0f;  /* guard against zero std */
-        features[i] = (features[i] - SCALER_MEANS[i]) / std;
-        /* Clamp to [-10, 10] to prevent extreme scaled values */
-        if (features[i] >  10.0f) features[i] =  10.0f;
-        if (features[i] < -10.0f) features[i] = -10.0f;
+{self._scaler_body()}
     }}
 }}
 
@@ -188,6 +190,23 @@ void har_classify(
 #endif
 }}
 """
+
+    def _scaler_body(self) -> str:
+        """Return the inner scaler loop body.
+
+        For CNN models (skip_scaler=True), returns nothing extra — NaN guard
+        already applied, raw values pass through unchanged.
+        For standard models, applies StandardScaler + [-10,10] clamp.
+        """
+        if self.skip_scaler:
+            return "        /* CNN mode: raw values pass through (no scaling/clamp) */"
+        return """\
+        float std = SCALER_STDS[i];
+        if (std < 1e-7f) std = 1.0f;  /* guard against zero std */
+        features[i] = (features[i] - SCALER_MEANS[i]) / std;
+        /* Clamp to [-10, 10] to prevent extreme scaled values */
+        if (features[i] >  10.0f) features[i] =  10.0f;
+        if (features[i] < -10.0f) features[i] = -10.0f;"""
 
     def _smoothing_code(self) -> str:
         if self.smoothing_window <= 1:

@@ -123,7 +123,8 @@ class TFLiteModelBlock(ModelBlock):
             quantization=self.quantization,
             representative_data=rep_data,
         )
-        self._c_array = converter.to_c_array("g_har_model", platform=self.platform)
+        self._c_array = converter.to_c_array(
+            "g_har_model", platform=self.platform)
         raw_ops = converter.enumerate_ops()
         if raw_ops is None:
             self._use_all_ops = True
@@ -298,7 +299,8 @@ void har_model_predict(
                 "    /* AllOpsResolver: model contains unrecognized ops */\n"
                 "    static tflite::AllOpsResolver resolver;"
             )
-        ops = self._ops or ["Dequantize", "FullyConnected", "Quantize", "Softmax"]
+        ops = self._ops or ["Dequantize",
+                            "FullyConnected", "Quantize", "Softmax"]
         ops_sorted = sorted(ops)
         lines = [
             f"    static tflite::MicroMutableOpResolver<{len(ops_sorted)}> resolver;"

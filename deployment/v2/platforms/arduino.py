@@ -156,7 +156,8 @@ class ArduinoSketch(PlatformSketch):
     # ------------------------------------------------------------------
 
     def generate(self) -> str:
-        cfg = self._BOARD_CONFIG.get(self.platform, self._BOARD_CONFIG["generic"])
+        cfg = self._BOARD_CONFIG.get(
+            self.platform, self._BOARD_CONFIG["generic"])
 
         imu_global_decl = ""
         if self.platform == "esp32":

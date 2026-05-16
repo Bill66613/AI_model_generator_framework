@@ -137,7 +137,8 @@ void har_model_predict(
                         v = values[i]
                         # values shape is [1, n_classes] per sklearn
                         if isinstance(v, (list, tuple)) and len(v) > 0:
-                            counts = v[0] if isinstance(v[0], (list, tuple)) else v
+                            counts = v[0] if isinstance(
+                                v[0], (list, tuple)) else v
                             leaf_cls = int(np.argmax(counts))
                         else:
                             leaf_cls = 0

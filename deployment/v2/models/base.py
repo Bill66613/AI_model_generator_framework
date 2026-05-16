@@ -46,8 +46,9 @@ class ModelBlock(ABC):
         """Format a 1-D list of floats as a C array initializer."""
         rows = []
         for i in range(0, len(values), per_row):
-            row = values[i : i + per_row]
-            rows.append("    " + ", ".join(f"{v:.{self.precision}f}f" for v in row))
+            row = values[i: i + per_row]
+            rows.append(
+                "    " + ", ".join(f"{v:.{self.precision}f}f" for v in row))
         return ",\n".join(rows)
 
     def _softmax_code(self) -> str:

@@ -44,4 +44,13 @@ class PlatformSketch(ABC):
 
     @abstractmethod
     def generate(self) -> str:
-        """Return the .ino file content."""
+        """Return the primary sketch file content."""
+
+    def generate_files(self) -> dict:
+        """Return all platform sketch files as a dict mapping filename → content.
+
+        The default implementation wraps the single file returned by generate()
+        as a {sketch_name}.ino entry.  Platform subclasses that produce multiple
+        files (e.g. Zephyr: main.c + CMakeLists.txt) should override this method.
+        """
+        return {f"{self.sketch_name}.ino": self.generate()}

@@ -72,7 +72,8 @@ void har_model_predict(
             dc_rows.append(f"    {{{vals}}}")
         dc_arr = ",\n".join(dc_rows)
 
-        ic_vals = ", ".join(f"{v:.{self.precision}f}f" for v in self._intercept)
+        ic_vals = ", ".join(
+            f"{v:.{self.precision}f}f" for v in self._intercept)
 
         return f"""\
 #include "har_model.h"

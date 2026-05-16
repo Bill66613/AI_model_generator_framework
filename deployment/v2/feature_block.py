@@ -35,18 +35,6 @@ from typing import Dict, List, Tuple
 
 
 def _cf(v: float) -> str:
-    """Format a Python float as a valid C99 float literal (always has decimal point).
-
-    The :.Xg format specifier drops the decimal for integer-valued floats
-    (e.g. 1.0 → '1'), which produces '1f' — an invalid GCC literal.
-    """
-    s = f"{v:.10g}"
-    if '.' not in s and 'e' not in s.lower():
-        s += '.0'
-    return s + 'f'
-
-
-def _cf(v: float) -> str:
     """Format a Python float as a valid C99 float literal (always has decimal point)."""
     s = f"{v:.10g}"
     # :.Xg drops the decimal for integer-valued floats (e.g. 1.0 → '1').
@@ -97,6 +85,23 @@ class FeatureBlock:
         self.has_tilt = "tilt_pitch" in fset or "tilt_roll" in fset
         self.has_autocorr = "acc_mag_autocorr_lag1" in fset
         self.has_peak_count = "acc_jerk_mag_peak_count" in fset
+        # True when per-axis time stats are present (time_domain / all modes)
+        self.has_per_axis_time_stats = any(
+            f"{ax}_mean" in fset
+            for ax in ("aX", "aY", "aZ", "gX", "gY", "gZ")
+        )
+        # True when the feature set contains no computed features at all (raw mode)
+        self.is_raw = (
+            not self.has_per_axis
+            and not self.has_acc_mag
+            and not self.has_gyro_mag
+            and any(f in fset for f in ("aX", "aY", "aZ", "gX", "gY", "gZ"))
+        )
+        # True for CNN models: feature names are cnn_in_{t}_{c} (flattened window)
+        self.is_cnn = (
+            bool(feature_names)
+            and all(f.startswith("cnn_in_") for f in feature_names)
+        )
 
     def generate(self) -> Tuple[str, str]:
         """Return (har_features.h content, har_features.cpp content)."""
@@ -143,10 +148,26 @@ void har_extract_features(
         preproc_functions = self._preprocessing_functions()
         preproc_calls = self._preprocessing_calls()
 
-        if self.has_per_axis and not (self.has_acc_mag or self.has_gyro_mag):
-            extraction = self._per_axis_extraction()
+        if self.is_cnn:
+            extraction = self._cnn_flatten_extraction()
+        elif self.is_raw:
+            extraction = self._raw_extraction()
+        elif self.has_per_axis and self.has_freq:
+            if self.has_per_axis_time_stats:
+                extraction = self._per_axis_all_extraction()       # 'all' mode
+            else:
+                extraction = self._per_axis_freq_extraction()      # 'frequency_domain' mode
+        elif self.has_per_axis:
+            extraction = self._per_axis_extraction()               # 'time_domain' mode
         else:
-            extraction = self._orientation_invariant_extraction()
+            extraction = self._orientation_invariant_extraction()  # orientation-invariant modes
+
+        # Add spectral_stats C helper only when per-axis frequency extraction is needed
+        spectral_stats_code = (
+            self._spectral_stats_code()
+            if (self.has_per_axis and self.has_freq)
+            else ""
+        )
 
         sorted_arr_size = max(self.window_size + 10, 210)  # a bit of headroom
 
@@ -298,7 +319,7 @@ static void _extract_15_stats(const float *x, int n, float *out) {{
     out[14] = (float)mc / (float)n;
 }}
 
-{preproc_functions}
+{spectral_stats_code}{preproc_functions}
 
 /* ===========================================================
  * Main feature extraction entry point
@@ -337,13 +358,17 @@ void har_extract_features(
     def _preprocessing_calls(self) -> str:
         calls = []
         if self.preprocessing.get("low_pass_filter"):
-            calls.append("    iir_filtfilt_window(data, HAR_WINDOW_SIZE, data);")
+            calls.append(
+                "    iir_filtfilt_window(data, HAR_WINDOW_SIZE, data);")
         if self.preprocessing.get("savgol_filter"):
-            calls.append("    savgol_smooth_window(data, HAR_WINDOW_SIZE, data);")
+            calls.append(
+                "    savgol_smooth_window(data, HAR_WINDOW_SIZE, data);")
         if self.preprocessing.get("kalman_filter"):
-            calls.append("    kalman_filter_window(data, HAR_WINDOW_SIZE, data);")
+            calls.append(
+                "    kalman_filter_window(data, HAR_WINDOW_SIZE, data);")
         if self.preprocessing.get("fft_filter"):
-            calls.append("    fft_lowpass_window(data, HAR_WINDOW_SIZE, data);")
+            calls.append(
+                "    fft_lowpass_window(data, HAR_WINDOW_SIZE, data);")
         return "\n".join(calls) if calls else "    /* no preprocessing */"
 
     # ------------------------------------------------------------------
@@ -354,9 +379,11 @@ void har_extract_features(
         blocks = ["    int fi = 0;  /* feature output index */\n"]
 
         if self.has_acc_mag:
-            blocks.append(self._mag_block("acc_mag", "0", "1", "2"))  # aX=ch0, aY=ch1, aZ=ch2
+            # aX=ch0, aY=ch1, aZ=ch2
+            blocks.append(self._mag_block("acc_mag", "0", "1", "2"))
         if self.has_gyro_mag:
-            blocks.append(self._mag_block("gyro_mag", "3", "4", "5"))  # gX=ch3, gY=ch4, gZ=ch5
+            # gX=ch3, gY=ch4, gZ=ch5
+            blocks.append(self._mag_block("gyro_mag", "3", "4", "5"))
 
         if self.has_acc_jerk:
             blocks.append(self._jerk_block("acc_jerk_mag", "0", "1", "2"))
@@ -607,7 +634,8 @@ void har_extract_features(
 
     def _per_axis_extraction(self) -> str:
         n = self.window_size
-        axes = [("aX", 0), ("aY", 1), ("aZ", 2), ("gX", 3), ("gY", 4), ("gZ", 5)]
+        axes = [("aX", 0), ("aY", 1), ("aZ", 2),
+                ("gX", 3), ("gY", 4), ("gZ", 5)]
         fset = set(self.feature_names)
         blocks = ["    int fi = 0;\n"]
         for axis_name, ch in axes:
@@ -621,6 +649,254 @@ void har_extract_features(
         fi += 15;
     }}
 """)
+        blocks.append("    (void)fi;")
+        return "\n".join(blocks)
+
+    # ------------------------------------------------------------------
+    # CNN flatten extraction (CNN mode: copy window to flat array)
+    # ------------------------------------------------------------------
+
+    def _cnn_flatten_extraction(self) -> str:
+        """For CNN models, 'feature extraction' is just flattening the window.
+
+        HAR_NUM_FEATURES == HAR_WINDOW_SIZE * HAR_N_CHANNELS.
+        No statistical computation — the CNN model processes the raw values.
+        Scaling (mean=0, std=1 identity) is applied by har_classifier.cpp
+        but has no numerical effect.
+        """
+        return """\
+    /* CNN mode: flatten window into features[WINDOW_SIZE * N_CHANNELS] */
+    for (int t = 0; t < HAR_WINDOW_SIZE; t++)
+        for (int c = 0; c < HAR_N_CHANNELS; c++)
+            features[t * HAR_N_CHANNELS + c] = data[t][c];
+"""
+
+    # ------------------------------------------------------------------
+    # Raw mode extraction (raw mode: 6 axis means)
+    # ------------------------------------------------------------------
+
+    def _raw_extraction(self) -> str:
+        """6 features: mean of each sensor axis over the window.
+
+        Matches Python raw mode:
+            features = {col: df_window[col].mean() for col in sensor_cols}
+        """
+        axes = [("aX", 0), ("aY", 1), ("aZ", 2),
+                ("gX", 3), ("gY", 4), ("gZ", 5)]
+        fset = set(self.feature_names)
+        blocks = [
+            "    int fi = 0;  /* raw mode: mean of each axis over window */\n"]
+        for axis_name, ch in axes:
+            if axis_name in fset:
+                blocks.append(f"""\
+    /* ---- {axis_name}: mean over window ---- */
+    {{
+        float s = 0.0f;
+        for (int i = 0; i < HAR_WINDOW_SIZE; i++) s += data[i][{ch}];
+        features[fi++] = s / (float)HAR_WINDOW_SIZE;
+    }}
+""")
+        blocks.append("    (void)fi;")
+        return "\n".join(blocks)
+
+    # ------------------------------------------------------------------
+    # Per-axis frequency extraction (frequency_domain mode)
+    # ------------------------------------------------------------------
+
+    def _spectral_stats_code(self) -> str:
+        """C helper matching Python _spectral_statistics().
+
+        Uses population std for z-score normalization (NOT sample std) and the
+        adjusted Fisher-Pearson formulas for skewness/kurtosis — same as Python.
+        """
+        return """\
+/*
+ * _spectral_stats: RMS, skewness, kurtosis of an FFT magnitude array.
+ * Matches Python _spectral_statistics() exactly:
+ *   - population variance for std (NOT sample std)
+ *   - adjusted Fisher-Pearson formulas
+ */
+static void _spectral_stats(const float *mag, int n,
+                             float *rms_out, float *skew_out, float *kurt_out) {
+    *rms_out = 0.0f; *skew_out = 0.0f; *kurt_out = 0.0f;
+    if (n == 0) return;
+    float sq = 0.0f, s = 0.0f;
+    for (int i = 0; i < n; i++) { sq += mag[i] * mag[i]; s += mag[i]; }
+    float fn = (float)n;
+    *rms_out = sqrtf(sq / fn);
+    float mn  = s / fn;
+    float var = sq / fn - mn * mn;              /* population variance */
+    float std = (var > 0.0f) ? sqrtf(var) : 0.0001f;
+    float m3 = 0.0f, m4 = 0.0f;
+    for (int i = 0; i < n; i++) {
+        float z  = (mag[i] - mn) / (std + 1e-7f);
+        float z2 = z * z;
+        m3 += z2 * z;
+        m4 += z2 * z2;
+    }
+    if (n > 2)
+        *skew_out = (m3 / fn) * (fn * (fn + 1.0f)) / ((fn - 1.0f) * (fn - 2.0f));
+    if (n > 3) {
+        float rk = m4 / fn;
+        *kurt_out = ((fn + 1.0f) * rk - 3.0f * (fn - 1.0f)) * (fn - 1.0f)
+                    / ((fn - 2.0f) * (fn - 3.0f));
+    }
+}
+
+"""
+
+    def _per_axis_freq_block(self, axis_name: str, ch: int) -> str:
+        """11 frequency features for one per-axis signal.
+
+        Feature output order matches Python extract_frequency_domain_features()
+        dict insertion order:
+          spectral_centroid, spectral_rolloff, spectral_bandwidth,
+          dominant_frequency, dominant_frequency_magnitude,
+          energy_low_freq, energy_mid_freq, energy_high_freq,
+          spectral_rms, spectral_skewness, spectral_kurtosis
+
+        Band thresholds (match Python): low [0,5) Hz, mid [5,15) Hz, high [15,fs/2] Hz
+        Rolloff: 85% of cumulative magnitude (not energy) — matches Python.
+        """
+        n = self.window_size
+        # Cap FFT scratch to avoid excessive stack; 100 bins covers fs=100, N=200
+        fft_arr_size = min(n // 2 + 1, 101)
+        return f"""\
+    /* ---- {axis_name} (ch {ch}): 11 per-axis frequency features ---- */
+    {{
+        float hw[{n}];
+        {{
+            float dc = 0.0f;
+            for (int i = 0; i < HAR_WINDOW_SIZE; i++) dc += data[i][{ch}];
+            dc /= (float)HAR_WINDOW_SIZE;
+            for (int i = 0; i < HAR_WINDOW_SIZE; i++) {{
+                float h = 0.5f * (1.0f - cosf(6.283185307f * (float)i
+                                              / (float)(HAR_WINDOW_SIZE - 1)));
+                hw[i] = (data[i][{ch}] - dc) * h;
+            }}
+        }}
+
+        /* DFT positive bins k=1..N/2 (DC removed, so k=0 ≈ 0) */
+        int nb = HAR_WINDOW_SIZE / 2;
+        if (nb > {fft_arr_size - 1}) nb = {fft_arr_size - 1};
+        float fmag[{fft_arr_size}];
+        for (int k = 1; k <= nb; k++) {{
+            float re = 0.0f, im = 0.0f;
+            float step = 6.283185307f * (float)k / (float)HAR_WINDOW_SIZE;
+            for (int i = 0; i < HAR_WINDOW_SIZE; i++) {{
+                re += hw[i] * cosf(step * (float)i);
+                im -= hw[i] * sinf(step * (float)i);
+            }}
+            fmag[k - 1] = sqrtf(re * re + im * im);
+        }}
+
+        /* Aggregate statistics */
+        float total_mag = 0.0f, dom_mag = 0.0f, dom_freq = 0.0f;
+        float e_low = 0.0f, e_mid = 0.0f, e_high = 0.0f;
+        float sc_num = 0.0f;
+        for (int k = 0; k < nb; k++) {{
+            float freq = (float)(k + 1) * (float)HAR_SAMPLE_RATE / (float)HAR_WINDOW_SIZE;
+            float mag  = fmag[k];
+            total_mag += mag;
+            sc_num    += freq * mag;
+            if (mag > dom_mag) {{ dom_mag = mag; dom_freq = freq; }}
+            float e = mag * mag;
+            if      (freq < 5.0f)  e_low  += e;
+            else if (freq < 15.0f) e_mid  += e;
+            else                   e_high += e;
+        }}
+        float sc = (total_mag > 1e-12f) ? (sc_num / total_mag) : 0.0f;
+
+        /* Spectral rolloff: bin where cumulative magnitude >= 85% of total */
+        float rolloff = (nb > 0)
+            ? ((float)nb * (float)HAR_SAMPLE_RATE / (float)HAR_WINDOW_SIZE)
+            : 0.0f;
+        {{
+            float cum = 0.0f, thr = 0.85f * total_mag;
+            for (int k = 0; k < nb; k++) {{
+                cum += fmag[k];
+                if (cum >= thr) {{
+                    rolloff = (float)(k + 1) * (float)HAR_SAMPLE_RATE / (float)HAR_WINDOW_SIZE;
+                    break;
+                }}
+            }}
+        }}
+
+        /* Spectral bandwidth: sqrt( sum((freq-centroid)^2 * mag) / total_mag ) */
+        float bw = 0.0f;
+        if (total_mag > 1e-12f) {{
+            for (int k = 0; k < nb; k++) {{
+                float freq = (float)(k + 1) * (float)HAR_SAMPLE_RATE / (float)HAR_WINDOW_SIZE;
+                float d = freq - sc;
+                bw += d * d * fmag[k];
+            }}
+            bw = sqrtf(bw / total_mag);
+        }}
+
+        /* Spectral shape (population-std z-score formulas — matches Python) */
+        float sp_rms, sp_skew, sp_kurt;
+        _spectral_stats(fmag, nb, &sp_rms, &sp_skew, &sp_kurt);
+
+        /* Output in Python insertion order (spectral_centroid first) */
+        features[fi++] = sc;        /* spectral_centroid             */
+        features[fi++] = rolloff;   /* spectral_rolloff               */
+        features[fi++] = bw;        /* spectral_bandwidth             */
+        features[fi++] = dom_freq;  /* dominant_frequency             */
+        features[fi++] = dom_mag;   /* dominant_frequency_magnitude   */
+        features[fi++] = e_low;     /* energy_low_freq                */
+        features[fi++] = e_mid;     /* energy_mid_freq                */
+        features[fi++] = e_high;    /* energy_high_freq               */
+        features[fi++] = sp_rms;    /* spectral_rms                   */
+        features[fi++] = sp_skew;   /* spectral_skewness              */
+        features[fi++] = sp_kurt;   /* spectral_kurtosis              */
+    }}
+"""
+
+    def _per_axis_freq_extraction(self) -> str:
+        """frequency_domain mode: 11 FFT features per axis (66 features total)."""
+        axes = [("aX", 0), ("aY", 1), ("aZ", 2),
+                ("gX", 3), ("gY", 4), ("gZ", 5)]
+        fset = set(self.feature_names)
+        blocks = ["    int fi = 0;\n"]
+        for axis_name, ch in axes:
+            if any(f.startswith(f"{axis_name}_") for f in fset):
+                blocks.append(self._per_axis_freq_block(axis_name, ch))
+        blocks.append("    (void)fi;")
+        return "\n".join(blocks)
+
+    def _per_axis_all_extraction(self) -> str:
+        """'all' mode: time features for all axes, then frequency features for all axes.
+
+        Order matches Python create_feature_vector(include_frequency=True,
+        orientation_robust=False, include_per_axis=True):
+            pd.concat([extract_time_domain_features(...),
+                       extract_frequency_domain_features(...)], axis=1)
+        Time block (all axes) comes first, then frequency block (all axes).
+        """
+        axes = [("aX", 0), ("aY", 1), ("aZ", 2),
+                ("gX", 3), ("gY", 4), ("gZ", 5)]
+        fset = set(self.feature_names)
+        n = self.window_size
+        blocks = ["    int fi = 0;\n"]
+
+        # Time-domain features first (all axes, 15 stats each)
+        for axis_name, ch in axes:
+            if f"{axis_name}_mean" in fset:
+                blocks.append(f"""\
+    /* ---- {axis_name} (channel {ch}): 15 time stats ---- */
+    {{
+        float axis[{n}];
+        for (int i = 0; i < HAR_WINDOW_SIZE; i++) axis[i] = data[i][{ch}];
+        _extract_15_stats(axis, HAR_WINDOW_SIZE, features + fi);
+        fi += 15;
+    }}
+""")
+
+        # Frequency-domain features second (all axes, 11 each)
+        for axis_name, ch in axes:
+            if f"{axis_name}_spectral_centroid" in fset:
+                blocks.append(self._per_axis_freq_block(axis_name, ch))
+
         blocks.append("    (void)fi;")
         return "\n".join(blocks)
 
@@ -713,7 +989,8 @@ static void savgol_smooth_window(float in[][HAR_N_CHANNELS], int n, float out[][
         q01 = q * (dt ** 2) / 2.0
         q11 = q * dt
         # Pre-compute C literals so brace escaping inside f-string stays simple.
-        kQ = "{{" + _cf(q00) + "," + _cf(q01) + "},{" + _cf(q01) + "," + _cf(q11) + "}}"
+        kQ = "{{" + _cf(q00) + "," + _cf(q01) + "},{" + \
+            _cf(q01) + "," + _cf(q11) + "}}"
         kR = _cf(r)
         kDT = _cf(dt)
         return f"""\
