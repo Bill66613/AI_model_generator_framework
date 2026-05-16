@@ -2,13 +2,80 @@
 \label{chap:methodology}
 
 \section{Tổng quan Kiến trúc Framework}
-Framework được đề xuất triển khai một quy trình từ đầu đến cuối để tạo các mô hình AI được điều chỉnh cho theo dõi chuyển động trên các thiết bị biên. Kiến trúc hệ thống bao gồm năm thành phần chính: (1) tải lên và quản lý dữ liệu, (2) tiền xử lý tương tác với phân đoạn trực quan, (3) trích xuất đặc trưng, (4) huấn luyện mô hình với tối ưu hóa siêu tham số, và (5) tạo mã đặc thù cho nền tảng. Framework được triển khai bằng Python với giao diện web Dash, scikit-learn cho học máy và các trình tạo mã tùy chỉnh cho triển khai C++ nhúng. Hình \ref{fig:architecture} minh họa quy trình làm việc tổng thể.
+Framework được đề xuất triển khai một quy trình từ đầu đến cuối để tạo các mô hình AI được điều chỉnh cho theo dõi chuyển động trên các thiết bị biên. Kiến trúc hệ thống bao gồm năm thành phần chính: (1) tải lên và quản lý dữ liệu, (2) tiền xử lý tương tác với phân đoạn trực quan, (3) trích xuất đặc trưng, (4) huấn luyện mô hình với tối ưu hóa siêu tham số, và (5) tạo mã đặc thù cho nền tảng. Framework được triển khai bằng Python với giao diện web Dash, scikit-learn và PyTorch cho học máy, cùng các trình tạo mã tùy chỉnh cho triển khai đa nền tảng (C/C++, MicroPython, TFLite Micro, ONNX Runtime). Hình \ref{fig:architecture} minh họa quy trình làm việc tổng thể.
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.85\textwidth]{figures/system_architecture.png}
-    \caption{Tổng quan Kiến trúc Framework: Quy trình từ đầu đến cuối từ tải dữ liệu đến triển khai biên}
-    \label{fig:architecture}
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+    node distance=0.55cm,
+    stepbox/.style={
+        rectangle, rounded corners=5pt,
+        minimum width=2.8cm, minimum height=2.2cm,
+        text width=2.6cm, align=center,
+        draw=blue!45!black, fill=blue!6,
+        line width=0.9pt, font=\small,
+    },
+    arr/.style={
+        -{Stealth[length=7pt, width=5pt]},
+        line width=2pt, color=black!35,
+    },
+    badge/.style={
+        circle, fill=blue!65!black,
+        minimum size=20pt, inner sep=0pt,
+        font=\small\bfseries, text=white,
+    },
+    phaselbl/.style={font=\small\bfseries, text=black!65},
+    sublbl/.style={font=\scriptsize\itshape, text=black!45},
+]
+    % --- Step boxes ---
+    \node[stepbox] (s1) {\textbf{Dữ liệu}\\[4pt]\scriptsize Tải CSV\\Quản lý metadata};
+    \node[stepbox, right=of s1] (s2) {\textbf{Tiền xử lý}\\[4pt]\scriptsize Lọc · Kalman\\Làm mịn tín hiệu};
+    \node[stepbox, right=of s2] (s3) {\textbf{Đặc trưng}\\[4pt]\scriptsize 90 features\\Sliding window};
+    \node[stepbox, right=of s3] (s4) {\textbf{Huấn luyện}\\[4pt]\scriptsize RF · SVM\\MLP · CNN};
+    \node[stepbox, right=of s4] (s5) {\textbf{Tạo Mã}\\[4pt]\scriptsize C/C++ · MicroPython\\TFLite · ONNX};
+    \node[stepbox, right=of s5] (s6) {\textbf{Triển khai}\\[4pt]\scriptsize MCU · Arduino\\Cortex-M · ESP32};
+
+    % --- Phase grouping backgrounds ---
+    \begin{scope}[on background layer]
+        \node[rectangle, rounded corners=8pt,
+              fill=blue!10, draw=blue!30!black,
+              inner sep=8pt, line width=0.8pt,
+              fit=(s1)(s2)] (ph1) {};
+        \node[rectangle, rounded corners=8pt,
+              fill=teal!10, draw=teal!30!black,
+              inner sep=8pt, line width=0.8pt,
+              fit=(s3)(s4)] (ph2) {};
+        \node[rectangle, rounded corners=8pt,
+              fill=orange!10, draw=orange!30!black,
+              inner sep=8pt, line width=0.8pt,
+              fit=(s5)(s6)] (ph3) {};
+    \end{scope}
+
+    % --- Phase labels above groups ---
+    \node[phaselbl, above=0.5cm of ph1] {Thu thập \& Xử lý};
+    \node[phaselbl, above=0.5cm of ph2] {Xây dựng Mô hình};
+    \node[phaselbl, above=0.5cm of ph3] {Tạo Mã \& Triển khai};
+
+    % --- Arrows between steps ---
+    \foreach \a/\b in {s1/s2, s2/s3, s3/s4, s4/s5, s5/s6}
+        \draw[arr] (\a) -- (\b);
+
+    % --- Step number badges centred on top border ---
+    \foreach \n/\i in {s1/1, s2/2, s3/3, s4/4, s5/5, s6/6}
+        \node[badge] at (\n.north) {\i};
+
+    % --- Data format labels below ---
+    \node[sublbl, below=0.3cm of s1] {CSV};
+    \node[sublbl, below=0.3cm of s2] {Tín hiệu sạch};
+    \node[sublbl, below=0.3cm of s3] {Feature vectors};
+    \node[sublbl, below=0.3cm of s4] {Model .joblib};
+    \node[sublbl, below=0.3cm of s5] {Gói mã nguồn};
+    \node[sublbl, below=0.3cm of s6] {Nhúng thiết bị};
+\end{tikzpicture}%
+}
+\caption{Tổng quan kiến trúc framework: quy trình sáu bước từ tải dữ liệu thô đến triển khai mô hình trên thiết bị biên, hỗ trợ các thuật toán RF, SVM, MLP, CNN và xuất mã đa nền tảng}
+\label{fig:architecture}
 \end{figure}
 
 \section{Thu thập Dữ liệu và Nền tảng Tham chiếu}
@@ -220,7 +287,7 @@ Người dùng cũng có thể xác định thủ công danh sách nhãn tĩnh q
 
 Trong triển khai thực tế, thiết bị biên thường ghi nhận các chuyển động không thuộc bất kỳ lớp nào đã huấn luyện (ví dụ: ngồi xuống, cúi người, hoặc đeo thiết bị ở vị trí bất thường). Các hệ thống phân loại truyền thống bắt buộc phải gán một nhãn cho mọi đầu vào, bất kể mức độ tin cậy, dẫn đến các dự đoán sai với độ tin cậy cao---hiện tượng được gọi là \textit{overconfident misclassification} \cite{hendrycks2017baseline, guo2017calibration}.
 
-\textbf{Cơ chế từ chối}: Framework tích hợp ngưỡng tin cậy (confidence threshold) trực tiếp vào mã C++ đã tạo. Mỗi mô hình tính toán xác suất từng lớp, và nếu xác suất tối đa $\max_c P(y=c|\mathbf{x})$ thấp hơn ngưỡng $\tau$ (mặc định: $\tau = 0{,}6$), dự đoán trả về ``unknown'' thay vì ép buộc một nhãn cụ thể:
+\textbf{Cơ chế từ chối}: Framework tích hợp ngưỡng tin cậy (confidence threshold) trực tiếp vào mã triển khai đã tạo (C/C++ hoặc MicroPython). Mỗi mô hình tính toán xác suất từng lớp, và nếu xác suất tối đa $\max_c P(y=c|\mathbf{x})$ thấp hơn ngưỡng $\tau$ (mặc định: $\tau = 0{,}6$), dự đoán trả về ``unknown'' thay vì ép buộc một nhãn cụ thể:
 \begin{equation}
     \hat{y} = \begin{cases}
         \arg\max_c P(y=c|\mathbf{x}) & \text{nếu } \max_c P(y=c|\mathbf{x}) \geq \tau \\
@@ -230,7 +297,7 @@ Trong triển khai thực tế, thiết bị biên thường ghi nhận các chu
 
 \textbf{Tính toán tin cậy theo thuật toán}: Mỗi thuật toán sử dụng cơ chế tính xác suất riêng có sẵn:
 \begin{itemize}
-    \item \textbf{Neural Network}: Hàm softmax trên logits đầu ra: $P(c) = \frac{e^{z_c}}{\sum_j e^{z_j}}$
+    \item \textbf{Neural Network/CNN}: Hàm softmax trên logits đầu ra: $P(c) = \frac{e^{z_c}}{\sum_j e^{z_j}}$
     \item \textbf{Random Forest}: Tỷ lệ bỏ phiếu: $P(c) = \frac{\text{số cây bỏ phiếu cho } c}{\text{tổng số cây}}$
     \item \textbf{SVM}: Softmax trên điểm quyết định One-vs-Rest (OvR)
 \end{itemize}
@@ -242,7 +309,7 @@ Giá trị $\tau = 0{,}6$ được chọn để cân bằng giữa tỷ lệ t�
 \section{Huấn luyện Mô hình Học máy}
 
 \subsection{Các Thuật toán Được Hỗ trợ}
-Framework tích hợp ba thuật toán học máy cổ điển từ scikit-learn, được chọn vì hiệu quả đã được chứng minh của chúng trong nhận dạng hoạt động và tính khả thi cho triển khai nhúng:
+Framework tích hợp bốn nhóm thuật toán học máy, bao gồm cả học máy cổ điển (scikit-learn) và học sâu (PyTorch), được chọn vì hiệu quả đã được chứng minh trong nhận dạng hoạt động và tính khả thi cho triển khai nhúng:
 
 \paragraph{Random Forest (RF)}
 Phương pháp ensemble kết hợp nhiều cây quyết định với bagging và ngẫu nhiên hóa đặc trưng. Cấu hình:
@@ -271,7 +338,18 @@ Perceptron đa lớp với lan truyền ngược. Cấu hình:
     \item Huấn luyện: Dừng sớm với patience=10, tối đa 500 epochs
     \item Kích thước Batch: Batch đầy đủ (toàn bộ tập huấn luyện)
 \end{itemize}
-Kiến trúc một lớp ẩn cung cấp khả năng đầy đủ để học các mẫu hoạt động phi tuyến trong khi vẫn đủ nhỏ để triển khai C++ hiệu quả (ma trận trọng số cố định, không phân bổ bộ nhớ động).
+Kiến trúc một lớp ẩn cung cấp khả năng đầy đủ để học các mẫu hoạt động phi tuyến trong khi vẫn đủ nhỏ để triển khai hiệu quả trên vi điều khiển (ma trận trọng số cố định, không phân bổ bộ nhớ động). Ngoài ra, framework hỗ trợ kiến trúc MLP tùy chỉnh qua PyTorch với nhiều lớp ẩn cấu hình được và hệ thống xuất trọng số đã huấn luyện sang định dạng tương thích scikit-learn để tạo mã triển khai.
+
+\paragraph{Convolutional Neural Network (CNN)}
+Mạng tích chập 1D được triển khai qua PyTorch, xử lý trực tiếp cửa sổ cảm biến thô (end-to-end) mà không cần trích xuất đặc trưng thủ công. Cấu hình:
+\begin{itemize}
+    \item Đầu vào: Cửa sổ thô 150 mẫu $\times$ 6 kênh cảm biến
+    \item Kiến trúc: 2--3 lớp Conv1D (kernel size 3--5, bộ lọc 32--64) + BatchNorm + MaxPool + Flatten + Dense
+    \item Trình tối ưu: Adam với OneCycleLR scheduler
+    \item Chính quy hóa: Dropout 0,3--0,5 giữa các lớp Dense
+    \item Xuất mã: Trọng số được xuất thành mảng hằng số C/C++ qua \texttt{export\_cnn\_weights()}, hoặc chuyển đổi sang TFLite Micro với lượng tử hóa INT8
+\end{itemize}
+CNN phù hợp cho các bài toán cần độ chính xác cao hơn nơi các đặc trưng thống kê thủ công chưa đủ phân biệt---mô hình học trực tiếp các biểu diễn phân cấp từ tín hiệu thô, nhưng đổi lại yêu cầu nhiều dữ liệu huấn luyện hơn và bộ nhớ triển khai lớn hơn (500~KB--2~MB so với 50--200~KB cho mô hình cổ điển).
 
 \subsection{Giao thức Huấn luyện và Đánh giá}
 
@@ -327,7 +405,7 @@ Tối ưu hóa xác định các cấu hình tối đa hóa độ chính xác x�
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{figures/ui_training_config.png}
-    \caption{Bảng cấu hình mô hình cho thấy lựa chọn thuật toán (Random Forest, Neural Network, SVM), các tùy chọn điều chỉnh siêu tham số với GridSearchCV, các chiến lược cân bằng lớp (trọng số cân bằng, phân chia phân tầng) và giám sát tiến trình huấn luyện thời gian thực với các điểm xác thực chéo.}
+    \caption{Bảng cấu hình mô hình cho thấy lựa chọn thuật toán (Random Forest, Neural Network, SVM, CNN), các tùy chọn điều chỉnh siêu tham số với GridSearchCV, các chiến lược cân bằng lớp (trọng số cân bằng, phân chia phân tầng) và giám sát tiến trình huấn luyện thời gian thực.}
     \label{fig:ui_training}
 \end{figure}
 
@@ -366,7 +444,7 @@ Bảng~\ref{tab:deployment_target_matrix} tóm tắt ma trận đích triển kh
 \subsection{Lý do Chọn Tạo Mã Trực tiếp thay vì Runtime Suy luận}
 \label{sec:codegen_rationale}
 
-Một quyết định thiết kế cốt lõi của framework là \textbf{tạo mã C++ trực tiếp} (direct code generation) qua việc trích xuất trọng số, cấu trúc quyết định và tham số mô hình từ các đối tượng scikit-learn đã huấn luyện, thay vì sử dụng các runtime suy luận đóng gói (packaged inference runtimes). Phần này phân tích các phương pháp thay thế và lập luận cho lựa chọn đã chọn.
+Một quyết định thiết kế cốt lõi của framework là \textbf{tạo mã nguồn trực tiếp} (direct code generation) qua việc trích xuất trọng số, cấu trúc quyết định và tham số mô hình từ các đối tượng scikit-learn/PyTorch đã huấn luyện, sau đó tạo mã C/C++ thuần hoặc MicroPython triển khai thuật toán suy luận tương ứng---thay vì sử dụng các runtime suy luận đóng gói (packaged inference runtimes). Phần này phân tích các phương pháp thay thế và lập luận cho lựa chọn đã chọn.
 
 \subsubsection{Các Phương pháp Triển khai Mô hình trên Vi điều khiển}
 
@@ -429,9 +507,9 @@ Các mô hình Random Forest và SVM gặp rào cản chuyển đổi do hạn c
 \end{itemize}
 
 \paragraph{Phương pháp 3: Tạo mã trực tiếp (Direct Code Generation)---phương pháp đề xuất}
-Framework trích xuất trực tiếp các tham số đã huấn luyện từ đối tượng scikit-learn---trọng số và bias của mạng nơ-ron (\texttt{coefs\_}, \texttt{intercepts\_}), support vectors và hệ số kernel của SVM, cấu trúc cây nhị phân của Random Forest---rồi tạo mã C++ thuần (pure C++) triển khai thuật toán suy luận tương ứng.
+Framework trích xuất trực tiếp các tham số đã huấn luyện từ đối tượng scikit-learn/PyTorch---trọng số và bias của mạng nơ-ron (\texttt{coefs\_}, \texttt{intercepts\_} hoặc state\_dict PyTorch), support vectors và hệ số kernel của SVM, cấu trúc cây nhị phân của Random Forest, trọng số convolution và batch normalization của CNN---rồi tạo mã nguồn (C/C++ hoặc MicroPython) triển khai thuật toán suy luận tương ứng.
 
-\textit{Ưu điểm:} Không phụ thuộc bên ngoài---mã tự chứa hoàn toàn; dấu chân bộ nhớ tối thiểu (chỉ chứa trọng số + logic suy luận); minh bạch hoàn toàn---mọi phép tính có thể kiểm tra và xác minh; hỗ trợ trực tiếp các thuật toán ML cổ điển mà không cần chuyển đổi định dạng.
+\textit{Ưu điểm:} Không phụ thuộc bên ngoài---mã tự chứa hoàn toàn; dấu chân bộ nhớ tối thiểu (chỉ chứa trọng số + logic suy luận); minh bạch hoàn toàn---mọi phép tính có thể kiểm tra và xác minh; hỗ trợ trực tiếp các thuật toán ML cổ điển mà không cần chuyển đổi định dạng; xuất được nhiều ngôn ngữ đích (C, C++, MicroPython).
 
 \textit{Nhược điểm:} Yêu cầu triển khai thủ công logic suy luận cho mỗi thuật toán; không hưởng các tối ưu hóa toán tử tự động cấp vi kiến trúc; khó mở rộng sang các kiến trúc phức tạp (CNN nhiều lớp, attention).
 
@@ -483,14 +561,14 @@ Hệ sinh thái TFLite Micro và ONNX Runtime Micro được thiết kế chủ 
 \paragraph{(4) Các Thuật toán Cổ điển là Lựa chọn Phù hợp cho HAR Biên}
 Lựa chọn tạo mã trực tiếp liên kết chặt chẽ với lựa chọn thuật toán. Cho bài toán HAR 5--10 lớp với $<$1000 vectors đặc trưng và 90 đặc trưng thống kê, các thuật toán cổ điển đạt hiệu suất cạnh tranh (93,8--96,2\%) với chi phí tài nguyên thấp hơn đáng kể. Các mô hình này có cấu trúc suy luận đơn giản---nhân ma trận cho NN, duyệt cây cho RF, tính kernel cho SVM---có thể triển khai chính xác trong vài trăm dòng C++ mà không cần framework tính toán phức tạp. Điều này tạo thành một \textit{sweet spot} giữa hiệu suất mô hình và tính khả thi triển khai cho các thiết bị đeo bị giới hạn tài nguyên.
 
-\subsubsection{Hạn chế và Các Phương pháp Bổ sung Tương lai}
+\subsubsection{Hạn chế và Các Phương pháp Bổ sung}
 Tạo mã trực tiếp không phải giải pháp phổ quát. Nó không phù hợp cho:
 \begin{itemize}
-    \item \textbf{Mạng sâu phức tạp}: CNN nhiều lớp convolution, LSTM, hoặc Transformer yêu cầu các toán tử phức tạp (batch normalization, pooling, attention) mà triển khai thủ công dễ lỗi và khó bảo trì
+    \item \textbf{Mạng sâu nhiều lớp}: LSTM, Transformer, hoặc CNN với hơn 4--5 lớp convolution yêu cầu các toán tử phức tạp (attention, bidirectional) mà triển khai thủ công dễ lỗi và khó bảo trì
     \item \textbf{Lượng tử hóa nâng cao}: INT8 inference với hiệu chỉnh phạm vi per-channel yêu cầu hạ tầng runtime mà TFLite Micro cung cấp sẵn
     \item \textbf{Mô hình thay đổi thường xuyên}: Nếu mô hình cần cập nhật OTA (over-the-air) mà không biên dịch lại firmware, runtime interpreter là lựa chọn tốt hơn
 \end{itemize}
-Các phiên bản tương lai của framework nên tích hợp đường dẫn TFLite Micro bên cạnh tạo mã trực tiếp, cho phép người dùng chọn phương pháp phù hợp với ràng buộc của họ: tạo mã trực tiếp cho ML cổ điển và TFLite Micro cho học sâu.
+Framework đã tích hợp đường dẫn TFLite Micro (Mục~\ref{sec:tflite_micro_deployment}) bên cạnh tạo mã trực tiếp, cho phép người dùng chọn phương pháp phù hợp: tạo mã trực tiếp cho ML cổ điển và CNN nhỏ, TFLite Micro cho các mô hình cần lượng tử hóa INT8 đầy đủ.
 
 \subsection{Cấu trúc Mã Đã Tạo}
 Đối với mỗi mô hình đã huấn luyện, trình tạo sản xuất một gói triển khai gồm các tệp tham số, tệp cài đặt và tệp ví dụ tích hợp. Cụ thể:
@@ -501,6 +579,82 @@ Các phiên bản tương lai của framework nên tích hợp đường dẫn T
 \end{enumerate}
 
 \textbf{Xác minh Công thức Thống kê}: Mã C++ đã tạo cho trích xuất đặc trưng sử dụng các công thức thống kê được xác minh khớp chính xác với triển khai Python (pandas/NumPy). Cụ thể, các đặc trưng kurtosis và skewness sử dụng \textit{độ lệch chuẩn tổng thể} (population standard deviation, chia $n$) cho chuẩn hóa z-scores, thay vì độ lệch chuẩn mẫu (chia $n-1$). Sự khác biệt này, mặc dù nhỏ ($\sim$1,3\% cho $n=150$), là hệ thống và tích lũy qua nhiều đặc trưng, có thể ảnh hưởng đến độ chính xác triển khai nếu không được xử lý.
+
+\subsection{Lượng tử hóa Mô hình cho Triển khai Biên}
+\label{sec:quantization}
+
+Lượng tử hóa (model quantization) là kỹ thuật nén mô hình then chốt trong triển khai TinyML, chuyển đổi các tham số mô hình từ biểu diễn dấu phẩy động 32-bit (float32) sang số nguyên 8-bit (int8) hoặc 16-bit (int16). Trên vi điều khiển như Cortex-M4F với 256~KB RAM và 1~MB flash, lượng tử hóa có thể quyết định liệu một mô hình có thể triển khai được hay không: chuyển đổi từ float32 sang int8 giảm kích thước trọng số $4\times$, giảm băng thông bộ nhớ và tăng tốc suy luận 2--3$\times$ nhờ các tập lệnh SIMD integer của ARM \cite{lin2022mcunet}.
+
+\subsubsection{Các Loại Lượng tử hóa}
+
+\paragraph{Lượng tử hóa Sau Huấn luyện (Post-Training Quantization, PTQ)}
+PTQ áp dụng sau khi huấn luyện hoàn tất mà không cần sửa đổi quy trình huấn luyện. Mỗi tham số float32 $x$ được ánh xạ sang giá trị lượng tử hóa $x_q$ theo:
+\begin{equation}
+    x_q = \mathrm{clip}\!\left(\mathrm{round}\!\left(\frac{x}{s}\right) + z,\; 0,\; 255\right)
+    \label{eq:quantization}
+\end{equation}
+trong đó $s = \frac{x_{\max} - x_{\min}}{255}$ là hệ số tỷ lệ và $z \in [0, 255]$ là điểm zero-point giữ nguyên giá trị số không. Có hai biến thể PTQ: \textit{lượng tử hóa trọng số} (weight-only), trong đó chỉ trọng số mô hình được chuyển đổi còn phép tính suy luận vẫn dùng float32; và \textit{lượng tử hóa tĩnh} (static PTQ), trong đó cả trọng số lẫn giá trị kích hoạt đều được lượng tử hóa, đòi hỏi một tập hiệu chỉnh nhỏ (100--500 mẫu đại diện) để đo phân phối kích hoạt trong thực tế. PTQ thường gây suy giảm độ chính xác 0,5--2\% cho các mô hình HAR \cite{warden2019tinyml}.
+
+\paragraph{Lượng tử hóa Trong Huấn luyện (Quantization-Aware Training, QAT)}
+QAT chèn các toán tử ``giả lượng tử hóa'' (fake quantization) vào đồ thị tính toán trong quá trình huấn luyện, mô phỏng sai số lượng tử hóa để mô hình học cách bù đắp. QAT thường giảm suy giảm độ chính xác xuống dưới 0,3\% nhưng đòi hỏi sửa đổi pipeline huấn luyện và thực tế chỉ áp dụng cho mạng nơ-ron---Random Forest và SVM có cấu trúc rời rạc (ngưỡng quyết định, vector hỗ trợ) không tương thích với kỹ thuật đạo hàm giả (straight-through estimator) mà QAT dựa vào.
+
+\subsubsection{Chiến lược Lượng tử hóa trong Framework}
+
+Framework áp dụng lượng tử hóa theo hai đường dẫn khác nhau tùy vào phương pháp tạo mã:
+
+\paragraph{Lượng tử hóa Trọng số trong Tạo Mã Trực tiếp}
+Trong đường dẫn tạo mã trực tiếp, lượng tử hóa được thực hiện ở cấp độ biểu diễn tham số trong mã C++ đã tạo. Chế độ tối ưu hóa kiểm soát số chữ số thập phân khi nhúng hằng số float32 vào mã nguồn---tương đương lượng tử hóa trọng số mức thấp:
+\begin{itemize}
+    \item \textbf{Accuracy}: float32 đầy đủ (6 chữ số thập phân), không xấp xỉ
+    \item \textbf{Balanced}: 3 chữ số thập phân, tiết kiệm $\approx$30\% kích thước mã nguồn
+    \item \textbf{Speed/Power}: 2 chữ số thập phân, tiết kiệm $\approx$45\% kích thước mã nguồn
+\end{itemize}
+Phép suy luận vẫn thực hiện bằng số học float32 trên FPU của Cortex-M4F---đây là lượng tử hóa \textit{lưu trữ}, không phải lượng tử hóa \textit{tính toán} đầy đủ. Đối với mạng nơ-ron, chế độ \textit{Power} có thể tùy chọn biểu diễn ma trận trọng số ở int16, thực hiện nhân tích lũy integer và chỉ dequantize một lần trước hàm kích hoạt:
+\begin{equation}
+    y_j = f\!\left(s \cdot \sum_i w_{ij}^{\mathrm{int16}} \cdot x_i^{\mathrm{int16}} + b_j\right)
+\end{equation}
+trong đó $s$ là tích của hai scale tương ứng (trọng số và đầu vào), $f(\cdot)$ là hàm kích hoạt ReLU hoặc softmax.
+
+\paragraph{Lượng tử hóa INT8 Đầy đủ qua Đường dẫn TFLite Micro}
+Đường dẫn TFLite Micro (áp dụng cho NN và CNN) hỗ trợ static PTQ với INT8 đầy đủ---cả trọng số lẫn kích hoạt. Quy trình thực hiện:
+\begin{enumerate}
+    \item Mô hình Keras/PyTorch được chuyển đổi sang định dạng TFLite qua \texttt{tf.lite.TFLiteConverter}
+    \item Một tập hiệu chỉnh gồm 100--500 vectors đặc trưng đại diện được cung cấp để TFLiteConverter đo phân phối kích hoạt từng lớp
+    \item Converter tự động tính $s$ và $z$ cho mỗi tensor theo Phương trình~\ref{eq:quantization}, tối ưu cho phạm vi kích hoạt thực tế
+    \item Mô hình INT8 kết quả kết hợp với ARM CMSIS-NN \cite{banbury2021mlperf} để khai thác tập lệnh SIMD của Cortex-M4, thực thi 4 phép nhân int8 song song mỗi chu kỳ---tăng tốc 2--3$\times$ so với mô hình float32 tương đương
+\end{enumerate}
+
+Bảng~\ref{tab:quantization_tradeoff} so sánh hai đường dẫn lượng tử hóa theo các tiêu chí triển khai:
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh Chiến lược Lượng tử hóa trong Framework}
+    \label{tab:quantization_tradeoff}
+    \small
+    \begin{tabular}{@{}p{3.5cm}p{3.5cm}p{4.2cm}@{}}
+        \toprule
+        Tiêu chí & Tạo mã trực tiếp (Weight PTQ) & TFLite Micro (Static INT8 PTQ) \\
+        \midrule
+        Áp dụng cho & RF, SVM, NN, CNN & NN, CNN (không hỗ trợ RF/SVM) \\
+        Giảm kích thước & 30--45\% (so với float32 đầy đủ) & $4\times$ (so với float32) \\
+        Tăng tốc suy luận & Không đáng kể (vẫn dùng FPU float32) & 2--3$\times$ (SIMD int8) \\
+        Suy giảm độ chính xác & $<$0,5\% & 0,5--2\% \\
+        Yêu cầu tập hiệu chỉnh & Không & 100--500 mẫu \\
+        Tính minh bạch & Hoàn toàn (mã có thể kiểm tra) & Hạn chế (runtime hộp đen) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsubsection{Đặc thù Lượng tử hóa cho Đặc trưng HAR Miền Thời gian}
+
+Bài toán HAR với đặc trưng thống kê miền thời gian có các đặc tính thuận lợi cho lượng tử hóa so với thị giác máy tính hay xử lý ngôn ngữ tự nhiên:
+
+\begin{itemize}
+    \item \textbf{Phạm vi đặc trưng có giới hạn vật lý}: Gia tốc IMU bị giới hạn ở $\pm$20~m/s², vận tốc góc ở $\pm$2000$^\circ$/s. Do đó, các đặc trưng thống kê (trung bình, RMS, độ lệch chuẩn) có phạm vi xác định, giúp xác định scale lượng tử hóa chính xác mà không cần tập hiệu chỉnh lớn.
+    \item \textbf{Bền vững với nhiễu lượng tử hóa}: Random Forest quyết định theo ngưỡng nhị phân tại mỗi nút cây; sai số lượng tử hóa nhỏ hiếm khi đủ để đổi chiều quyết định phân nhánh, đặc biệt khi đặc trưng nằm xa ngưỡng. SVM nhạy hơn ở vùng ranh giới quyết định nhưng vẫn ổn định với int16.
+    \item \textbf{Tham số scaler phải đồng bộ độ chính xác}: StandardScaler (trung bình $\mu$ và độ lệch chuẩn $\sigma$) được áp dụng trước mô hình. Để duy trì parity huấn luyện-triển khai, tham số scaler cần được nhúng với cùng độ chính xác với tham số mô hình---lượng tử hóa mô hình nhưng giữ scaler ở float32 đầy đủ sẽ gây ra sự không nhất quán hệ thống ảnh hưởng đến toàn bộ vector đặc trưng đầu vào.
+    \item \textbf{Kurtosis và Skewness nhạy hơn}: Các đặc trưng hình dạng phân phối có phạm vi giá trị rộng hơn và nhạy với lượng tử hóa mạnh hơn các đặc trưng năng lượng (RMS, Energy). Trong chế độ \textit{Balanced}, framework ưu tiên 3 chữ số thập phân để bảo toàn các đặc trưng này.
+\end{itemize}
 
 \subsection{Kiến trúc Tạo Mã Đa Kiến trúc}
 \label{sec:multi_architecture_codegen}
@@ -559,7 +713,7 @@ Hình \ref{fig:ui_code_generation} cho thấy giao diện tạo mã với bản 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{figures/ui_code_generation.png}
-    \caption{Giao diện xem trước gói mã triển khai đã tạo. Framework hiển thị các tệp header, tệp triển khai và tệp ví dụ tích hợp tương ứng với nền tảng đích, cho phép người dùng chọn các chế độ tối ưu hóa (Accuracy, Speed, Power, Balanced), cấu hình các tham số backend và tải xuống gói triển khai hoàn chỉnh.}
+    \caption{Giao diện xem trước gói mã triển khai đã tạo. Framework hiển thị các tệp header, tệp triển khai và tệp ví dụ tích hợp tương ứng với nền tảng đích (Arduino, ARM Cortex-M, Generic C/C++, ESP-IDF, MicroPython, Zephyr, TFLite Micro, ONNX Runtime), cho phép người dùng chọn các chế độ tối ưu hóa (Accuracy, Speed, Power, Balanced) và tải xuống gói triển khai hoàn chỉnh.}
     \label{fig:ui_code_generation}
 \end{figure}
 
@@ -585,17 +739,18 @@ Tối thiểu hóa độ trễ suy luận:
 \paragraph{Chế độ Power}
 Giảm tiêu thụ năng lượng:
 \begin{itemize}
-    \item Số học số nguyên điểm cố định nếu khả thi
+    \item Số học số nguyên điểm cố định và biểu diễn trọng số int16 khi khả thi (xem Mục~\ref{sec:quantization})
+    \item 2 chữ số thập phân cho tham số mô hình và scaler, tiết kiệm $\approx$45\% khích thước flash
     \item Giảm tần số lấy mẫu (có thể cấu hình xuống 50Hz)
-    \item Các chế độ ngủ giữa các chu kỳ suy luận (không được triển khai trong phiên bản hiện tại)
+    \item Các chế độ ngủ giữa các chu kỳ suy luận (chưa được triển khai trong phiên bản hiện tại)
 \end{itemize}
 
 \paragraph{Chế độ Balanced}
 Thỏa hiệp giữa độ chính xác, tốc độ và điện năng:
 \begin{itemize}
     \item Độ phức tạp mô hình trung bình
-    \item Bộ đặc trưng chọn lọc (60-75 đặc trưng hàng đầu theo tầm quan trọng)
-    \item Độ chính xác hỗn hợp (các tính toán quan trọng trong float, trung gian trong điểm cố định)
+    \item 3 chữ số thập phân cho tham số---đủ bảo tồn các đặc trưng nhạy cảm như kurtosis và skewness trong khi tiết kiệm 30\% flash (xem Mục~\ref{sec:quantization})
+    \item Độ chính xác hỗn hợp: các tính toán quan trọng (softmax, chuẩn hóa scaler) dùng float32, các phép nhân ma trận trung gian có thể dùng điểm cố định
 \end{itemize}
 
 \subsection{Các Điều chỉnh Đặc thù Nền tảng}
@@ -659,9 +814,11 @@ Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: su
 \textbf{Ngăn xếp Phần mềm:}
 \begin{itemize}
     \item Python 3.10 với Dash 2.14 (giao diện web)
-    \item scikit-learn 1.3 (học máy)
+    \item scikit-learn 1.3 (học máy cổ điển: RF, SVM, MLP)
+    \item PyTorch 2.x (học sâu: MLP, CNN)
     \item NumPy, Pandas (xử lý dữ liệu)
     \item Plotly (trực quan hóa)
+    \item Jinja2 (template engine cho tạo mã đa nền tảng)
 \end{itemize}
 
 \textbf{Phần cứng:}
