@@ -1,25 +1,21 @@
 """
-Deployment package initialization
-Provides clean imports for the refactored code generators
+Deployment package — v2 clean architecture for HAR embedded code generation.
+
+All generation is handled by deployment/v2/.  The factory functions below
+provide the public API used by the application.
 """
 
-from .base_generator import BaseCodeGenerator
-from .random_forest_generator import RandomForestCodeGenerator
-from .neural_network_generator import NeuralNetworkCodeGenerator
-from .svm_generator import SVMCodeGenerator
-from .cnn_generator import CNNCodeGenerator
-from .arm_cortex_generator import ARMCortexMCodeGenerator
-from .micropython_generator import MicroPythonCodeGenerator
-from .zephyr_generator import ZephyrCodeGenerator
-from .tflite_generator import TFLiteMicroCodeGenerator
-from .onnx_generator import ONNXRuntimeCodeGenerator
 from .code_generator_factory import (
-    CodeGeneratorFactory, 
-    generate_deployment_code, 
+    CodeGeneratorFactory,
+    generate_deployment_code,
     analyze_resource_requirements,
     generate_and_save_deployment_code,
     get_deployment_info,
     DEPLOYMENT_APPROACHES,
+    BaseCodeGenerator,        # backward-compat stub
+    ValidationError,
+    ModelDataError,
+    OptimizationError,
 )
 from .validation import DeploymentValidator, validate_before_deployment
 from .quantization import (

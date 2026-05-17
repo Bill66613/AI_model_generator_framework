@@ -50,6 +50,9 @@ Key technical findings to reflect in the thesis (see `TECHNICAL_FINDINGS.md` for
 15. **TFLite deployment scope** → CLARIFIED (RF/SVM not directly convertible via onnx2tf/ONNX-ML; Keras surrogate fallback added as approximation)
 16. **CNN code generation metadata mismatch** → FIXED (consistent feature/channel count in UI and code-gen)
 17. **Kalman filter (causal) + exact deployment parity** → IMPLEMENTED (identical Python ↔ C++ filter equations with lazy-init)
+18. **CNN scaler clamp destroys raw sensor data** → FIXED (v2 unified pipeline applied [-10,10] clamp to raw gyro values; added `skip_scaler` bypass for CNN; saves 7KB flash + eliminates wrong inference)
+19. **Preprocessing filter parity on device** → IMPLEMENTED (per-window filtfilt for IIR, SavGol FIR convolution, FFT lowpass — all replicated exactly on device; outlier removal NOT replicated by design)
+20. **Conv2D neural network (HARCNN2D)** → IMPLEMENTED (2D-CNN with cross-channel fusion via Conv2D(3×n_channels) kernel; explicit sensor-axis correlation learning; same deployment path as 1D-CNN)
 
 ---
 
@@ -66,6 +69,8 @@ Key technical findings to reflect in the thesis (see `TECHNICAL_FINDINGS.md` for
 | 2026-04-08 | Multi-device redirect | Reframed Ch.1/3/4/5/6 so thesis emphasizes multi-device deployment capability; XIAO now treated as reference benchmark platform |
 | 2026-05-05 | Sync PR\#3 | Added TODOs/placeholders for TFLite scope, Kalman preprocessing parity, and CNN metadata fix; updated requested evidence list |
 | 2026-05-05 | Integrate Findings 15-17 | ✅ Added: Kalman filter section in Ch.3 methodology, TFLite limitations section, multi-architecture code generation section, technical findings analysis in Ch.5 discussion, updated research objective #6, added kalman1960new + tensorflow2015_whitepaper references |
+| 2026-05-17 | Finding 18 | CNN scaler clamp fix: v2 pipeline [-10,10] clamp destroyed raw sensor values for CNN; added skip_scaler bypass, validator CNN-awareness, memcpy optimization, brace formatting fix |
+| 2026-05-17 | Findings 19-20 | Preprocessing filter parity (filtfilt+SavGol+FFT replicated on device); Conv2D HARCNN2D architecture; spectral_entropy DFT feature added |
 
 *Add a row here each time this file is updated.*
 

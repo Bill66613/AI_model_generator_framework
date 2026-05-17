@@ -12,7 +12,8 @@ from config.config import (
     PERSISTENT_DIR, METADATA_FILE, DATASETS_DIR, WINDOWS_DIR, TRAINING_DIR, MODELS_DIR,
     SENSOR_COLUMNS, ACCEL_COLUMNS, GYRO_COLUMNS,
     DEFAULT_SAMPLING_RATE, get_sampling_rate_from_metadata,
-    get_dataset_path, get_window_path, get_window_pattern, get_training_data_path
+    get_dataset_path, get_window_path, get_window_pattern, get_training_data_path,
+    resolve_working_dir
 )
 from utils.data_processing import clean_data, low_pass_filter, detect_sensor_columns
 
@@ -191,8 +192,7 @@ def register_callbacks(app):
     def populate_dataset_selector(tab, base_dir):
         """Populate the dataset selector with available datasets."""
         if tab == 'tab-2':
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
             if os.path.exists(metadata_file):
                 with open(metadata_file, 'r') as f:
@@ -213,8 +213,7 @@ def register_callbacks(app):
         if not dataset_name:
             return {}, html.Div("Select a dataset to view status", style={'color': '#6c757d', 'font-style': 'italic'})
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
         with open(metadata_file, 'r') as f:
@@ -428,6 +427,8 @@ def register_callbacks(app):
         State('preprocess-savgol-enabled', 'value'),
         State('preprocess-savgol-window', 'value'),
         State('preprocess-savgol-polyorder', 'value'),
+        State('preprocess-fft-enabled', 'value'),
+        State('preprocess-fft-cutoff', 'value'),
         State('preprocess-kalman-enabled', 'value'),
         State('preprocess-kalman-process-noise', 'value'),
         State('preprocess-kalman-measurement-noise', 'value'),
@@ -436,13 +437,13 @@ def register_callbacks(app):
     def clean_and_smooth_data(n_clicks, dataset_name, base_dir,
                               outlier_enabled, lpf_enabled, lpf_cutoff, lpf_order,
                               savgol_enabled, savgol_window, savgol_polyorder,
+                              fft_enabled, fft_cutoff,
                               kalman_enabled, kalman_process_noise, kalman_measurement_noise):
         """Clean and smooth the selected dataset and display it in a graph."""
         if not dataset_name:
             return no_update, no_update, no_update
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         datasets_dir = os.path.join(base_dir, 'datasets')
 
         file_path = os.path.join(datasets_dir, dataset_name)
@@ -456,7 +457,11 @@ def register_callbacks(app):
             if os.path.exists(metadata_file):
                 with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
+                if not isinstance(metadata, dict):
+                    metadata = {}
                 sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
+            else:
+                metadata = {}
 
             df = pd.read_csv(file_path)
 
@@ -465,12 +470,18 @@ def register_callbacks(app):
             use_lpf = 'enabled' in (lpf_enabled or [])
             use_savgol = 'enabled' in (savgol_enabled or [])
             use_kalman = 'enabled' in (kalman_enabled or [])
+            use_fft = 'enabled' in (fft_enabled or [])
             lpf_cutoff = float(lpf_cutoff or 5)
             lpf_order = int(lpf_order or 2)
             savgol_window = int(savgol_window or 5)
             savgol_polyorder = int(savgol_polyorder or 2)
+            fft_cutoff = float(fft_cutoff or 10)
             kalman_q = float(kalman_process_noise or 1e-3)
             kalman_r = float(kalman_measurement_noise or 1e-1)
+            window_size_ms = metadata.get(dataset_name, {}).get('window_size_ms', 1500)
+            fft_window_size_samples = int((window_size_ms / 1000) * sampling_rate)
+            if fft_window_size_samples <= 0:
+                fft_window_size_samples = None
 
             preprocess_config = {
                 'outlier_removal': use_outlier,
@@ -480,6 +491,9 @@ def register_callbacks(app):
                 'savgol_filter': use_savgol,
                 'savgol_window_length': savgol_window,
                 'savgol_polyorder': savgol_polyorder,
+                'fft_filter': use_fft,
+                'fft_cutoff_hz': fft_cutoff,
+                'fft_window_size_samples': fft_window_size_samples,
                 'kalman_filter': use_kalman,
                 'kalman_process_noise': kalman_q,
                 'kalman_measurement_noise': kalman_r,
@@ -498,6 +512,14 @@ def register_callbacks(app):
             if use_savgol:
                 for col in df.select_dtypes(include=['float64', 'int64']).columns:
                     df[col] = savgol_filter(df[col], window_length=savgol_window, polyorder=savgol_polyorder)
+
+            # Apply FFT low-pass filter
+            if use_fft:
+                from utils.data_processing import fft_lowpass_filter
+                df = fft_lowpass_filter(
+                    df, cutoff=fft_cutoff, fs=sampling_rate,
+                    window_size=fft_window_size_samples
+                )
 
             # Apply Kalman filter
             if use_kalman:
@@ -565,8 +587,7 @@ def register_callbacks(app):
         if not (dataset_name and processed_figure):
             return {}
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         datasets_dir = os.path.join(base_dir, 'datasets')
 
         df = pd.DataFrame(cleaned_smoothed)
@@ -607,8 +628,7 @@ def register_callbacks(app):
         if not (dataset_name and time_window_span):
             return {}, []
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
         with open(metadata_file, 'r') as f:
@@ -887,8 +907,7 @@ def register_callbacks(app):
             current_windows = []
 
         # Load dataset info for window calculations
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
         with open(metadata_file, 'r') as f:
@@ -1058,8 +1077,7 @@ def register_callbacks(app):
             return no_update, no_update
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -1351,8 +1369,7 @@ def register_callbacks(app):
 
         try:
             # Load data
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -1606,8 +1623,7 @@ def register_callbacks(app):
             all_selected_data = []
 
             # Use working directory for window storage
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             windows_dir = os.path.join(base_dir, 'windows')
             os.makedirs(windows_dir, exist_ok=True)
 
@@ -1746,8 +1762,7 @@ def register_callbacks(app):
 
         print("Current windows:", current_windows)
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         metadata_file = os.path.join(base_dir, 'metadata.json')
 
         with open(metadata_file, 'r') as f:
@@ -1865,7 +1880,7 @@ def register_callbacks(app):
             old_files = metadata[dataset_name]['dragged_samples']
             for old_file in old_files:
                 # Only remove manual dragged windows, not sliding windows
-                if 'dragged_window_' in old_file and os.path.exists(old_file):
+                if 'dragged_window_' in old_file and 'sliding_' not in old_file and os.path.exists(old_file):
                     try:
                         os.remove(old_file)
                         print(f"Removed old window file: {old_file}")
@@ -2005,8 +2020,7 @@ def register_callbacks(app):
             return [], None
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2236,8 +2250,7 @@ def register_callbacks(app):
                 f"Deleted {'sliding' if is_sliding else 'manual'} window file: {selected_file_path}")
 
             # Update metadata
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2338,8 +2351,7 @@ def register_callbacks(app):
                     print(f"Deleted: {file_path}")
 
             # Update metadata to remove references to deleted files
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2586,8 +2598,7 @@ def register_callbacks(app):
             return no_update
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2757,4 +2768,3 @@ def register_callbacks(app):
 
         except Exception as e:
             return html.Div(f"Error updating status: {str(e)}", style={'color': '#dc3545'})
-

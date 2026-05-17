@@ -35,28 +35,67 @@ layout = html.Div([
                     'border-left': '4px solid #2196f3',
                     'font-family': 'monospace',
                     'font-size': '13px',
+                    'margin-bottom': '8px'
+                }),
+                html.Div([
+                    html.Strong("💡 Portability tip: "),
+                    "Use a ",
+                    html.Strong("relative path"),
+                    " (e.g. ",
+                    html.Code("persistent_data"),
+                    " or ",
+                    html.Code("my_project/data"),
+                    ") so the project stays portable when moved to another machine. "
+                    "Relative paths are resolved from the application root folder. "
+                    "Absolute paths work too but break if you move the project.",
+                ], style={
+                    'font-size': '12px', 'color': '#856404',
+                    'background': '#fff3cd', 'padding': '8px 12px',
+                    'border-radius': '5px', 'border-left': '3px solid #ffc107',
                     'margin-bottom': '15px'
-                })
+                }),
             ]),
 
             html.Div([
                 html.Div([
                     html.Label("Directory Path:", style={
                                'font-weight': 'bold', 'margin-bottom': '5px', 'display': 'block'}),
-                    dcc.Input(
-                        id='directory-path-input',
-                        type='text',
-                        value='',  # Initialize with empty string instead of undefined
-                        placeholder='Enter directory path (e.g., D:\\Workspaces\\data or C:\\my_project\\datasets)',
-                        style={
-                            'width': '100%',
-                            'padding': '10px',
-                            'border': '1px solid #ddd',
-                            'border-radius': '6px',
-                            'font-size': '14px',
-                            'box-sizing': 'border-box'
-                        }
-                    )
+                    html.Div([
+                        dcc.Input(
+                            id='directory-path-input',
+                            type='text',
+                            value='',
+                            placeholder='Absolute: D:\\data  OR  relative to app root: my_data  (default: persistent_data)',
+                            style={
+                                'flex': '1',
+                                'padding': '8px',
+                                'border': '1px solid #ddd',
+                                'border-right': 'none',
+                                'border-radius': '6px 0 0 6px',
+                                'font-size': '14px',
+                                'box-sizing': 'border-box',
+                                'min-width': '0',
+                            }
+                        ),
+                        html.Button(
+                            "📁 Browse",
+                            id='browse-working-dir-btn',
+                            n_clicks=0,
+                            title='Open folder picker dialog',
+                            style={
+                                'flex': '0 0 auto',
+                                'padding': '7px 16px',
+                                'background-color': '#6c757d',
+                                'color': 'white',
+                                'border': '1px solid #6c757d',
+                                'border-radius': '0 6px 6px 0',
+                                'cursor': 'pointer',
+                                'font-weight': 'bold',
+                                'font-size': '13px',
+                                'white-space': 'nowrap',
+                            }
+                        ),
+                    ], style={'display': 'flex', 'align-items': 'stretch', 'width': '100%'}),
                 ], style={'margin-bottom': '15px'}),
 
                 html.Div([

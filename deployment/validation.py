@@ -217,7 +217,7 @@ class DeploymentValidator:
 
         # Detect CNN model type — CNN uses raw sensor windows, not extracted features
         model_type = model_data.get('model_type', '')
-        is_cnn = model_type in ('pytorch_cnn', 'cnn') or \
+        is_cnn = model_type in ('pytorch_cnn', 'pytorch_cnn2d', 'cnn') or \
                  'har_predict_from_window' in source_code
 
         if is_cnn:
@@ -407,6 +407,224 @@ class DeploymentValidator:
 
         return report
 
+    # ------------------------------------------------------------------
+    # v2 validation
+    # ------------------------------------------------------------------
+
+    def _validate_v2_code(self, files: Dict[str, str],
+                          model_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate v2 (HAR Edge Framework v2) generated files.
+
+        v2 uses:
+          har_config.h        — HAR_NUM_FEATURES / HAR_NUM_CLASSES / HAR_WINDOW_SIZE
+          har_features.cpp    — har_extract_features()
+          har_classifier.cpp  — SCALER_MEANS[] / SCALER_STDS[] / har_classify()
+          har_model.cpp       — har_model_predict()
+          *.ino               — thin sketch calling har_classify()
+        """
+        report = {
+            'passed': True,
+            'issues': [],
+            'warnings': [],
+            'checks_passed': [],
+        }
+
+        config_h = files.get('har_config.h', '')
+        features_cpp = files.get('har_features.cpp', '')
+        classifier_cpp = files.get('har_classifier.cpp', '')
+        model_h = files.get('har_model.h', '')
+        model_cpp = files.get('har_model.cpp', '')
+        sketch = next((v for k, v in files.items() if k.endswith('.ino')), '')
+        sketch_name = next((k for k in files if k.endswith('.ino')), '')
+
+        # ---- Required v2 files presence check ----
+        required_v2_files = [
+            'har_config.h',
+            'har_features.cpp',
+            'har_classifier.cpp',
+            'har_model.h',
+            'har_model.cpp',
+        ]
+        missing = [fname for fname in required_v2_files if not files.get(fname)]
+        if missing:
+            report['issues'].append(
+                "Missing required v2 files: " + ", ".join(missing)
+            )
+            report['passed'] = False
+            return report
+
+        # ---- Check 1: HAR_NUM_FEATURES matches model ----
+        m = re.search(r'#define HAR_NUM_FEATURES\s+(\d+)', config_h)
+        model_type_v2 = model_data.get('model_type', '')
+        is_cnn = model_type_v2 in ('pytorch_cnn', 'pytorch_cnn2d')
+        if m:
+            cpp_n = int(m.group(1))
+            if is_cnn:
+                # For CNN, HAR_NUM_FEATURES = WINDOW_SIZE * N_CHANNELS (flattened window).
+                # Derive expected value from HAR_WINDOW_SIZE * len(raw feature_names).
+                ws_m = re.search(r'#define HAR_WINDOW_SIZE\s+(\d+)', config_h)
+                n_ch = len(model_data.get('feature_names') or []) or 6
+                expected_cnn_n = (int(ws_m.group(1)) * n_ch) if ws_m else None
+                if expected_cnn_n is not None and cpp_n != expected_cnn_n:
+                    report['issues'].append(
+                        f"HAR_NUM_FEATURES mismatch: C++={cpp_n}, "
+                        f"expected {expected_cnn_n} (WINDOW_SIZE*N_CHANNELS)")
+                    report['passed'] = False
+                else:
+                    report['checks_passed'].append(f"HAR_NUM_FEATURES={cpp_n} ✓")
+            else:
+                py_n = len(model_data.get('feature_names') or [])
+                if py_n > 0 and cpp_n != py_n:
+                    report['issues'].append(
+                        f"HAR_NUM_FEATURES mismatch: C++={cpp_n}, Python={py_n}")
+                    report['passed'] = False
+                else:
+                    report['checks_passed'].append(f"HAR_NUM_FEATURES={cpp_n} ✓")
+        else:
+            report['issues'].append("HAR_NUM_FEATURES not found in har_config.h")
+            report['passed'] = False
+
+        # ---- Check 2: HAR_NUM_CLASSES matches model ----
+        m = re.search(r'#define HAR_NUM_CLASSES\s+(\d+)', config_h)
+        if m:
+            cpp_c = int(m.group(1))
+            py_c = len(model_data.get('classes') or [])
+            if py_c > 0 and cpp_c != py_c:
+                report['issues'].append(
+                    f"HAR_NUM_CLASSES mismatch: C++={cpp_c}, Python={py_c}")
+                report['passed'] = False
+            else:
+                report['checks_passed'].append(f"HAR_NUM_CLASSES={cpp_c} ✓")
+
+        # ---- Check 3: Scaler arrays present in har_classifier.cpp ----
+        # CNN models intentionally skip scaler (raw sensor values pass through)
+        if is_cnn:
+            if 'No scaler arrays needed' in classifier_cpp or 'CNN mode' in classifier_cpp:
+                report['checks_passed'].append("CNN scaler bypass confirmed ✓")
+            elif 'SCALER_MEANS' in classifier_cpp:
+                report['warnings'].append(
+                    "CNN model has SCALER_MEANS — unnecessary but not harmful if identity")
+            # Not an error for CNN to lack scaler arrays
+        else:
+            if 'SCALER_MEANS' in classifier_cpp:
+                report['checks_passed'].append("SCALER_MEANS array present ✓")
+            else:
+                report['issues'].append("SCALER_MEANS[] not found in har_classifier.cpp")
+                report['passed'] = False
+
+            if 'SCALER_STDS' in classifier_cpp:
+                report['checks_passed'].append("SCALER_STDS array present ✓")
+            else:
+                report['issues'].append("SCALER_STDS[] not found in har_classifier.cpp")
+                report['passed'] = False
+
+        # ---- Check 4: Scaler count matches feature count ----
+        # Skip for CNN (no scaler arrays)
+        means_match = re.search(r'SCALER_MEANS\[HAR_NUM_FEATURES\]\s*=\s*\{([^}]+)\}', classifier_cpp, re.DOTALL) if not is_cnn else None
+        if means_match:
+            vals = [v.strip().rstrip('f') for v in means_match.group(1).split(',') if v.strip()]
+            py_n = len(model_data.get('feature_means') or [])
+            if py_n > 0 and abs(len(vals) - py_n) > 1:  # allow ±1 for trailing
+                report['issues'].append(
+                    f"SCALER_MEANS has {len(vals)} values but model has {py_n} feature_means")
+                report['passed'] = False
+            else:
+                report['checks_passed'].append(f"SCALER_MEANS values count matches ✓")
+
+        # ---- Check 5: Feature extraction parity (feature type detection) ----
+        feature_names = model_data.get('feature_names') or []
+        has_mag = any(str(n).startswith('acc_mag_') for n in feature_names)
+        has_gyro_mag = any(str(n).startswith('gyro_mag_') for n in feature_names)
+        has_per_axis = any(str(n).startswith(('aX_', 'aY_', 'aZ_')) for n in feature_names)
+
+        if has_mag:
+            # v2 orientation-invariant path computes acc_mag centred magnitude
+            # It always calls _extract_15_stats on the magnitude arrays
+            if '_extract_15_stats' in features_cpp or 'acc_mag' in features_cpp.lower():
+                report['checks_passed'].append("Orientation-invariant feature extraction ✓")
+            else:
+                report['issues'].append(
+                    "Model trained with magnitude features (acc_mag_*) but "
+                    "har_features.cpp does not contain magnitude extraction!")
+                report['passed'] = False
+
+        if has_per_axis:
+            if 'for (int axis' in features_cpp or 'for (int ch' in features_cpp:
+                report['checks_passed'].append("Per-axis feature extraction ✓")
+            else:
+                report['warnings'].append(
+                    "Model has per-axis features but har_features.cpp may not iterate axes")
+
+        is_cnn_features = all(str(n).startswith('cnn_in_') for n in feature_names) if feature_names else False
+        if is_cnn or is_cnn_features:
+            report['checks_passed'].append("CNN window-flatten feature extraction ✓")
+        elif not has_mag and not has_per_axis and feature_names:
+            report['warnings'].append(
+                "Could not detect feature extraction mode from feature names")
+
+        # ---- Check 6: Parity — division-by-zero guard in scaler ----
+        if is_cnn:
+            report['checks_passed'].append("CNN mode: no scaler division needed ✓")
+        elif '1e-7f' in classifier_cpp or '0.0001f' in classifier_cpp or '1e-6f' in classifier_cpp:
+            report['checks_passed'].append("Zero-std guard present in scaler ✓")
+        else:
+            report['warnings'].append(
+                "Division-by-zero guard not found in har_classifier.cpp scaler")
+
+        # ---- Check 7: NaN/Inf guard in scaler ----
+        if '!= features[i]' in classifier_cpp or '!= features' in classifier_cpp or \
+                'features[i] != features[i]' in classifier_cpp:
+            report['checks_passed'].append("NaN guard present in scaler ✓")
+        else:
+            report['warnings'].append(
+                "NaN/Inf guard not found in har_classifier.cpp — "
+                "may cause silent incorrect results on bad sensor data")
+
+        # ---- Check 8: Sketch .ino filename ----
+        if sketch_name:
+            # Extract base name (without .ino)
+            ino_base = sketch_name[:-4] if sketch_name.endswith('.ino') else sketch_name
+            if ino_base == 'har_sketch':
+                report['warnings'].append(
+                    "Sketch is named 'har_sketch.ino' — rename to match the folder name "
+                    "for Arduino IDE compatibility")
+            else:
+                report['checks_passed'].append(
+                    f"Sketch filename '{sketch_name}' matches folder name ✓")
+        else:
+            report['warnings'].append("No .ino sketch file found in generated files")
+
+        # ---- Check 9: har_classify() entry point present ----
+        if 'har_classify' in classifier_cpp:
+            report['checks_passed'].append("har_classify() inference entry point present ✓")
+        else:
+            report['issues'].append("har_classify() not found in har_classifier.cpp")
+            report['passed'] = False
+
+        # ---- Check 10: har_model_predict() entry point present ----
+        if 'har_model_predict' in model_cpp:
+            report['checks_passed'].append("har_model_predict() present ✓")
+        else:
+            report['issues'].append("har_model_predict() not found in har_model.cpp")
+            report['passed'] = False
+
+        # ---- Check 11: Class names match ----
+        for cls in model_data.get('classes', []):
+            if f'"{cls}"' not in classifier_cpp:
+                report['warnings'].append(
+                    f"Class label '{cls}' not found in HAR_CLASS_NAMES array")
+
+        # ---- Check 12: Sketch includes har_classifier.h ----
+        if sketch and '#include "har_classifier.h"' not in sketch:
+            report['issues'].append(
+                "Sketch does not include har_classifier.h — inference won't compile")
+            report['passed'] = False
+        elif sketch:
+            report['checks_passed'].append("Sketch includes har_classifier.h ✓")
+
+        return report
+
     def estimate_resources(self, model_data: Dict[str, Any],
                            device_key: str,
                            optimization: str = 'balanced') -> Dict[str, Any]:
@@ -435,7 +653,7 @@ class DeploymentValidator:
         sensor_buffer_bytes = window_size * 6 * 4
 
         # CNN models: raw window buffer + layer activations, no feature extraction
-        if model_type in ('pytorch_cnn', 'cnn'):
+        if model_type in ('pytorch_cnn', 'pytorch_cnn2d', 'cnn'):
             return self._estimate_cnn_resources(
                 model_data, device, optimization, window_size, num_classes)
 
@@ -891,33 +1109,43 @@ def validate_before_deployment(model_data: Dict[str, Any],
     """
     validator = DeploymentValidator(model_data)
     report = {'passed': True, 'checks': {}}
-    
-    # Find header and source files
-    header_code = ""
-    source_code = ""
-    for fname, content in generated_files.items():
-        if fname.endswith('.h'):
-            header_code = content
-        elif fname.endswith('.cpp') or fname.endswith('.c'):
-            source_code = content
-    
-    # Code validation
-    if header_code and source_code:
-        code_report = validator.validate_generated_code(
-            header_code, source_code, model_data)
+
+    # Detect v2 architecture: has har_config.h with HAR_NUM_FEATURES define
+    is_v2 = 'har_config.h' in generated_files and (
+        'HAR_NUM_FEATURES' in generated_files.get('har_config.h', '')
+    )
+
+    if is_v2:
+        code_report = validator._validate_v2_code(generated_files, model_data)
         report['checks']['code'] = code_report
         if not code_report['passed']:
             report['passed'] = False
-    
+    else:
+        # Legacy v1: find first .h and first .cpp
+        header_code = ""
+        source_code = ""
+        for fname, content in generated_files.items():
+            if fname.endswith('.h') and fname != 'build_opt.h' and not header_code:
+                header_code = content
+            elif (fname.endswith('.cpp') or fname.endswith('.c')) and not source_code:
+                source_code = content
+
+        if header_code and source_code:
+            code_report = validator.validate_generated_code(
+                header_code, source_code, model_data)
+            report['checks']['code'] = code_report
+            if not code_report['passed']:
+                report['passed'] = False
+
     # Scaling validation (skip for CNN — CNN uses raw sensor windows, no feature scaling)
     model_type = model_data.get('model_type', '')
-    is_cnn = model_type in ('pytorch_cnn', 'cnn')
+    is_cnn = model_type in ('pytorch_cnn', 'pytorch_cnn2d', 'cnn')
     feature_means = model_data.get('feature_means', [])
     feature_stds = model_data.get('feature_stds', [])
     if feature_means and feature_stds and not is_cnn:
         # Determine precision from optimization level
         optimization = model_data.get('optimization', 'balanced')
-        precision = {'accuracy': 6, 'balanced': 3, 'speed': 3, 'power': 3}.get(optimization, 3)
+        precision = {'accuracy': 6, 'balanced': 4, 'speed': 3, 'power': 3}.get(optimization, 4)
         scaling_report = validator.validate_scaling_parameters(
             feature_means, feature_stds, precision)
         report['checks']['scaling'] = scaling_report

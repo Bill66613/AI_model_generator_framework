@@ -106,17 +106,17 @@ layout = html.Div([
                     dcc.Dropdown(
                         id='global-feature-selection',
                         options=[
-                            {'label': '🧭 Orientation-Invariant Time-Domain ONLY (RECOMMENDED) - 33 features',
+                            {'label': '🧭 Orientation-Invariant Time-Domain ONLY - 41 features',
                              'value': 'orientation_invariant_time_only'},
-                            {'label': '🧭 Orientation-Invariant + DFT (Deployable) - 53 features',
+                            {'label': '🧭 Orientation-Invariant + DFT - 63 features',
                              'value': 'orientation_invariant'},
-                            {'label': '🎯 Per-Axis Time-Domain (Deployable) - 90 features',
+                            {'label': '🎯 Per-Axis Time-Domain - 90 features',
                              'value': 'time_domain'},
-                            {'label': '🎯 Per-Axis All + FFT (⚠️ per-axis freq NOT deployable) - 156 features',
+                            {'label': '🎯 Per-Axis All + FFT - 156 features',
                              'value': 'all'},
-                            {'label': '🌊 Per-Axis Frequency Only (⚠️ NOT deployable) - 66 features',
+                            {'label': '🌊 Per-Axis Frequency Only - 66 features',
                              'value': 'frequency_domain'},
-                            {'label': '📊 Raw Sensor Axes (Deployable) - 6 features',
+                            {'label': '📊 Raw Sensor Axes - 6 features',
                              'value': 'raw'}
                         ],
                         value='orientation_invariant_time_only',
@@ -126,7 +126,7 @@ layout = html.Div([
                     ),
                     html.Div([
                         html.Strong("⚠️ Note: "),
-                        "Orientation-robust DFT (53 features) ",
+                        "Orientation-robust DFT (63 features) ",
                         html.Strong("is fully deployable"),
                         " — code generators emit a lightweight sin/cos DFT. ",
                         "Only ",
@@ -367,75 +367,146 @@ layout = html.Div([
             html.P("Define how to split the combined dataset into train/validation/test sets",
                    style={'color': '#666', 'margin-bottom': '20px'}),
 
+            # Split mode selector
             html.Div([
-                # Train split
-                html.Div([
-                    html.Label("Training Set Ratio:", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
-                    dcc.Slider(
-                        id='global-train-split',
-                        min=0.5,
-                        max=0.9,
-                        step=0.05,
-                        value=0.7,
-                        marks={0.5: '50%', 0.6: '60%',
-                               0.7: '70%', 0.8: '80%', 0.9: '90%'},
-                        tooltip={"placement": "bottom", "always_visible": True}
-                    ),
-                    html.Div(id='global-train-split-display', style={
-                        'color': '#666', 'font-size': '14px', 'margin-top': '10px'
-                    })
-                ], style={'width': '31%', 'display': 'inline-block', 'vertical-align': 'top', 'margin-right': '3%'}),
-
-                # Validation split
-                html.Div([
-                    html.Label("Validation Set Ratio:", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
-                    dcc.Slider(
-                        id='global-val-split',
-                        min=0.05,
-                        max=0.3,
-                        step=0.05,
-                        value=0.15,
-                        marks={0.05: '5%', 0.1: '10%',
-                               0.15: '15%', 0.2: '20%', 0.3: '30%'},
-                        tooltip={"placement": "bottom", "always_visible": True}
-                    ),
-                    html.Div(id='global-val-split-display', style={
-                        'color': '#666', 'font-size': '14px', 'margin-top': '10px'
-                    })
-                ], style={'width': '31%', 'display': 'inline-block', 'vertical-align': 'top', 'margin-right': '3%'}),
-
-                # Test split (calculated)
-                html.Div([
-                    html.Label("Test Set Ratio:", style={
-                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
-                    html.Div(id='global-test-split-display', style={
-                        'font-size': '28px',
-                        'font-weight': 'bold',
-                        'color': '#28a745',
-                        'margin-top': '20px'
-                    })
-                ], style={'width': '31%', 'display': 'inline-block', 'vertical-align': 'top'})
-            ], style={'margin-bottom': '20px'}),
-
-            # Random state
-            html.Div([
-                html.Label("Random Seed (for reproducibility):", style={
+                html.Label("Split Mode:", style={
                     'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
-                dcc.Input(
-                    id='global-random-state',
-                    type='number',
-                    value=42,
-                    min=0,
-                    max=9999,
-                    style={'width': '200px', 'padding': '8px',
-                           'border-radius': '4px', 'border': '1px solid #ccc'}
+                dcc.RadioItems(
+                    id='split-mode-selector',
+                    options=[
+                        {'label': ' 🎲 Auto (ratio-based random split)', 'value': 'auto'},
+                        {'label': ' ✋ Manual (assign each window by hand)', 'value': 'manual'},
+                    ],
+                    value='auto',
+                    inline=True,
+                    style={'font-size': '15px', 'margin-bottom': '20px'}
                 ),
-                html.P("ℹ️ Same seed = reproducible splits across runs", style={
-                    'font-size': '12px', 'color': '#666', 'font-style': 'italic', 'margin-top': '5px'
-                })
-            ])
+            ]),
+
+            # --- Auto split panel ---
+            html.Div(id='auto-split-panel', children=[
+                html.Div([
+                    # Train split
+                    html.Div([
+                        html.Label("Training Set Ratio:", style={
+                            'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                        dcc.Slider(
+                            id='global-train-split',
+                            min=0.5,
+                            max=0.9,
+                            step=0.05,
+                            value=0.7,
+                            marks={0.5: '50%', 0.6: '60%',
+                                   0.7: '70%', 0.8: '80%', 0.9: '90%'},
+                            tooltip={"placement": "bottom", "always_visible": True}
+                        ),
+                        html.Div(id='global-train-split-display', style={
+                            'color': '#666', 'font-size': '14px', 'margin-top': '10px'
+                        })
+                    ], style={'width': '31%', 'display': 'inline-block', 'vertical-align': 'top', 'margin-right': '3%'}),
+
+                    # Validation split
+                    html.Div([
+                        html.Label("Validation Set Ratio:", style={
+                            'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                        dcc.Slider(
+                            id='global-val-split',
+                            min=0.05,
+                            max=0.3,
+                            step=0.05,
+                            value=0.15,
+                            marks={0.05: '5%', 0.1: '10%',
+                                   0.15: '15%', 0.2: '20%', 0.3: '30%'},
+                            tooltip={"placement": "bottom", "always_visible": True}
+                        ),
+                        html.Div(id='global-val-split-display', style={
+                            'color': '#666', 'font-size': '14px', 'margin-top': '10px'
+                        })
+                    ], style={'width': '31%', 'display': 'inline-block', 'vertical-align': 'top', 'margin-right': '3%'}),
+
+                    # Test split (calculated)
+                    html.Div([
+                        html.Label("Test Set Ratio:", style={
+                            'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                        html.Div(id='global-test-split-display', style={
+                            'font-size': '28px',
+                            'font-weight': 'bold',
+                            'color': '#28a745',
+                            'margin-top': '20px'
+                        })
+                    ], style={'width': '31%', 'display': 'inline-block', 'vertical-align': 'top'})
+                ], style={'margin-bottom': '20px'}),
+
+                # Random state
+                html.Div([
+                    html.Label("Random Seed (for reproducibility):", style={
+                        'font-weight': 'bold', 'margin-bottom': '8px', 'display': 'block'}),
+                    dcc.Input(
+                        id='global-random-state',
+                        type='number',
+                        value=42,
+                        min=0,
+                        max=9999,
+                        style={'width': '200px', 'padding': '8px',
+                               'border-radius': '4px', 'border': '1px solid #ccc'}
+                    ),
+                    html.P("ℹ️ Same seed = reproducible splits across runs", style={
+                        'font-size': '12px', 'color': '#666', 'font-style': 'italic', 'margin-top': '5px'
+                    })
+                ])
+            ]),
+
+            # --- Manual split panel ---
+            html.Div(id='manual-split-panel', style={'display': 'none'}, children=[
+                html.Div([
+                    html.P([
+                        "Select activity labels above (Step 1), then click ",
+                        html.Strong("Load Windows"),
+                        " to list all windows. Assign each window to ",
+                        html.Strong("Train"), ", ", html.Strong("Val"), ", or ",
+                        html.Strong("Test"),
+                        " using the dropdown in the table. "
+                        "Windows left as 'Unassigned' are excluded from training."
+                    ], style={'color': '#555', 'margin-bottom': '15px',
+                              'background': '#e7f3ff', 'padding': '12px',
+                              'border-radius': '6px', 'border-left': '4px solid #2196f3'}),
+
+                    html.Div([
+                        html.Button(
+                            "🔄 Load / Refresh Windows",
+                            id='load-manual-split-btn',
+                            n_clicks=0,
+                            style={
+                                'background-color': '#17a2b8', 'color': 'white',
+                                'border': 'none', 'padding': '10px 24px',
+                                'border-radius': '6px', 'cursor': 'pointer',
+                                'font-weight': 'bold', 'margin-right': '10px'
+                            }
+                        ),
+                        html.Button(
+                            "📋 Auto-assign remaining (70/15/15)",
+                            id='auto-assign-remaining-btn',
+                            n_clicks=0,
+                            style={
+                                'background-color': '#6c757d', 'color': 'white',
+                                'border': 'none', 'padding': '10px 24px',
+                                'border-radius': '6px', 'cursor': 'pointer',
+                                'font-weight': 'bold'
+                            }
+                        ),
+                    ], style={'margin-bottom': '15px'}),
+
+                    # Summary badges
+                    html.Div(id='manual-split-summary', style={'margin-bottom': '12px'}),
+
+                    # Assignment table
+                    html.Div(id='manual-split-table-container', children=[
+                        html.P("Click 'Load / Refresh Windows' to populate the table.",
+                               style={'color': '#999', 'font-style': 'italic'})
+                    ])
+                ])
+            ]),
+
         ], style={
             'background': 'white',
             'padding': '25px',
@@ -487,6 +558,7 @@ layout = html.Div([
 
         # Hidden stores
         dcc.Store(id='engineered-dataset-store'),
+        dcc.Store(id='manual-split-store'),   # {file_path: 'train'|'val'|'test'|'unassigned'}
 
     ], style={
         'max-width': '1400px',

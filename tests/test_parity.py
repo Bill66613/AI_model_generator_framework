@@ -20,6 +20,8 @@ from deployment.code_generator_factory import (
     get_cpp_feature_order,
     compute_feature_reorder_indices,
 )
+from deployment.validation import validate_before_deployment
+from deployment.v2.models.cnn import CNNModelBlock
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +199,13 @@ def _cpp_dft_features(data: np.ndarray, sampling_rate: float) -> dict:
         spec_kurt = ((nn + 1) * raw_kurt - 3.0 * (nn - 1)) * (nn - 1) / ((nn - 2) * (nn - 3))
         # excess kurtosis (Fisher)
 
+    spec_entropy = 0.0
+    if mag_sum > 0:
+        probs = dft_mag / mag_sum
+        probs_nz = probs[probs > 1e-12]
+        if len(probs_nz) > 0:
+            spec_entropy = -np.sum(probs_nz * np.log2(probs_nz))
+
     return {
         'dominant_frequency': dominant_frequency,
         'dominant_frequency_magnitude': dominant_frequency_magnitude,
@@ -208,6 +217,7 @@ def _cpp_dft_features(data: np.ndarray, sampling_rate: float) -> dict:
         'spectral_rms': spec_rms,
         'spectral_skewness': spec_skew,
         'spectral_kurtosis': spec_kurt,
+        'spectral_entropy': spec_entropy,
     }
 
 
@@ -342,17 +352,17 @@ class TestFrequencyDomainParity:
 class TestFeatureCounts:
     """Verify feature counts match documented values for each mode."""
 
-    def test_orientation_invariant_time_only_33(self, synthetic_window):
+    def test_orientation_invariant_time_only_41(self, synthetic_window):
         feats = create_feature_vector(
             synthetic_window, include_frequency=False,
             orientation_robust=True, include_per_axis=False)
-        assert feats.shape[1] == 33, f"Expected 33, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
+        assert feats.shape[1] == 41, f"Expected 41, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
 
-    def test_orientation_invariant_53(self, synthetic_window):
+    def test_orientation_invariant_63(self, synthetic_window):
         feats = create_feature_vector(
             synthetic_window, include_frequency=True,
             orientation_robust=True, include_per_axis=False)
-        assert feats.shape[1] == 53, f"Expected 53, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
+        assert feats.shape[1] == 63, f"Expected 63, got {feats.shape[1]}: {sorted(feats.columns.tolist())}"
 
     def test_time_domain_90(self, synthetic_window):
         feats = create_feature_vector(
@@ -582,3 +592,77 @@ class TestKalmanFilterParity:
                 py_result[col].values, cpp_out, rtol=1e-9, atol=1e-9,
                 err_msg=f"Parity failure on channel {col}"
             )
+
+
+class TestAdditionalParityGuards:
+    def test_orientation_features_require_full_imu_columns(self, synthetic_window):
+        accel_only = synthetic_window[['aX', 'aY', 'aZ']].copy()
+        with pytest.raises(ValueError, match="require full 6-axis IMU columns"):
+            create_feature_vector(
+                accel_only, include_frequency=False,
+                orientation_robust=True, include_per_axis=False
+            )
+
+    def test_fft_lowpass_window_mode_matches_manual_chunking(self):
+        from utils.data_processing import fft_lowpass_filter
+        rng = np.random.RandomState(123)
+        sig = rng.normal(size=301)
+        df = pd.DataFrame({'aX': sig})
+        out = fft_lowpass_filter(df, cutoff=10, fs=100, window_size=150)['aX'].values
+
+        expected = sig.copy()
+        for start in (0, 150, 300):
+            end = min(start + 150, len(sig))
+            chunk = sig[start:end]
+            if len(chunk) <= 1:
+                continue
+            cutoff_bin = max(1, int(np.ceil(10 * len(chunk) / 100)))
+            X = np.fft.rfft(chunk)
+            X[cutoff_bin:] = 0.0
+            expected[start:end] = np.fft.irfft(X, n=len(chunk))
+
+        np.testing.assert_allclose(out, expected, rtol=1e-9, atol=1e-9)
+
+    def test_cnn2d_direct_codegen_raises_clear_error(self):
+        model_data = {
+            "cnn_weights": {
+                "layers": [
+                    {"type": "conv2d", "weights": [[[[0.1]]]], "bias": [0.0]},
+                    {"type": "dense", "weights": [[1.0]], "bias": [0.0], "in_features": 1, "out_features": 1},
+                ]
+            }
+        }
+        with pytest.raises(NotImplementedError, match="not supported"):
+            CNNModelBlock(model_data, feature_names=["ch0"], classes=["a"], window_size=150)
+
+    def test_v2_validation_reports_missing_files_explicitly(self):
+        model_data = {"model_type": "neural_network", "feature_names": ["f1"], "classes": ["a"]}
+        files = {"har_config.h": "#define HAR_NUM_FEATURES 1\n"}
+        report = validate_before_deployment(model_data, files)
+        issues = report.get("checks", {}).get("code", {}).get("issues", [])
+        assert any("Missing required v2 files" in issue for issue in issues)
+
+    def test_pytorch_cnn2d_derives_window_and_channels_from_training_data(self, monkeypatch):
+        from utils.edge_ml_model import EdgeMLModel
+
+        class _DummyTrainer:
+            def __init__(self, model):
+                self.model = model
+
+            def train(self, *args, **kwargs):
+                return {}
+
+            def predict(self, X):
+                return np.zeros(len(X), dtype=int)
+
+            def predict_proba(self, X):
+                return np.ones((len(X), 2), dtype=float) * 0.5
+
+        monkeypatch.setattr("utils.edge_ml_model.PyTorchTrainer", _DummyTrainer)
+
+        X = np.random.RandomState(0).randn(8, 120, 4)
+        y = pd.Series(["walk", "run", "walk", "run", "walk", "run", "walk", "run"])
+        model = EdgeMLModel("pytorch_cnn2d", window_size=150, n_channels=6, max_iter=1)
+        model.train(X, y, use_cross_validation=False)
+        assert model.model_params["window_size"] == 120
+        assert model.model_params["n_channels"] == 4

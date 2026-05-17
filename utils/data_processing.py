@@ -1,4 +1,5 @@
 # utils/data_processing.py
+import numpy as np
 import pandas as pd
 import base64
 import io
@@ -67,6 +68,56 @@ def low_pass_filter(data, cutoff=5, fs=None, order=2):
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     return pd.DataFrame(filtfilt(b, a, data, axis=0), columns=data.columns)
+
+
+def fft_lowpass_filter(data, cutoff=10, fs=None, window_size=None):
+    """Apply a brick-wall FFT low-pass filter column-wise.
+
+    Computes the real FFT of each numeric column, zeroes out all frequency
+    bins at or above *cutoff* Hz, then applies the inverse FFT.  This is an
+    ideal (brick-wall) low-pass filter with no phase distortion and no
+    filter-order trade-offs.
+
+    Matches the device C++ ``fft_lowpass_window()`` exactly only when filtering
+    fixed-size windows with the same sample count ``N`` as deployment.
+    For training-deployment parity, pass ``window_size`` equal to the feature
+    extraction window length so each chunk uses the same FFT bin resolution.
+
+    Args:
+        data: DataFrame of numeric columns.
+        cutoff: Cutoff frequency in Hz (first bin to zero out).
+        fs: Sampling frequency in Hz.  Defaults to ``DEFAULT_SAMPLING_RATE``.
+        window_size: Optional chunk size in samples. If ``None``, the full
+            signal is filtered as a single window.
+    """
+    if fs is None:
+        fs = DEFAULT_SAMPLING_RATE
+    result = data.copy()
+    numeric_cols = data.select_dtypes(
+        include=['float64', 'float32', 'int64', 'int32']).columns
+    n = len(data)
+    if window_size is None:
+        window_size = n
+    else:
+        window_size = int(window_size)
+        if window_size <= 0:
+            raise ValueError("window_size must be a positive integer when provided")
+
+    for col in numeric_cols:
+        x = data[col].values.astype(float)
+        y = x.copy()
+        for start in range(0, n, window_size):
+            end = min(start + window_size, n)
+            chunk = x[start:end]
+            chunk_n = len(chunk)
+            if chunk_n <= 1:
+                continue
+            cutoff_bin = max(1, int(np.ceil(cutoff * chunk_n / fs)))
+            X = np.fft.rfft(chunk)       # bins 0 .. N//2
+            X[cutoff_bin:] = 0.0         # zero bins >= cutoff_bin
+            y[start:end] = np.fft.irfft(X, n=chunk_n)
+        result[col] = y
+    return result
 
 
 def kalman_filter(data, process_noise=1e-3, measurement_noise=1e-1, fs=None):

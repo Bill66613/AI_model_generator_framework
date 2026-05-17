@@ -115,6 +115,23 @@ layout = html.Div([
                     ], style={'margin-left': '25px', 'margin-bottom': '10px'}),
                 ]),
 
+                # FFT low-pass filter config
+                html.Div([
+                    dcc.Checklist(
+                        id='preprocess-fft-enabled',
+                        options=[{'label': ' FFT low-pass filter (brick-wall)', 'value': 'enabled'}],
+                        value=[],
+                        style={'margin-bottom': '8px'}
+                    ),
+                    html.Div([
+                        html.Label("Cutoff (Hz):", style={'display': 'inline-block', 'width': '90px', 'font-size': '13px'}),
+                        dcc.Input(id='preprocess-fft-cutoff', type='number', value=10, min=1, max=50, step=0.5,
+                                  style={'width': '70px', 'display': 'inline-block'}),
+                    ], style={'margin-left': '25px', 'margin-bottom': '5px'}),
+                    html.Div("Ideal frequency cutoff — zero phase distortion, exact parity in training & deployment",
+                             style={'font-size': '11px', 'color': '#28a745', 'margin-left': '25px'}),
+                ]),
+
                 # Kalman filter config
                 html.Div([
                     dcc.Checklist(

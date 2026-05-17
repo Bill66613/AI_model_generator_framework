@@ -4,7 +4,7 @@ Edge ML Model for Human Activity Recognition
 Provides the EdgeMLModel class — a unified interface for training,
 evaluating, saving, and loading machine learning models optimized for
 edge deployment. Supports sklearn models (Random Forest, SVM, MLP) and
-PyTorch models (MLP, 1D-CNN).
+PyTorch models (MLP, 1D-CNN, 2D-CNN).
 """
 
 import numpy as np
@@ -22,7 +22,7 @@ import os
 import logging
 
 from utils.pytorch_models import (
-    is_pytorch_available, PyTorchTrainer, HARMLP, HARCNN
+    is_pytorch_available, PyTorchTrainer, HARMLP, HARCNN, HARCNN2D
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +106,20 @@ class EdgeMLModel:
                 'window_size': self.model_params.get('window_size', 150),
                 'n_channels': self.model_params.get('n_channels', 6),
             }
+        elif self.model_type == 'pytorch_cnn2d':
+            if not is_pytorch_available():
+                raise RuntimeError("PyTorch is required for pytorch_cnn2d. "
+                                   "Install via: pip install torch")
+            self.model = None  # placeholder
+            self._pytorch_config = {
+                'dropout': self.model_params.get('dropout', 0.3),
+                'epochs': self.model_params.get('max_iter', 200),
+                'batch_size': self.model_params.get('batch_size', 32),
+                'lr': self.model_params.get('learning_rate', 1e-3),
+                'patience': self.model_params.get('patience', 15),
+                'window_size': self.model_params.get('window_size', 150),
+                'n_channels': self.model_params.get('n_channels', 6),
+            }
         else:
             raise ValueError(f"Unsupported model type: {self.model_type}")
 
@@ -122,7 +136,7 @@ class EdgeMLModel:
         # Batch normalization layers within the CNN handle internal normalization,
         # so applying StandardScaler would distort the raw signal characteristics
         # that convolutional layers need to learn spatial/temporal patterns.
-        if self.model_type == 'pytorch_cnn':
+        if self.model_type in ('pytorch_cnn', 'pytorch_cnn2d'):
             X_scaled = X_array
         elif self.scaler is None:
             if scaler_type == 'standard':
@@ -224,15 +238,33 @@ class EdgeMLModel:
             self.performance_metrics['early_stopped'] = (
                 patience_counter >= patience)
 
-        elif self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+        elif self.model_type in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             cfg = self._pytorch_config
             num_classes = len(set(y_encoded))
             input_size = X_scaled.shape[1]
+
+            if self.model_type in ('pytorch_cnn', 'pytorch_cnn2d'):
+                if np.asarray(X_scaled).ndim != 3:
+                    raise ValueError(
+                        f"{self.model_type} expects 3D input (n_samples, window_size, n_channels), "
+                        f"got shape {np.asarray(X_scaled).shape}"
+                    )
+                cfg['window_size'] = int(np.asarray(X_scaled).shape[1])
+                cfg['n_channels'] = int(np.asarray(X_scaled).shape[2])
+                self.model_params['window_size'] = cfg['window_size']
+                self.model_params['n_channels'] = cfg['n_channels']
 
             if self.model_type == 'pytorch_mlp':
                 net = HARMLP(
                     input_size=input_size,
                     hidden_sizes=cfg['hidden_sizes'],
+                    num_classes=num_classes,
+                    dropout=cfg['dropout'],
+                )
+            elif self.model_type == 'pytorch_cnn2d':
+                net = HARCNN2D(
+                    window_size=cfg['window_size'],
+                    n_channels=cfg['n_channels'],
                     num_classes=num_classes,
                     dropout=cfg['dropout'],
                 )
@@ -262,7 +294,7 @@ class EdgeMLModel:
             self.model.fit(X_scaled, y_encoded)
 
         if use_cross_validation and X_val is None and self.model_type not in (
-                'pytorch_mlp', 'pytorch_cnn'):
+                'pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             cv_scores = cross_val_score(self.model, X_scaled, y_encoded, cv=5)
             self.performance_metrics['cv_mean_accuracy'] = cv_scores.mean()
             self.performance_metrics['cv_std_accuracy'] = cv_scores.std()
@@ -285,12 +317,12 @@ class EdgeMLModel:
         else:
             X_array = np.asarray(X) if not isinstance(X, np.ndarray) else X
 
-        if self.scaler is not None and self.model_type != 'pytorch_cnn':
+        if self.scaler is not None and self.model_type not in ('pytorch_cnn', 'pytorch_cnn2d'):
             X_scaled = self.scaler.transform(X_array)
         else:
             X_scaled = X_array
 
-        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             encoded_preds = self._pytorch_trainer.predict(X_scaled)
         else:
             encoded_preds = self.model.predict(X_scaled)
@@ -306,12 +338,12 @@ class EdgeMLModel:
         else:
             X_array = np.asarray(X) if not isinstance(X, np.ndarray) else X
 
-        if self.scaler is not None and self.model_type != 'pytorch_cnn':
+        if self.scaler is not None and self.model_type not in ('pytorch_cnn', 'pytorch_cnn2d'):
             X_scaled = self.scaler.transform(X_array)
         else:
             X_scaled = X_array
 
-        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             return self._pytorch_trainer.predict_proba(X_scaled)
         if hasattr(self.model, 'predict_proba'):
             return self.model.predict_proba(X_scaled)
@@ -324,7 +356,7 @@ class EdgeMLModel:
 
         X_scaled, y_encoded = self.preprocess_data(X_test, y_test)
 
-        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             y_pred = self._pytorch_trainer.predict(X_scaled)
             y_pred_proba = self._pytorch_trainer.predict_proba(X_scaled)
         else:
@@ -393,7 +425,7 @@ class EdgeMLModel:
 
         X_scaled, y_encoded = self.preprocess_data(X_test, y_test)
 
-        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             y_pred = self._pytorch_trainer.predict(X_scaled)
             y_pred_proba = self._pytorch_trainer.predict_proba(X_scaled)
         else:
@@ -519,7 +551,7 @@ class EdgeMLModel:
         if param_grid is None:
             param_grid = self._get_default_param_grid()
 
-        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             logger.warning("Hyperparameter optimization is not supported for "
                            f"{self.model_type}. Adjust parameters manually.")
             return {'best_params': {}, 'best_score': 0.0,
@@ -618,7 +650,7 @@ class EdgeMLModel:
                 'alpha': [0.0001, 0.001, 0.01],
                 'learning_rate_init': [0.001, 0.01, 0.1]
             }
-        elif self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+        elif self.model_type in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             return {}
         else:
             return {}
@@ -638,7 +670,7 @@ class EdgeMLModel:
             'performance_metrics': self.performance_metrics
         }
 
-        if self.model_type in ('pytorch_mlp', 'pytorch_cnn'):
+        if self.model_type in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             import torch
             trainer = getattr(self, '_pytorch_trainer', None)
             if trainer is not None:
@@ -671,7 +703,7 @@ class EdgeMLModel:
         instance.feature_names = model_data['feature_names']
         instance.performance_metrics = model_data['performance_metrics']
 
-        if model_data['model_type'] in ('pytorch_mlp', 'pytorch_cnn'):
+        if model_data['model_type'] in ('pytorch_mlp', 'pytorch_cnn', 'pytorch_cnn2d'):
             pytorch_config = model_data.get('pytorch_config', {})
             state_dict = model_data.get('pytorch_state_dict')
             if state_dict is not None and is_pytorch_available():

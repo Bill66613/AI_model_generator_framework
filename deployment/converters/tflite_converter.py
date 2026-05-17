@@ -22,6 +22,30 @@ from typing import Dict, Any, Optional, List
 logger = logging.getLogger(__name__)
 
 
+def _get_keras():
+    """Return the keras module, compatible with TF ≤2.15 (tf.keras) and TF 2.16+ (standalone keras)."""
+    # Try standalone keras first (required for TF 2.16+; also works with TF 2.21+)
+    try:
+        import keras
+        # Quick sanity check — keras must expose layers
+        _ = keras.layers
+        return keras
+    except Exception:
+        pass
+    # Fallback: tf.keras for TF ≤ 2.15
+    try:
+        import tensorflow as tf
+        keras = tf.keras
+        _ = keras.layers
+        return keras
+    except Exception:
+        pass
+    raise ImportError(
+        "Keras is not available. Install with: pip install tensorflow  "
+        "or: pip install keras tensorflow"
+    )
+
+
 def check_tflite_dependencies() -> Dict[str, bool]:
     """Check which TFLite-related packages are available."""
     deps = {}
@@ -177,7 +201,7 @@ class TFLiteConverter:
 
     def _build_keras_mlp(self):
         """Build a Keras MLP equivalent to the trained sklearn/PyTorch MLP."""
-        import tensorflow as tf
+        keras = _get_keras()
 
         n_features = len(self.feature_names)
         n_classes = len(self.classes)
@@ -195,8 +219,8 @@ class TFLiteConverter:
             raise ValueError("MLP weights (coefs_, intercepts_) not found")
 
         # Build Keras Sequential model
-        model = tf.keras.Sequential()
-        model.add(tf.keras.layers.InputLayer(input_shape=(n_features,)))
+        model = keras.Sequential()
+        model.add(keras.layers.InputLayer(input_shape=(n_features,)))
 
         # NOTE: Do NOT embed the scaler here as a Normalization layer.
         # The C++ har_predict() wrapper applies StandardScaler before calling the model.
@@ -204,7 +228,7 @@ class TFLiteConverter:
 
         # Hidden layers: Dense + ReLU
         for i, (w, b) in enumerate(zip(coefs[:-1], intercepts[:-1])):
-            layer = tf.keras.layers.Dense(
+            layer = keras.layers.Dense(
                 w.shape[1],
                 activation='relu',
                 name=f'hidden_{i}'
@@ -212,7 +236,7 @@ class TFLiteConverter:
             model.add(layer)
 
         # Output layer: Dense + Softmax
-        output_layer = tf.keras.layers.Dense(
+        output_layer = keras.layers.Dense(
             n_classes,
             activation='softmax',
             name='output'
@@ -226,7 +250,7 @@ class TFLiteConverter:
         # Now set weights to match the trained model
         layer_idx = 0
         for keras_layer in model.layers:
-            if isinstance(keras_layer, tf.keras.layers.Dense):
+            if isinstance(keras_layer, keras.layers.Dense):
                 w = coefs[layer_idx].astype(np.float32)
                 b = intercepts[layer_idx].astype(np.float32)
                 keras_layer.set_weights([w, b])
@@ -238,7 +262,7 @@ class TFLiteConverter:
 
     def _build_keras_cnn(self):
         """Build a Keras 1D-CNN equivalent to the trained PyTorch CNN."""
-        import tensorflow as tf
+        keras = _get_keras()
 
         n_classes = len(self.classes)
         window_size = self.model_params.get('window_size_samples', 150)
@@ -255,28 +279,28 @@ class TFLiteConverter:
         # Conv1d(64, 128, k=3, pad=1) → ReLU → Dropout
         # GlobalAvgPool → Dense(128, 64) → ReLU → Dense(64, n_classes)
 
-        model = tf.keras.Sequential([
-            tf.keras.layers.InputLayer(input_shape=(window_size, n_channels)),
+        model = keras.Sequential([
+            keras.layers.InputLayer(input_shape=(window_size, n_channels)),
 
             # Conv block 1
-            tf.keras.layers.Conv1D(32, kernel_size=5, padding='same',
-                                   activation='relu', name='conv1'),
+            keras.layers.Conv1D(32, kernel_size=5, padding='same',
+                                activation='relu', name='conv1'),
 
             # Conv block 2
-            tf.keras.layers.Conv1D(64, kernel_size=5, padding='same',
-                                   activation='relu', name='conv2'),
-            tf.keras.layers.MaxPool1D(pool_size=2, name='maxpool'),
+            keras.layers.Conv1D(64, kernel_size=5, padding='same',
+                                activation='relu', name='conv2'),
+            keras.layers.MaxPool1D(pool_size=2, name='maxpool'),
 
             # Conv block 3
-            tf.keras.layers.Conv1D(128, kernel_size=3, padding='same',
-                                   activation='relu', name='conv3'),
+            keras.layers.Conv1D(128, kernel_size=3, padding='same',
+                                activation='relu', name='conv3'),
 
             # Global average pooling
-            tf.keras.layers.GlobalAveragePooling1D(name='global_avg_pool'),
+            keras.layers.GlobalAveragePooling1D(name='global_avg_pool'),
 
             # Dense layers
-            tf.keras.layers.Dense(64, activation='relu', name='dense1'),
-            tf.keras.layers.Dense(n_classes, activation='softmax', name='output'),
+            keras.layers.Dense(64, activation='relu', name='dense1'),
+            keras.layers.Dense(n_classes, activation='softmax', name='output'),
         ])
 
         # Build model
@@ -293,7 +317,7 @@ class TFLiteConverter:
 
     def _transfer_cnn_weights(self, keras_model, pytorch_weights: Dict):
         """Transfer PyTorch CNN weights to Keras model (handles axis transposition)."""
-        import tensorflow as tf
+        keras = _get_keras()
 
         layer_map = {
             'conv1': 'conv1',
@@ -315,10 +339,10 @@ class TFLiteConverter:
             w = pytorch_weights[weight_key]
             b = pytorch_weights[bias_key]
 
-            if isinstance(keras_layer, tf.keras.layers.Conv1D):
+            if isinstance(keras_layer, keras.layers.Conv1D):
                 # PyTorch: (out_ch, in_ch, kernel) → Keras: (kernel, in_ch, out_ch)
                 w = np.transpose(w, (2, 1, 0)).astype(np.float32)
-            elif isinstance(keras_layer, tf.keras.layers.Dense):
+            elif isinstance(keras_layer, keras.layers.Dense):
                 # PyTorch: (out, in) → Keras: (in, out)
                 w = w.T.astype(np.float32)
 
@@ -330,19 +354,21 @@ class TFLiteConverter:
         model = self.model_object
 
         # PyTorch MLP: check trainer export
-        if hasattr(model, 'trainer') and model.trainer is not None:
-            if hasattr(model.trainer, 'export_mlp_weights'):
-                weights = model.trainer.export_mlp_weights()
+        # EdgeMLModel stores the trainer as _pytorch_trainer (private attr)
+        trainer = getattr(model, '_pytorch_trainer', None) or getattr(model, 'trainer', None)
+        if trainer is not None:
+            if hasattr(trainer, 'export_mlp_weights'):
+                weights = trainer.export_mlp_weights()
                 if weights:
                     return weights
 
-        # Check model_object for pytorch_weights
+        # Check model_object for pytorch_weights (set during save/load)
         if hasattr(model, 'pytorch_weights'):
             return model.pytorch_weights
 
         # sklearn MLP: extract from MLPClassifier
-        sklearn_model = model.model
-        if hasattr(sklearn_model, 'coefs_') and hasattr(sklearn_model, 'intercepts_'):
+        sklearn_model = getattr(model, 'model', None)
+        if sklearn_model is not None and hasattr(sklearn_model, 'coefs_') and hasattr(sklearn_model, 'intercepts_'):
             return {
                 'coefs_': [c.copy() for c in sklearn_model.coefs_],
                 'intercepts_': [b.copy() for b in sklearn_model.intercepts_],
@@ -355,8 +381,9 @@ class TFLiteConverter:
         model = self.model_object
 
         state_dict = None
-        if hasattr(model, 'trainer') and model.trainer is not None:
-            state_dict = model.trainer.model.state_dict()
+        trainer = getattr(model, '_pytorch_trainer', None) or getattr(model, 'trainer', None)
+        if trainer is not None:
+            state_dict = trainer.model.state_dict()
         elif hasattr(model, 'model'):
             import torch
             if isinstance(model.model, torch.nn.Module):
@@ -381,6 +408,7 @@ class TFLiteConverter:
         - Works for any sklearn model with predict_proba()
         - Produces a clean TFLite model with standard ops
         """
+        keras = _get_keras()
         import tensorflow as tf
 
         n_features = len(self.feature_names)
@@ -426,15 +454,15 @@ class TFLiteConverter:
         # Build a compact Keras MLP surrogate
         # Architecture: match complexity to the number of features/classes
         hidden_size = min(128, max(32, n_features * 2))
-        model = tf.keras.Sequential([
-            tf.keras.layers.InputLayer(input_shape=(n_features,)),
-            tf.keras.layers.Dense(hidden_size, activation='relu'),
-            tf.keras.layers.Dense(hidden_size // 2, activation='relu'),
-            tf.keras.layers.Dense(n_classes, activation='softmax'),
+        model = keras.Sequential([
+            keras.layers.InputLayer(input_shape=(n_features,)),
+            keras.layers.Dense(hidden_size, activation='relu'),
+            keras.layers.Dense(hidden_size // 2, activation='relu'),
+            keras.layers.Dense(n_classes, activation='softmax'),
         ])
 
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+            optimizer=keras.optimizers.Adam(learning_rate=0.001),
             loss='categorical_crossentropy',
             metrics=['accuracy']
         )
@@ -448,7 +476,7 @@ class TFLiteConverter:
             batch_size=256,
             verbose=0,
             validation_split=0.1,
-            callbacks=[tf.keras.callbacks.EarlyStopping(
+            callbacks=[keras.callbacks.EarlyStopping(
                 patience=5, restore_best_weights=True)]
         )
 
@@ -671,20 +699,35 @@ class TFLiteConverter:
             is_cnn = self.model_type == 'pytorch_cnn'
 
             if representative_data is None:
-                # Generate synthetic representative data centred around 0
-                # (features are StandardScaler-normalised, so ~N(0,1) is realistic)
+                # Generate synthetic representative data matching expected input ranges.
                 n_samples = 200
                 if is_cnn:
-                    representative_data = np.random.normal(
-                        0, 1, (n_samples, window_size, n_channels)
-                    ).astype(np.float32)
+                    # CNN input is RAW IMU sensor data (NOT standardized):
+                    #   Accelerometer: typically ±20 m/s² (gravity ~9.8 + dynamic)
+                    #   Gyroscope: typically ±500 deg/s (most motion ±50)
+                    # Using N(0,1) here would clip real accel values (~9.8) to quantization
+                    # range, producing near-uniform (garbage) output probabilities.
+                    representative_data = np.zeros(
+                        (n_samples, window_size, n_channels), dtype=np.float32)
+                    rng = np.random.default_rng(42)
+                    for i in range(n_samples):
+                        # Accelerometer channels (0,1,2): simulate real sensor range
+                        # Gravity + dynamic acceleration → range roughly -20 to +20 m/s²
+                        representative_data[i, :, 0] = rng.uniform(-2, 2, window_size)       # aX
+                        representative_data[i, :, 1] = rng.uniform(7, 12, window_size)       # aY (gravity axis)
+                        representative_data[i, :, 2] = rng.uniform(-4, 0, window_size)       # aZ
+                        # Gyroscope channels (3,4,5): range roughly -200 to +200 deg/s
+                        for ch in range(3, min(n_channels, 6)):
+                            representative_data[i, :, ch] = rng.uniform(-50, 50, window_size)
+                        # Fill remaining channels if > 6
+                        for ch in range(6, n_channels):
+                            representative_data[i, :, ch] = rng.uniform(-10, 10, window_size)
                 else:
                     representative_data = np.random.normal(
-                        0, 1, (n_samples, n_features)
-                    ).astype(np.float32)
+                        0, 1, (n_samples, n_features)).astype(np.float32)
                 logger.warning(
                     "No representative data for INT8 quantization — using synthetic "
-                    "N(0,1) samples.  For better accuracy, provide real calibration data."
+                    "calibration data.  For better accuracy, provide real calibration data."
                 )
 
             if quantization == 'int8':
@@ -749,15 +792,19 @@ class TFLiteConverter:
         """Get conversion details."""
         return self._conversion_info.copy()
 
-    def to_c_array(self, variable_name: str = 'g_model') -> str:
+    def to_c_array(self, variable_name: str = 'g_model', platform: str = 'arduino') -> str:
         """
         Convert TFLite model bytes to a C byte array for embedding.
 
         This is the key output for TFLite Micro deployment — the model
         is embedded as a const unsigned char array in the firmware.
 
+        On ESP32-based platforms the array is placed in flash via PROGMEM
+        to avoid exhausting the limited ~320 KB DRAM.
+
         Args:
             variable_name: C variable name for the array
+            platform: Target platform (affects storage qualifiers)
 
         Returns:
             C source code string with the model byte array
@@ -765,16 +812,27 @@ class TFLiteConverter:
         if self._tflite_bytes is None:
             self.convert()
 
+        # ESP32/M5Stack: const alone does NOT guarantee flash placement on
+        # Xtensa — PROGMEM (maps to __attribute__((section(".rodata")))) is
+        # required to keep the model out of DRAM.
+        esp32_platforms = ('esp32', 'm5stack', 'esp_idf')
+        use_progmem = platform in esp32_platforms
+        storage_attr = 'PROGMEM ' if use_progmem else ''
+
         data = self._tflite_bytes
         lines = []
         lines.append(f"// TFLite model - {len(data)} bytes")
         lines.append(f"// Generated by HAR Edge Deployment Framework")
         lines.append(f"// Model type: {self.model_type}")
         lines.append(f"// Classes: {', '.join(self.classes)}")
+        if use_progmem:
+            lines.append(f"// Storage: PROGMEM (flash) — avoids DRAM exhaustion on ESP32")
         lines.append(f"")
         lines.append(f"#include <cstdint>")
+        if use_progmem:
+            lines.append(f"#include <pgmspace.h>")
         lines.append(f"")
-        lines.append(f"alignas(16) const unsigned char {variable_name}[] = {{")
+        lines.append(f"alignas(16) const unsigned char {variable_name}[] {storage_attr}= {{")
 
         # Format bytes in rows of 12
         for i in range(0, len(data), 12):
