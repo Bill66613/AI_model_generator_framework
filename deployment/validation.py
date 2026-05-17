@@ -438,6 +438,22 @@ class DeploymentValidator:
         sketch = next((v for k, v in files.items() if k.endswith('.ino')), '')
         sketch_name = next((k for k in files if k.endswith('.ino')), '')
 
+        # ---- Required v2 files presence check ----
+        required_v2_files = [
+            'har_config.h',
+            'har_features.cpp',
+            'har_classifier.cpp',
+            'har_model.h',
+            'har_model.cpp',
+        ]
+        missing = [fname for fname in required_v2_files if not files.get(fname)]
+        if missing:
+            report['issues'].append(
+                "Missing required v2 files: " + ", ".join(missing)
+            )
+            report['passed'] = False
+            return report
+
         # ---- Check 1: HAR_NUM_FEATURES matches model ----
         m = re.search(r'#define HAR_NUM_FEATURES\s+(\d+)', config_h)
         model_type_v2 = model_data.get('model_type', '')

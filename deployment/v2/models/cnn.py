@@ -120,6 +120,18 @@ class CNNModelBlock(ModelBlock):
                 self._normalise_layers()
 
     def _normalise_layers(self):
+        supported = {"conv1d", "maxpool1d", "dense"}
+        unsupported = sorted(
+            {str(layer.get("type", "")) for layer in self.layers
+             if layer.get("type") not in supported}
+        )
+        if unsupported:
+            raise NotImplementedError(
+                "Direct C++ code generation for these CNN layers is not supported yet: "
+                f"{', '.join(unsupported)}. "
+                "Please use pytorch_cnn for direct deployment, or use a different deployment approach."
+            )
+
         for layer in self.layers:
             t = layer.get("type", "")
             if t == "conv1d":

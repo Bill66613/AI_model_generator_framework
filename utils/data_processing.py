@@ -70,7 +70,7 @@ def low_pass_filter(data, cutoff=5, fs=None, order=2):
     return pd.DataFrame(filtfilt(b, a, data, axis=0), columns=data.columns)
 
 
-def fft_lowpass_filter(data, cutoff=10, fs=None):
+def fft_lowpass_filter(data, cutoff=10, fs=None, window_size=None):
     """Apply a brick-wall FFT low-pass filter column-wise.
 
     Computes the real FFT of each numeric column, zeroes out all frequency
@@ -78,8 +78,10 @@ def fft_lowpass_filter(data, cutoff=10, fs=None):
     ideal (brick-wall) low-pass filter with no phase distortion and no
     filter-order trade-offs.
 
-    Matches the device C++ ``fft_lowpass_window()`` exactly: both keep bins
-    0 .. ceil(cutoff * N / fs) - 1 and discard the rest.
+    Matches the device C++ ``fft_lowpass_window()`` exactly only when filtering
+    fixed-size windows with the same sample count ``N`` as deployment.
+    For training-deployment parity, pass ``window_size`` equal to the feature
+    extraction window length so each chunk uses the same FFT bin resolution.
 
     Args:
         data: DataFrame of numeric columns.
@@ -89,13 +91,27 @@ def fft_lowpass_filter(data, cutoff=10, fs=None):
     if fs is None:
         fs = DEFAULT_SAMPLING_RATE
     result = data.copy()
+    numeric_cols = data.select_dtypes(
+        include=['float64', 'float32', 'int64', 'int32']).columns
     n = len(data)
-    cutoff_bin = max(1, int(np.ceil(cutoff * n / fs)))
-    for col in data.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns:
+    if not window_size or int(window_size) <= 0:
+        window_size = n
+    window_size = int(window_size)
+
+    for col in numeric_cols:
         x = data[col].values.astype(float)
-        X = np.fft.rfft(x)          # bins 0 .. N//2
-        X[cutoff_bin:] = 0.0        # zero bins >= cutoff_bin
-        result[col] = np.fft.irfft(X, n=n)
+        y = x.copy()
+        for start in range(0, n, window_size):
+            end = min(start + window_size, n)
+            chunk = x[start:end]
+            chunk_n = len(chunk)
+            if chunk_n <= 1:
+                continue
+            cutoff_bin = max(1, int(np.ceil(cutoff * chunk_n / fs)))
+            X = np.fft.rfft(chunk)       # bins 0 .. N//2
+            X[cutoff_bin:] = 0.0         # zero bins >= cutoff_bin
+            y[start:end] = np.fft.irfft(X, n=chunk_n)
+        result[col] = y
     return result
 
 

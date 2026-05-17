@@ -171,6 +171,9 @@ def extract_orientation_invariant_features(
         features[f'{name}_mean_crossing_rate'] = mean_crossings / len(data)
 
     # Jerk magnitude (rate of change of acceleration) - also orientation invariant
+    features['acc_jerk_mag_mean'] = 0.0
+    features['acc_jerk_mag_std'] = 0.0
+    features['acc_jerk_mag_max'] = 0.0
     if len(accel_cols) >= 2:
         acc_jerk_mag = np.sqrt(
             sum(np.diff(df[c].values) ** 2 for c in accel_cols))
@@ -185,6 +188,9 @@ def extract_orientation_invariant_features(
     # Gyro jerk magnitude (rate of change of angular velocity)
     # Captures rotational acceleration — wrist rotation snaps (blocking vs hooking),
     # ankle stance/swing phase transitions, trunk rotation in body wear.
+    features['gyro_jerk_mag_mean'] = 0.0
+    features['gyro_jerk_mag_std'] = 0.0
+    features['gyro_jerk_mag_max'] = 0.0
     if len(gyro_cols) >= 2:
         gyro_jerk_mag = np.sqrt(
             sum(np.diff(df[c].values) ** 2 for c in gyro_cols))
@@ -195,6 +201,7 @@ def extract_orientation_invariant_features(
     # Signal Magnitude Area (SMA): mean(|aX| + |aY| + |aZ|) using raw (uncentered) axes.
     # Widely used in HAR literature; discriminates sedentary vs active, especially
     # effective for body/back wear and ankle wear where total movement intensity matters.
+    features['acc_sma'] = 0.0
     if len(accel_cols) >= 1:
         raw_accel_sum = sum(np.abs(df[c].values) for c in accel_cols)
         features['acc_sma'] = float(np.mean(raw_accel_sum))
@@ -203,6 +210,8 @@ def extract_orientation_invariant_features(
     # Estimates device orientation/inclination relative to gravity vector.
     # Key for body/back wear (seated vs standing posture), ankle wear (foot angle),
     # and any scenario where device orientation is informative.
+    features['tilt_pitch'] = 0.0
+    features['tilt_roll'] = 0.0
     if len(accel_cols) >= 3:
         ax_m = df[accel_cols[0]].values.mean()
         ay_m = df[accel_cols[1]].values.mean()
@@ -214,6 +223,7 @@ def extract_orientation_invariant_features(
     # Autocorrelation of acc_mag at lag 1 (periodicity and signal smoothness).
     # High value ≈ smooth/repetitive motion (walking, running);
     # Low/negative value ≈ erratic/impact motion (jumping, punching).
+    features['acc_mag_autocorr_lag1'] = 0.0
     if len(acc_mag) > 1:
         ac_mean = np.mean(acc_mag)
         ac_var = np.var(acc_mag)
@@ -228,12 +238,13 @@ def extract_orientation_invariant_features(
     # Jerk peak count: number of local maxima above (mean + 0.5 × std) in acc_jerk_mag.
     # Captures gesture cadence (wrist wear: punch/block repetitions),
     # step count per window (ankle wear: walking/running cadence).
+    features['acc_jerk_mag_peak_count'] = 0
     if len(accel_cols) >= 2:
         jerk_for_peaks = np.sqrt(
             sum(np.diff(df[c].values) ** 2 for c in accel_cols))
         jm = np.mean(jerk_for_peaks)
         js = np.std(jerk_for_peaks)
-        threshold = jm + 0.5 * js
+        threshold = jm + max(0.5 * js, 1e-4)
         features['acc_jerk_mag_peak_count'] = int(np.sum(
             (jerk_for_peaks[1:-1] > jerk_for_peaks[:-2]) &
             (jerk_for_peaks[1:-1] > jerk_for_peaks[2:]) &

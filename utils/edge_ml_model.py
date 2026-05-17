@@ -243,6 +243,17 @@ class EdgeMLModel:
             num_classes = len(set(y_encoded))
             input_size = X_scaled.shape[1]
 
+            if self.model_type in ('pytorch_cnn', 'pytorch_cnn2d'):
+                if np.asarray(X_scaled).ndim != 3:
+                    raise ValueError(
+                        f"{self.model_type} expects 3D input (n_samples, window_size, n_channels), "
+                        f"got shape {np.asarray(X_scaled).shape}"
+                    )
+                cfg['window_size'] = int(np.asarray(X_scaled).shape[1])
+                cfg['n_channels'] = int(np.asarray(X_scaled).shape[2])
+                self.model_params['window_size'] = cfg['window_size']
+                self.model_params['n_channels'] = cfg['n_channels']
+
             if self.model_type == 'pytorch_mlp':
                 net = HARMLP(
                     input_size=input_size,
@@ -306,7 +317,7 @@ class EdgeMLModel:
         else:
             X_array = np.asarray(X) if not isinstance(X, np.ndarray) else X
 
-        if self.scaler is not None and self.model_type != 'pytorch_cnn':
+        if self.scaler is not None and self.model_type not in ('pytorch_cnn', 'pytorch_cnn2d'):
             X_scaled = self.scaler.transform(X_array)
         else:
             X_scaled = X_array
@@ -327,7 +338,7 @@ class EdgeMLModel:
         else:
             X_array = np.asarray(X) if not isinstance(X, np.ndarray) else X
 
-        if self.scaler is not None and self.model_type != 'pytorch_cnn':
+        if self.scaler is not None and self.model_type not in ('pytorch_cnn', 'pytorch_cnn2d'):
             X_scaled = self.scaler.transform(X_array)
         else:
             X_scaled = X_array

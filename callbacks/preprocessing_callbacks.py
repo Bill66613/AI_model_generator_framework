@@ -458,6 +458,8 @@ def register_callbacks(app):
                 with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
                 sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
+            else:
+                metadata = {}
 
             df = pd.read_csv(file_path)
 
@@ -474,6 +476,10 @@ def register_callbacks(app):
             fft_cutoff = float(fft_cutoff or 10)
             kalman_q = float(kalman_process_noise or 1e-3)
             kalman_r = float(kalman_measurement_noise or 1e-1)
+            window_size_ms = metadata.get(dataset_name, {}).get('window_size_ms', 1500)
+            fft_window_size_samples = int((window_size_ms / 1000) * sampling_rate)
+            if fft_window_size_samples <= 0:
+                fft_window_size_samples = None
 
             preprocess_config = {
                 'outlier_removal': use_outlier,
@@ -485,6 +491,7 @@ def register_callbacks(app):
                 'savgol_polyorder': savgol_polyorder,
                 'fft_filter': use_fft,
                 'fft_cutoff_hz': fft_cutoff,
+                'fft_window_size_samples': fft_window_size_samples,
                 'kalman_filter': use_kalman,
                 'kalman_process_noise': kalman_q,
                 'kalman_measurement_noise': kalman_r,
@@ -507,7 +514,10 @@ def register_callbacks(app):
             # Apply FFT low-pass filter
             if use_fft:
                 from utils.data_processing import fft_lowpass_filter
-                df = fft_lowpass_filter(df, cutoff=fft_cutoff, fs=sampling_rate)
+                df = fft_lowpass_filter(
+                    df, cutoff=fft_cutoff, fs=sampling_rate,
+                    window_size=fft_window_size_samples
+                )
 
             # Apply Kalman filter
             if use_kalman:
@@ -2756,4 +2766,3 @@ def register_callbacks(app):
 
         except Exception as e:
             return html.Div(f"Error updating status: {str(e)}", style={'color': '#dc3545'})
-
