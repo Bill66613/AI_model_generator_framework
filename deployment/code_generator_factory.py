@@ -7,16 +7,34 @@ import os
 import numpy as np
 from datetime import datetime
 from typing import Dict, Any, Type, List, Optional
-from .base_generator import BaseCodeGenerator, ValidationError, ModelDataError, OptimizationError
-from .random_forest_generator import RandomForestCodeGenerator
-from .neural_network_generator import NeuralNetworkCodeGenerator
-from .svm_generator import SVMCodeGenerator
-from .arm_cortex_generator import ARMCortexMCodeGenerator
-from .micropython_generator import MicroPythonCodeGenerator
-from .zephyr_generator import ZephyrCodeGenerator
-from .cnn_generator import CNNCodeGenerator
-from .tflite_generator import TFLiteMicroCodeGenerator
-from .onnx_generator import ONNXRuntimeCodeGenerator
+from .v2 import HARCodeGenerator as HARCodeGeneratorV2
+
+
+# ---------------------------------------------------------------------------
+# Exceptions (previously in base_generator.py)
+# ---------------------------------------------------------------------------
+
+class ValidationError(ValueError):
+    """Raised when input parameters are invalid."""
+
+
+class ModelDataError(ValidationError):
+    """Raised when model data is missing or malformed."""
+
+
+class OptimizationError(ValidationError):
+    """Raised when optimization settings are invalid."""
+
+
+# Backward-compat stub so old code that catches BaseCodeGenerator still works
+class BaseCodeGenerator:
+    """Stub kept for backward compatibility. All generation is now v2."""
+
+
+# Model types that the v2 clean architecture supports
+_V2_SUPPORTED_MODELS = frozenset(
+    ['random_forest', 'neural_network', 'pytorch_mlp', 'svm',
+     'pytorch_cnn', 'pytorch_cnn2d'])
 
 # Valid deployment approaches
 DEPLOYMENT_APPROACHES = ('direct', 'tflite_micro', 'onnx_runtime')
@@ -24,12 +42,12 @@ DEPLOYMENT_APPROACHES = ('direct', 'tflite_micro', 'onnx_runtime')
 
 def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
     """Get the canonical C++ feature extraction order.
-    
+
     The C++ extract_features() function outputs features in a fixed order:
       - extract_magnitude_stats(acc_mag): 15 features
       - extract_magnitude_stats(gyro_mag): 15 features  
       - jerk features: 3 features (mean, std, max)
-    
+
     This order may differ from the model's training order (which depends on
     DataFrame column ordering, typically alphabetical). This function returns
     the C++ extraction order so we can reorder model parameters to match.
@@ -41,55 +59,71 @@ def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
         'skewness', 'kurtosis', 'rms', 'energy',
         'zero_crossings', 'mean_crossing_rate'
     ]
-    
+
     # Detect which magnitude groups are present from feature names
     feature_set = set(str(f) for f in feature_names)
-    
+
     has_acc_mag = any(f.startswith('acc_mag_') for f in feature_set)
     has_gyro_mag = any(f.startswith('gyro_mag_') for f in feature_set)
     has_jerk = any(f.startswith('acc_jerk_mag_') for f in feature_set)
-    
+
     # Check for per-axis features (non-orientation-robust)
-    has_per_axis = any(f.startswith(('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_')) for f in feature_set)
-    
+    has_per_axis = any(f.startswith(
+        ('aX_', 'aY_', 'aZ_', 'gX_', 'gY_', 'gZ_')) for f in feature_set)
+
     if has_per_axis:
         # Per-axis mode: features extracted axis by axis
         # Cannot reliably determine C++ order for per-axis mode,
         # so return the original feature names (no reordering)
         return list(feature_names)
-    
+
     cpp_order = []
-    
+
     if has_acc_mag:
         for stat in magnitude_stats:
             name = f'acc_mag_{stat}'
             if name in feature_set:
                 cpp_order.append(name)
-    
+
     if has_gyro_mag:
         for stat in magnitude_stats:
             name = f'gyro_mag_{stat}'
             if name in feature_set:
                 cpp_order.append(name)
-    
+
     if has_jerk:
         for suffix in ['mean', 'std', 'max']:
             name = f'acc_jerk_mag_{suffix}'
             if name in feature_set:
                 cpp_order.append(name)
-    
-    # Frequency-domain features (DFT on magnitudes) - 10 features per signal
+
+    # Gyro jerk magnitude features (after acc_jerk_mag)
+    has_gyro_jerk = any(f.startswith('gyro_jerk_mag_') for f in feature_set)
+    if has_gyro_jerk:
+        for suffix in ['mean', 'std', 'max']:
+            name = f'gyro_jerk_mag_{suffix}'
+            if name in feature_set:
+                cpp_order.append(name)
+
+    # Scalar features extracted after jerk blocks
+    for scalar_feat in ['acc_sma', 'tilt_pitch', 'tilt_roll',
+                        'acc_mag_autocorr_lag1', 'acc_jerk_mag_peak_count']:
+        if scalar_feat in feature_set:
+            cpp_order.append(scalar_feat)
+
+    # Frequency-domain features (DFT on magnitudes) - 11 features per signal
     # Order matches C extract_frequency_features(): dominant_frequency,
     # dominant_frequency_magnitude, spectral_centroid, energy_low_freq,
     # energy_mid_freq, energy_high_freq, spectral_rolloff,
-    # spectral_rms, spectral_skewness, spectral_kurtosis
+    # spectral_rms, spectral_skewness, spectral_kurtosis, spectral_entropy
     freq_stats = [
         'dominant_frequency', 'dominant_frequency_magnitude',
         'spectral_centroid', 'energy_low_freq', 'energy_mid_freq',
         'energy_high_freq', 'spectral_rolloff',
-        'spectral_rms', 'spectral_skewness', 'spectral_kurtosis'
+        'spectral_rms', 'spectral_skewness', 'spectral_kurtosis',
+        'spectral_entropy'
     ]
-    has_acc_freq = any(f.startswith('acc_mag_dominant_') or f.startswith('acc_mag_spectral_') 
+    has_acc_freq = any(f.startswith('acc_mag_dominant_') or f.startswith('acc_mag_spectral_')
                        or f.startswith('acc_mag_energy_low') for f in feature_set)
     has_gyro_freq = any(f.startswith('gyro_mag_dominant_') or f.startswith('gyro_mag_spectral_')
                         or f.startswith('gyro_mag_energy_low') for f in feature_set)
@@ -105,81 +139,86 @@ def get_cpp_feature_order(feature_names: List[str]) -> List[str]:
             name = f'gyro_mag_{stat}'
             if name in feature_set:
                 cpp_order.append(name)
-    
+
     # Verify we captured all features
     if set(cpp_order) != feature_set:
         missing = feature_set - set(cpp_order)
         extra = set(cpp_order) - feature_set
-        print(f"Warning: Feature order mismatch. Missing from C++ order: {missing}, Extra: {extra}")
+        print(
+            f"Warning: Feature order mismatch. Missing from C++ order: {missing}, Extra: {extra}")
         # Fall back to original order if we can't determine C++ order
         return list(feature_names)
-    
+
     return cpp_order
 
 
-def compute_feature_reorder_indices(model_feature_names: List[str], 
-                                      cpp_feature_order: List[str]) -> Optional[List[int]]:
+def compute_feature_reorder_indices(model_feature_names: List[str],
+                                    cpp_feature_order: List[str]) -> Optional[List[int]]:
     """Compute reordering indices to map from model order to C++ order.
-    
+
     Returns a list of indices such that:
         cpp_order_value[i] = model_order_value[indices[i]]
-    
+
     i.e., for each position in the C++ output, which model-order index to pull from.
     Returns None if orders already match (no reordering needed).
     """
     model_names = [str(f) for f in model_feature_names]
-    
+
     if model_names == cpp_feature_order:
         return None  # Already in correct order
-    
+
     # Build lookup: feature_name -> model index
     name_to_model_idx = {name: i for i, name in enumerate(model_names)}
-    
+
     reorder = []
     for cpp_name in cpp_feature_order:
         if cpp_name not in name_to_model_idx:
-            print(f"Warning: C++ feature '{cpp_name}' not found in model features")
+            print(
+                f"Warning: C++ feature '{cpp_name}' not found in model features")
             return None  # Can't reorder safely
         reorder.append(name_to_model_idx[cpp_name])
-    
+
     return reorder
 
 
-def reorder_model_parameters(enhanced_data: Dict[str, Any], 
-                              reorder_indices: List[int],
-                              cpp_feature_order: List[str]) -> Dict[str, Any]:
+def reorder_model_parameters(enhanced_data: Dict[str, Any],
+                             reorder_indices: List[int],
+                             cpp_feature_order: List[str]) -> Dict[str, Any]:
     """Reorder all model parameters from model (training) order to C++ extraction order.
-    
+
     This ensures that feature_means[i], feature_stds[i], and weight matrix row [i]
     all correspond to the feature that C++ extract_features() places at position [i].
     """
-    print(f"Reordering {len(reorder_indices)} features from model order to C++ extraction order")
-    
+    print(
+        f"Reordering {len(reorder_indices)} features from model order to C++ extraction order")
+
     # Reorder scaler parameters
     if 'feature_means' in enhanced_data:
         old_means = enhanced_data['feature_means']
-        enhanced_data['feature_means'] = [old_means[i] for i in reorder_indices]
-    
+        enhanced_data['feature_means'] = [old_means[i]
+                                          for i in reorder_indices]
+
     if 'feature_stds' in enhanced_data:
         old_stds = enhanced_data['feature_stds']
         enhanced_data['feature_stds'] = [old_stds[i] for i in reorder_indices]
-    
+
     # Reorder neural network input weights (rows correspond to features)
     if 'weights' in enhanced_data:
         weights = enhanced_data['weights']
         if 'input_weights' in weights:
-            old_w = np.array(weights['input_weights'])  # shape: [n_features, hidden_size]
+            # shape: [n_features, hidden_size]
+            old_w = np.array(weights['input_weights'])
             new_w = old_w[reorder_indices, :]  # Reorder rows
             weights['input_weights'] = new_w.tolist()
             enhanced_data['weights'] = weights
-    
+
     # Reorder Random Forest feature indices in tree splits
     if 'trees' in enhanced_data:
         # Build reverse mapping: model_idx -> cpp_idx
         model_to_cpp = [0] * len(reorder_indices)
         for cpp_idx, model_idx in enumerate(reorder_indices):
             model_to_cpp[model_idx] = cpp_idx
-        
+
         for tree in enhanced_data['trees']:
             if 'feature_indices' in tree:
                 old_indices = tree['feature_indices']
@@ -187,22 +226,23 @@ def reorder_model_parameters(enhanced_data: Dict[str, Any],
                     model_to_cpp[fi] if fi >= 0 else fi  # -2 means leaf node
                     for fi in old_indices
                 ]
-    
+
     # Reorder SVM support vectors (columns correspond to features)
     if 'support_vectors' in enhanced_data:
-        old_sv = np.array(enhanced_data['support_vectors'])  # shape: [n_sv, n_features]
+        # shape: [n_sv, n_features]
+        old_sv = np.array(enhanced_data['support_vectors'])
         new_sv = old_sv[:, reorder_indices]  # Reorder columns
         enhanced_data['support_vectors'] = new_sv.tolist()
-    
+
     # Update feature names to C++ order
     enhanced_data['feature_names'] = cpp_feature_order
-    
+
     return enhanced_data
 
 
 def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
     """Extract actual parameters from trained model object.
-    
+
     Also reorders all parameters to match the C++ feature extraction order,
     since the model may have been trained with features in a different order
     (e.g., alphabetical from DataFrame columns) than the C++ code extracts them.
@@ -237,7 +277,7 @@ def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
                     enhanced_data['pytorch_coefs'] = mlp_export['coefs_']
                     enhanced_data['pytorch_intercepts'] = mlp_export['intercepts_']
                     enhanced_data['pytorch_hidden_layer_sizes'] = mlp_export['hidden_layer_sizes']
-            elif model_obj.model_type == 'pytorch_cnn':
+            elif model_obj.model_type in ('pytorch_cnn', 'pytorch_cnn2d'):
                 # PyTorch CNN — export layer descriptions for CNNCodeGenerator
                 if hasattr(model_obj, '_pytorch_trainer'):
                     cnn_export = model_obj._pytorch_trainer.export_cnn_weights()
@@ -256,9 +296,10 @@ def extract_real_model_parameters(model_data: Dict[str, Any]) -> Dict[str, Any]:
             # Reorder parameters to match C++ feature extraction order
             # (skip for CNN which operates on raw sensor windows)
             feature_names = enhanced_data.get('feature_names', [])
-            if feature_names and model_obj.model_type not in ('pytorch_cnn',):
+            if feature_names and model_obj.model_type not in ('pytorch_cnn', 'pytorch_cnn2d'):
                 cpp_order = get_cpp_feature_order(feature_names)
-                reorder_indices = compute_feature_reorder_indices(feature_names, cpp_order)
+                reorder_indices = compute_feature_reorder_indices(
+                    feature_names, cpp_order)
                 if reorder_indices is not None:
                     enhanced_data = reorder_model_parameters(
                         enhanced_data, reorder_indices, cpp_order)
@@ -413,7 +454,8 @@ def extract_svm_parameters(svm_model) -> Dict[str, Any]:
                 n_features = svm_model.support_vectors_.shape[1]
                 if gamma_val == 'scale':
                     sv_var = np.var(svm_model.support_vectors_)
-                    gamma_resolved = 1.0 / (n_features * sv_var) if sv_var > 0 else 1.0 / n_features
+                    gamma_resolved = 1.0 / \
+                        (n_features * sv_var) if sv_var > 0 else 1.0 / n_features
                 else:  # 'auto'
                     gamma_resolved = 1.0 / n_features
 
@@ -547,19 +589,16 @@ def create_output_folder_structure(base_output_dir: str, model_type: str,
 
 
 class CodeGeneratorFactory:
-    """Factory for creating code generators based on model type and platform."""
+    """Factory for creating code generators based on model type and platform.
 
-    # Registry of available generators
-    _generators: Dict[str, Type[BaseCodeGenerator]] = {
-        'random_forest': RandomForestCodeGenerator,
-        'neural_network': NeuralNetworkCodeGenerator,
-        'pytorch_mlp': NeuralNetworkCodeGenerator,  # MLP weights exported in sklearn format
-        'pytorch_cnn': CNNCodeGenerator,
-        'svm': SVMCodeGenerator,
-        'arm_cortex_m': ARMCortexMCodeGenerator,
-        'micropython': MicroPythonCodeGenerator,
-        'zephyr': ZephyrCodeGenerator,
-    }
+    NOTE: All generation is now handled by the v2 architecture (deployment/v2/).
+    This class is kept for backward-compatibility of callers that use
+    create_generator() directly.  Prefer calling generate_deployment_code()
+    which routes entirely through v2.
+    """
+
+    # Kept for API compatibility — not used for actual generation.
+    _generators: Dict[str, Any] = {}
 
     @classmethod
     def create_generator(cls, model_type: str, model_data: Dict[str, Any],
@@ -567,115 +606,35 @@ class CodeGeneratorFactory:
                          overlap: float = 0.5, quantization: str = 'none',
                          deployment_approach: str = 'direct',
                          confidence_threshold: float = 0.6,
-                         smoothing_window: int = 1,
-                         enable_iir_filter: bool = False,
-                         enable_kalman_filter: bool = False) -> BaseCodeGenerator:
+                         smoothing_window: int = 1):
         """
-        Create appropriate code generator based on model type, platform, and deployment approach.
+        Redirect to v2 HARCodeGenerator.
 
-        Args:
-            model_type: Type of model ('random_forest', 'neural_network', 'svm')
-            model_data: Dictionary containing model parameters and data
-            platform: Target platform ('arduino', 'arm_cortex_m', etc.)
-            optimization: Optimization strategy ('accuracy', 'speed', 'power', 'balanced')
-            overlap: Window overlap fraction (0.0 to 0.99)
-            quantization: Weight quantization mode ('none', 'int8', 'int16', 'float16')
-            deployment_approach: Deployment approach ('direct', 'tflite_micro', 'onnx_runtime')
-
-        Returns:
-            Appropriate code generator instance
-
-        Raises:
-            ValueError: If model_type or deployment_approach is not supported
-            ValidationError: If input parameters are invalid
-            ModelDataError: If model_data is invalid
+        Returns an HARCodeGeneratorV2 instance; call .generate_files() on it.
         """
-        try:
-            # Validate model_type first
-            if not isinstance(model_type, str):
-                raise ValueError("model_type must be a string")
+        if model_type not in _V2_SUPPORTED_MODELS:
+            raise ValueError(
+                f"Unsupported model type: '{model_type}'. "
+                f"Supported types: {sorted(_V2_SUPPORTED_MODELS)}")
 
-            # Validate deployment approach
-            if deployment_approach not in DEPLOYMENT_APPROACHES:
-                raise ValueError(
-                    f"Unsupported deployment approach: '{deployment_approach}'. "
-                    f"Supported: {DEPLOYMENT_APPROACHES}")
+        if 'model_object' in model_data:
+            model_data = extract_real_model_parameters(model_data)
 
-            # Route to alternative deployment approach generators
-            if deployment_approach == 'tflite_micro':
-                return TFLiteMicroCodeGenerator(
-                    model_data, platform, optimization, overlap, quantization,
-                    confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
-
-            if deployment_approach == 'onnx_runtime':
-                return ONNXRuntimeCodeGenerator(
-                    model_data, platform, optimization, overlap, quantization,
-                    confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
-
-            # --- Direct code generation (default) ---
-
-            # For ARM Cortex-M platform, use specialized generator
-            if platform == 'arm_cortex_m':
-                return cls._generators['arm_cortex_m'](
-                    model_data, platform, optimization, overlap, quantization,
-                    confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
-
-            # For MicroPython platform, use MicroPython generator
-            if platform == 'micropython':
-                return cls._generators['micropython'](
-                    model_data, platform, optimization, overlap, quantization,
-                    confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
-
-            # For Zephyr RTOS platform, use Zephyr generator
-            if platform == 'zephyr':
-                return cls._generators['zephyr'](
-                    model_data, platform, optimization, overlap, quantization,
-                    confidence_threshold=confidence_threshold,
-                    smoothing_window=smoothing_window,
-                    enable_iir_filter=enable_iir_filter,
-                    enable_kalman_filter=enable_kalman_filter)
-
-            # For other platforms, use model-specific generators
-            if model_type not in cls._generators:
-                available_types = [
-                    t for t in cls._generators.keys()
-                    if t not in ('arm_cortex_m', 'micropython', 'zephyr')]
-                raise ValueError(f"Unsupported model type: '{model_type}'. "
-                                 f"Supported types: {available_types}")
-
-            generator_class = cls._generators[model_type]
-            return generator_class(model_data, platform, optimization, overlap, quantization,
-                                   confidence_threshold=confidence_threshold,
-                                   smoothing_window=smoothing_window,
-                                   enable_iir_filter=enable_iir_filter,
-                                   enable_kalman_filter=enable_kalman_filter)
-
-        except (ValidationError, ModelDataError, OptimizationError) as e:
-            # Re-raise validation errors with context
-            raise type(e)(f"Generator creation failed: {str(e)}") from e
-        except Exception as e:
-            # Wrap unexpected errors
-            raise RuntimeError(
-                f"Unexpected error creating generator for {model_type}: {str(e)}") from e
+        return HARCodeGeneratorV2(
+            model_data=model_data,
+            platform=platform,
+            optimization=optimization,
+            overlap=overlap,
+            confidence_threshold=confidence_threshold,
+            smoothing_window=smoothing_window,
+            quantization=quantization,
+            deployment_approach=deployment_approach,
+        )
 
     @classmethod
     def get_supported_models(cls) -> list:
         """Get list of supported model types."""
-        # Exclude platform-specific generators that aren't model types
-        platform_generators = {'arm_cortex_m', 'micropython', 'zephyr'}
-        return [model for model in cls._generators.keys() if model not in platform_generators]
+        return sorted(_V2_SUPPORTED_MODELS)
 
     @classmethod
     def get_supported_platforms(cls) -> list:
@@ -684,18 +643,8 @@ class CodeGeneratorFactory:
                 'generic_c', 'generic_cpp', 'esp_idf', 'micropython', 'zephyr']
 
     @classmethod
-    def register_generator(cls, model_type: str, generator_class: Type[BaseCodeGenerator]):
-        """
-        Register a new generator class.
-
-        Args:
-            model_type: String identifier for the model type
-            generator_class: Class that inherits from BaseCodeGenerator
-        """
-        if not issubclass(generator_class, BaseCodeGenerator):
-            raise ValueError(
-                "Generator class must inherit from BaseCodeGenerator")
-
+    def register_generator(cls, model_type: str, generator_class):
+        """Register a custom generator class (stored in _generators for inspection)."""
         cls._generators[model_type] = generator_class
 
 
@@ -704,9 +653,7 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
                              overlap: float = 0.5, quantization: str = 'none',
                              deployment_approach: str = 'direct',
                              confidence_threshold: float = 0.6,
-                             smoothing_window: int = 1,
-                             enable_iir_filter: bool = False,
-                             enable_kalman_filter: bool = False) -> Dict[str, str]:
+                             smoothing_window: int = 1) -> Dict[str, str]:
     """
     Convenience function to generate deployment code with organized naming.
 
@@ -733,11 +680,60 @@ def generate_deployment_code(model_type: str, model_data: Dict[str, Any],
             # If we have the actual model object, extract real parameters
             model_data = extract_real_model_parameters(model_data)
 
+        # ----------------------------------------------------------------
+        # v2 clean architecture for supported direct deployments
+        # ----------------------------------------------------------------
+
+        # ONNX Runtime requires a full OS (Linux/Windows) and the ONNX Runtime
+        # shared library.  It cannot be compiled for bare-metal microcontrollers.
+        _MICROCONTROLLER_PLATFORMS = frozenset([
+            'arduino', 'nano_33', 'mkr_imu', 'esp32',
+            'm5stack', 'm5stick', 'm5stickc', 'seeed_xiao', 'teensy', 'arm_cortex_m',
+        ])
+        if deployment_approach == 'onnx_runtime' and platform in _MICROCONTROLLER_PLATFORMS:
+            raise ValueError(
+                f"ONNX Runtime is not supported on microcontroller target '{platform}'. "
+                "ONNX Runtime requires a full OS with the runtime library installed "
+                "(Raspberry Pi, Jetson Nano, Linux/Windows PC). "
+                "Use 'direct' or 'tflite_micro' deployment for microcontrollers."
+            )
+
+        _v2_deployments = {'direct', 'tflite_micro', 'onnx_runtime'}
+
+        if (deployment_approach in _v2_deployments
+                and model_type in _V2_SUPPORTED_MODELS):
+            # Build sketch/folder name matching create_output_folder_structure()
+            # so the .ino filename equals the folder name (Arduino IDE requirement)
+            num_features = len(model_data.get('feature_names', []))
+            num_classes = len(model_data.get('classes', []))
+            approach_prefix = {'tflite_micro': 'tflite_', 'onnx_runtime': 'onnx_'}.get(
+                deployment_approach, '')
+            base_name = (
+                f"har_{approach_prefix}{model_type}_{platform}"
+                f"_f{num_features}_c{num_classes}_{optimization}"
+            )
+            if quantization and quantization != 'none':
+                base_name += f"_{quantization}"
+            # Don't mutate the caller's dict
+            model_data = dict(model_data)
+            model_data['model_name'] = base_name
+            gen = HARCodeGeneratorV2(
+                model_data=model_data,
+                platform=platform,
+                optimization=optimization,
+                overlap=overlap,
+                confidence_threshold=confidence_threshold,
+                smoothing_window=smoothing_window,
+                quantization=quantization,
+                deployment_approach=deployment_approach,
+            )
+            return gen.generate_files()
+        # ----------------------------------------------------------------
+
         generator = CodeGeneratorFactory.create_generator(
             model_type, model_data, platform, optimization, overlap, quantization,
             deployment_approach, confidence_threshold=confidence_threshold,
-            smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter,
-            enable_kalman_filter=enable_kalman_filter)
+            smoothing_window=smoothing_window)
 
         # Create organized filenames
         # For alternative deployment approaches, generate files differently
@@ -794,7 +790,8 @@ def _generate_tflite_files(generator, model_type: str, platform: str,
                            quantization: str = 'none') -> Dict[str, str]:
     """Generate file set for TFLite Micro deployment."""
     # Build descriptive base name matching direct approach convention
-    num_features = len(model_data.get('feature_names', [])) if model_data else 0
+    num_features = len(model_data.get(
+        'feature_names', [])) if model_data else 0
     num_classes = len(model_data.get('classes', [])) if model_data else 0
 
     base_name = f"har_tflite_{model_type}_{platform}"
@@ -843,7 +840,8 @@ def _generate_onnx_files(generator, model_type: str, platform: str,
                          quantization: str = 'none') -> Dict[str, str]:
     """Generate file set for ONNX Runtime deployment."""
     # Build descriptive base name matching direct approach convention
-    num_features = len(model_data.get('feature_names', [])) if model_data else 0
+    num_features = len(model_data.get(
+        'feature_names', [])) if model_data else 0
     num_classes = len(model_data.get('classes', [])) if model_data else 0
 
     base_name = f"har_onnx_{model_type}_{platform}"
@@ -912,9 +910,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
                                       quantization: str = 'none',
                                       deployment_approach: str = 'direct',
                                       confidence_threshold: float = 0.6,
-                                      smoothing_window: int = 1,
-                                      enable_iir_filter: bool = False,
-                                      enable_kalman_filter: bool = False) -> Dict[str, str]:
+                                      smoothing_window: int = 1) -> Dict[str, str]:
     """
     Generate deployment code and save to organized folder structure.
 
@@ -946,8 +942,7 @@ def generate_and_save_deployment_code(model_type: str, model_data: Dict[str, Any
     generated_code = generate_deployment_code(
         model_type, model_data, platform, optimization, overlap, quantization,
         deployment_approach, confidence_threshold=confidence_threshold,
-        smoothing_window=smoothing_window, enable_iir_filter=enable_iir_filter,
-        enable_kalman_filter=enable_kalman_filter)
+        smoothing_window=smoothing_window)
 
     # Save files and return file paths
     saved_files = {}

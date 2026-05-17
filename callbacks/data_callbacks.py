@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 import pandas as pd
 import base64
 import io
@@ -7,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from dash import dcc, html, Input, Output, State, dash_table, ctx, no_update
 
-from config.config import PERSISTENT_DIR, METADATA_FILE, SENSOR_COLUMNS, get_window_pattern
+from config.config import PERSISTENT_DIR, METADATA_FILE, SENSOR_COLUMNS, get_window_pattern, resolve_working_dir, ROOT_DIR
 
 
 def parse_contents(contents, filename):
@@ -35,8 +36,7 @@ def register_callbacks(app):
             return "No file uploaded.", []
 
         # Use stored base directory or default to PERSISTENT_DIR
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         # Files should be saved to datasets subdirectory
         datasets_dir = os.path.join(base_dir, 'datasets')
@@ -119,8 +119,7 @@ def register_callbacks(app):
             return "⚠ Please select a dataset and enter a valid sampling rate."
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             # Load existing metadata
@@ -153,8 +152,7 @@ def register_callbacks(app):
     def data_selector_options(tab, base_dir):
         """Update the dataset selector options."""
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             if os.path.exists(metadata_file):
@@ -180,8 +178,7 @@ def register_callbacks(app):
             return "⚠ Please select a dataset and enter a label."
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             # Load existing metadata
@@ -213,8 +210,7 @@ def register_callbacks(app):
     )
     def clear_data(n_clicks, base_dir):
         """Clear all stored data and metadata."""
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
 
         try:
             # Remove all files in the persistent directory
@@ -246,8 +242,7 @@ def register_callbacks(app):
         """Filters the dataset and displays it as a chart."""
         if dataset_name:
             try:
-                if not base_dir:
-                    base_dir = PERSISTENT_DIR
+                base_dir = resolve_working_dir(base_dir)
                 metadata_file = os.path.join(base_dir, 'metadata.json')
 
                 # Load existing metadata
@@ -298,8 +293,7 @@ def register_callbacks(app):
     def display_label(dataset_name, base_dir):
         """Displays the label assigned to a dataset."""
         if dataset_name:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             if os.path.exists(metadata_file):
@@ -327,8 +321,7 @@ def register_callbacks(app):
             return "⚠️ Please select a dataset to delete.", no_update
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             # Load existing metadata
@@ -384,8 +377,7 @@ def register_callbacks(app):
             return html.Div("Select a dataset to view information", style={'color': '#666', 'font-style': 'italic'})
 
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             # Load metadata
@@ -482,8 +474,7 @@ def register_callbacks(app):
     def export_metadata(n_clicks, base_dir):
         """Export metadata to a downloadable JSON file."""
         try:
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             # Load metadata
@@ -528,10 +519,53 @@ def register_callbacks(app):
     )
     def display_current_working_dir(stored_dir):
         """Display the current persistent directory on page load and populate input."""
-        if not stored_dir:
-            # Default to PERSISTENT_DIR on first load
-            return str(PERSISTENT_DIR), str(PERSISTENT_DIR), str(PERSISTENT_DIR)
-        return stored_dir, stored_dir, stored_dir
+        abs_dir = resolve_working_dir(stored_dir)
+        # Compute a user-friendly display: show relative path when inside ROOT_DIR
+        try:
+            rel = Path(abs_dir).relative_to(ROOT_DIR)
+            display = f"{abs_dir}  (relative: {rel})"
+        except ValueError:
+            display = abs_dir
+        store_value = stored_dir if stored_dir else 'persistent_data'
+        return display, store_value, stored_dir or ''
+
+    @app.callback(
+        Output('directory-path-input', 'value', allow_duplicate=True),
+        Input('browse-working-dir-btn', 'n_clicks'),
+        State('directory-path-input', 'value'),
+        prevent_initial_call=True,
+    )
+    def browse_working_directory(n_clicks, current_value):
+        """Open a native OS folder-picker dialog and populate the path input.
+
+        Uses tkinter (stdlib) which works because this Dash app runs locally.
+        If tkinter is unavailable the button simply does nothing.
+        """
+        if not n_clicks:
+            return no_update
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()         # hide the tiny tk root window
+            root.attributes('-topmost', True)  # bring dialog to front
+            initial_dir = resolve_working_dir(current_value) if current_value else str(ROOT_DIR)
+            chosen = filedialog.askdirectory(
+                title="Select Working Directory",
+                initialdir=initial_dir,
+                mustexist=False,
+            )
+            root.destroy()
+            if not chosen:
+                return no_update
+            # Try to return a relative path when inside ROOT_DIR (portable)
+            try:
+                rel = Path(chosen).relative_to(ROOT_DIR)
+                return str(rel)
+            except ValueError:
+                return str(chosen)
+        except Exception:
+            return no_update
 
     @app.callback(
         Output('current-working-dir-display',
@@ -545,7 +579,13 @@ def register_callbacks(app):
         prevent_initial_call=True
     )
     def set_working_directory(apply_clicks, default_clicks, input_path):
-        """Set persistent base directory and create standard subdirectories."""
+        """Set persistent base directory and create standard subdirectories.
+
+        Accepts both **absolute** paths (``D:\\data``) and **relative** paths
+        (``persistent_data``, ``../my_data``).  Relative paths are resolved
+        against ROOT_DIR at runtime, so the project remains portable when the
+        whole application folder is moved to another machine or drive.
+        """
         if not ctx.triggered:
             return no_update, no_update, no_update, no_update
 
@@ -553,8 +593,8 @@ def register_callbacks(app):
 
         try:
             if button_id == 'use-default-dir-btn':
-                # Use default persistent directory
-                base_dir = str(PERSISTENT_DIR)
+                # Store as relative 'persistent_data' so the default is portable
+                stored_value = 'persistent_data'
 
             elif button_id == 'select-working-dir-btn':
                 # Apply user-entered directory
@@ -566,21 +606,16 @@ def register_callbacks(app):
                         html.P("⚠️ Please enter a directory path",
                                style={'color': '#ffc107', 'font-weight': 'bold'})
                     )
-
-                # Normalize path
-                base_dir = os.path.normpath(input_path.strip())
-
-                # Validate path
-                if not os.path.isabs(base_dir):
-                    return (
-                        no_update,
-                        no_update,
-                        no_update,
-                        html.P("⚠️ Please enter an absolute path (e.g., D:\\persistent_data or C:\\project\\data)",
-                               style={'color': '#ffc107', 'font-weight': 'bold'})
-                    )
+                raw = input_path.strip()
+                p = Path(os.path.normpath(raw))
+                # If the user entered a relative path, store it as-is (portable).
+                # If absolute, store as-is.
+                stored_value = raw if not p.is_absolute() else str(p)
             else:
                 return no_update, no_update, no_update, no_update
+
+            # Resolve to absolute for directory creation
+            base_dir = resolve_working_dir(stored_value)
 
             # Create base directory
             os.makedirs(base_dir, exist_ok=True)
@@ -601,19 +636,21 @@ def register_callbacks(app):
                     json.dump({}, f)
 
             # Build status message
+            is_relative = not Path(os.path.normpath(stored_value)).is_absolute()
+            rel_note = f" (relative to app root: {stored_value})" if is_relative else ""
             status_message = html.Div([
                 html.P("✅ Persistent directory configured successfully",
                        style={'color': '#28a745', 'font-weight': 'bold', 'margin': '0'}),
-                html.P(f"📁 Base: {base_dir}",
+                html.P(f"📁 Base: {base_dir}{rel_note}",
                        style={'color': '#666', 'font-size': '14px', 'margin': '5px 0'}),
                 html.P(f"📂 Created: {', '.join(subdirs)}, metadata.json",
                        style={'color': '#666', 'font-size': '13px', 'margin': '5px 0 0 0'})
             ])
 
             return (
-                base_dir,
-                base_dir,
-                base_dir,
+                f"{base_dir}{rel_note}",
+                stored_value,
+                stored_value,
                 status_message
             )
 
@@ -640,8 +677,8 @@ def register_callbacks(app):
             return no_update
 
         try:
-            # Use stored base directory or default to PERSISTENT_DIR
-            source_dir = base_dir if base_dir else PERSISTENT_DIR
+            # Resolve relative paths to absolute
+            source_dir = resolve_working_dir(base_dir)
             datasets_dir = os.path.join(source_dir, 'datasets')
             os.makedirs(datasets_dir, exist_ok=True)
 

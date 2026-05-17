@@ -12,7 +12,7 @@ import serial.tools.list_ports
 from pathlib import Path
 import traceback
 
-from config.config import MODELS_DIR, PERSISTENT_DIR, get_model_path, get_models_metadata_path
+from config.config import MODELS_DIR, PERSISTENT_DIR, get_model_path, get_models_metadata_path, resolve_working_dir
 from utils.model_training import EdgeMLModel
 from utils.toolchain_discovery import (
     find_arduino_cli, find_platformio_cli, get_tool_version,
@@ -558,8 +558,7 @@ def register_callbacks(app):
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             models_metadata_file = os.path.join(
@@ -660,8 +659,7 @@ def register_callbacks(app):
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             models_metadata_file = os.path.join(
@@ -723,7 +721,7 @@ def register_callbacks(app):
                          'margin-bottom': '5px'}),
                 html.Div(
                     f"Input: {raw_features} samples × {fe_config.get('num_channels', 6)} ch (raw windows)"
-                    if model_type == 'PYTORCH_CNN'
+                    if model_type in ('PYTORCH_CNN', 'PYTORCH_CNN2D')
                     else f"Features: {num_extracted_features}",
                     style={'margin-bottom': '5px'}),
                 html.Div(f"Classes: {classes} activities",
@@ -753,11 +751,11 @@ def register_callbacks(app):
                               'font-weight': 'bold'}),
                     html.Span(
                         f"{raw_features} samples × {fe_config.get('num_channels', 6)} channels = {raw_features * fe_config.get('num_channels', 6)} inputs (raw windows, no FE)"
-                        if model_type == 'PYTORCH_CNN'
+                        if model_type in ('PYTORCH_CNN', 'PYTORCH_CNN2D')
                         else f"{num_extracted_features} features",
                         style={'color': '#2E86AB'}),
                     html.Span(
-                        f" (FE used for other models: {feature_domain_label})" if model_type == 'PYTORCH_CNN'
+                        f" (FE used for other models: {feature_domain_label})" if model_type in ('PYTORCH_CNN', 'PYTORCH_CNN2D')
                         else f" ({feature_domain_label})",
                         style={'font-size': '11px', 'color': '#999', 'margin-left': '5px'})
                 ])
@@ -770,17 +768,21 @@ def register_callbacks(app):
                 if preprocess_cfg.get('low_pass_filter'):
                     preprocess_items.append(
                         html.Div(f"Low-pass filter: {preprocess_cfg.get('lpf_cutoff_hz', 5)}Hz "
-                                 f"(order {preprocess_cfg.get('lpf_order', 2)}) — replicated on device via IIR",
+                                 f"(order {preprocess_cfg.get('lpf_order', 2)}) — replicated on device via per-window filtfilt",
                                  style={'color': '#28a745', 'font-size': '12px'}))
                 if preprocess_cfg.get('savgol_filter'):
                     preprocess_items.append(
                         html.Div(f"Savitzky-Golay (window={preprocess_cfg.get('savgol_window_length', 5)}, "
-                                 f"poly={preprocess_cfg.get('savgol_polyorder', 2)}) — NOT replicated on device",
-                                 style={'color': '#ff9800', 'font-size': '12px'}))
+                                 f"poly={preprocess_cfg.get('savgol_polyorder', 2)}) — replicated on device",
+                                 style={'color': '#28a745', 'font-size': '12px'}))
+                if preprocess_cfg.get('fft_filter'):
+                    preprocess_items.append(
+                        html.Div(f"FFT low-pass (cutoff={preprocess_cfg.get('fft_cutoff_hz', 20)}Hz) — replicated on device",
+                                 style={'color': '#28a745', 'font-size': '12px'}))
                 if preprocess_cfg.get('kalman_filter'):
                     preprocess_items.append(
                         html.Div(f"Kalman filter (Q={preprocess_cfg.get('kalman_process_noise', 0.001)}, "
-                                 f"R={preprocess_cfg.get('kalman_measurement_noise', 0.1)}) — replicated on device ✓ exact parity",
+                                 f"R={preprocess_cfg.get('kalman_measurement_noise', 0.1)}) — replicated on device (window-initialized state)",
                                  style={'color': '#28a745', 'font-size': '12px'}))
                 if preprocess_cfg.get('outlier_removal'):
                     preprocess_items.append(
@@ -809,6 +811,84 @@ def register_callbacks(app):
             error_msg = html.Div(f"Error loading model: {str(e)}", style={
                                  'color': '#dc3545'})
             return error_msg, "Cannot load parameters"
+
+    @app.callback(
+        [Output('preproc-badge-lpf', 'style'),
+         Output('preproc-badge-savgol', 'style'),
+         Output('preproc-badge-fft', 'style'),
+         Output('preproc-badge-kalman', 'style'),
+         Output('preproc-badge-status', 'children'),
+         Output('preproc-badge-status', 'style')],
+        Input('deployment-model-selector', 'value'),
+        State('working-directory-store', 'data')
+    )
+    def update_preprocessing_badges(model_filename, base_dir):
+        """Color preprocessing badges by selected model's training metadata.
+
+        Green = method used during training (and generated on device).
+        Gray = not used for this model.
+        """
+        base_style = {
+            'padding': '3px 8px',
+            'border-radius': '4px',
+            'font-size': '11px',
+            'margin-right': '6px'
+        }
+        on_style = dict(base_style, background='#d4edda', color='#155724')
+        off_style = dict(base_style, background='#e9ecef', color='#6c757d')
+        status_on = {'font-size': '11px', 'color': '#28a745', 'font-style': 'italic'}
+        status_off = {'font-size': '11px', 'color': '#6c757d', 'font-style': 'italic'}
+
+        if not model_filename:
+            return (
+                off_style, off_style, off_style, off_style,
+                'Select a model to highlight active preprocessing methods.',
+                status_off
+            )
+
+        try:
+            base_dir = resolve_working_dir(base_dir)
+            metadata_file = os.path.join(base_dir, 'models', 'trained_models.json')
+            if not os.path.exists(metadata_file):
+                return (
+                    off_style, off_style, off_style, off_style,
+                    'Model metadata not found. Showing all preprocessing methods as inactive.',
+                    status_off
+                )
+
+            with open(metadata_file, 'r') as f:
+                models_metadata = json.load(f)
+
+            metadata = models_metadata.get(model_filename, {})
+            preprocess_cfg = metadata.get('fe_config', {}).get('preprocessing', {}) or {}
+
+            lpf_style = on_style if preprocess_cfg.get('low_pass_filter') else off_style
+            savgol_style = on_style if preprocess_cfg.get('savgol_filter') else off_style
+            fft_style = on_style if preprocess_cfg.get('fft_filter') else off_style
+            kalman_style = on_style if preprocess_cfg.get('kalman_filter') else off_style
+
+            any_enabled = any([
+                preprocess_cfg.get('low_pass_filter'),
+                preprocess_cfg.get('savgol_filter'),
+                preprocess_cfg.get('fft_filter'),
+                preprocess_cfg.get('kalman_filter')
+            ])
+
+            status_text = (
+                '✓ Active methods are highlighted in green for this model.'
+                if any_enabled
+                else 'No preprocessing was used during training for this model.'
+            )
+
+            return lpf_style, savgol_style, fft_style, kalman_style, status_text, (status_on if any_enabled else status_off)
+
+        except Exception as e:
+            print(f"Error updating preprocessing badges: {e}")
+            return (
+                off_style, off_style, off_style, off_style,
+                'Could not read preprocessing metadata. Showing inactive state.',
+                status_off
+            )
 
     @app.callback(
         Output('toolchain-status', 'children'),
@@ -979,15 +1059,12 @@ def register_callbacks(app):
          State('deployment-stride', 'value'),
          State('deployment-confidence-threshold', 'value'),
          State('deployment-smoothing-window', 'value'),
-         State('deployment-iir-filter-enabled', 'value'),
-         State('deployment-kalman-filter-enabled', 'value'),
          State('working-directory-store', 'data')],
         prevent_initial_call=True
     )
     def generate_embedded_code(n_clicks, model_filename, framework, target_board,
                                deployment_approach, optimization, quantization, stride,
-                               confidence_threshold, smoothing_window, iir_filter_enabled,
-                               kalman_filter_enabled, base_dir):
+                               confidence_threshold, smoothing_window, base_dir):
         """
         Generate embedded C/C++ code from the trained model using actual metadata.
         Model type is automatically detected from the selected model.
@@ -1005,8 +1082,7 @@ def register_callbacks(app):
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             models_metadata_file = os.path.join(
@@ -1055,7 +1131,7 @@ def register_callbacks(app):
 
             # CNN models operate on raw windows, not extracted features.
             # Use channel placeholder names so filename reflects input channels.
-            if model_type in ('pytorch_cnn', 'cnn'):
+            if model_type in ('pytorch_cnn', 'pytorch_cnn2d', 'cnn'):
                 n_channels = (metadata.get('fe_config', {}).get('num_channels')
                               or len(metadata.get('fe_config', {}).get('sensor_columns', []))
                               or 6)
@@ -1116,15 +1192,12 @@ def register_callbacks(app):
 
             # Parse new deployment options
             smoothing_window = int(smoothing_window or 3)
-            enable_iir = 'enabled' in (iir_filter_enabled or [])
-            enable_kalman = 'enabled' in (kalman_filter_enabled or [])
 
             # Generate code using proper code generators
             generated_code_files = generate_deployment_code(
                 model_type, model_data, platform, optimization, overlap_fraction, quantization,
                 deployment_approach, confidence_threshold=confidence_threshold,
-                smoothing_window=smoothing_window, enable_iir_filter=enable_iir,
-                enable_kalman_filter=enable_kalman
+                smoothing_window=smoothing_window
             )
 
             # Filter out binary files (e.g., .onnx, .tflite) for text-based processing
@@ -1154,8 +1227,7 @@ def register_callbacks(app):
             saved_files = generate_and_save_deployment_code(
                 model_type, model_data, platform, output_dir, optimization, overlap_fraction, quantization,
                 deployment_approach, confidence_threshold=confidence_threshold,
-                smoothing_window=smoothing_window, enable_iir_filter=enable_iir,
-                enable_kalman_filter=enable_kalman
+                smoothing_window=smoothing_window
             )
 
             # Get the first generated file for preview (typically the sketch/example)
@@ -1366,8 +1438,7 @@ def register_callbacks(app):
         if tab != 'tab-5':
             return no_update
 
-        if not base_dir:
-            base_dir = PERSISTENT_DIR
+        base_dir = resolve_working_dir(base_dir)
         generated_dir = os.path.join(base_dir, 'generated')
 
         if not os.path.isdir(generated_dir):
@@ -1618,8 +1689,7 @@ def register_callbacks(app):
 
         try:
             # Use stored base directory or default to PERSISTENT_DIR
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             models_metadata_file = os.path.join(

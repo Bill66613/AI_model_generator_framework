@@ -1003,6 +1003,11 @@ tflite = [
     { name = "tensorflow" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.7.0" },
@@ -1029,6 +1034,9 @@ requires-dist = [
     { name = "torch", specifier = ">=2.0.0" },
 ]
 provides-extras = ["onnx", "tflite", "dev", "docs"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.2" }]
 
 [[package]]
 name = "idna"

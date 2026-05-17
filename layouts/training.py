@@ -40,7 +40,9 @@ layout = html.Div([
                         {'label': '🔥 PyTorch MLP (Better Training)',
                          'value': 'pytorch_mlp'},
                         {'label': '📊 PyTorch 1D-CNN (Raw Sensor Input)',
-                         'value': 'pytorch_cnn'}
+                         'value': 'pytorch_cnn'},
+                        {'label': '🖼️ PyTorch 2D-CNN (Time×Channel Image)',
+                         'value': 'pytorch_cnn2d'}
                     ],
                     placeholder="Select a machine learning model",
                     value='random_forest',
