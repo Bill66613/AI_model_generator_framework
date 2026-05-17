@@ -595,16 +595,13 @@ class TestKalmanFilterParity:
 
 
 class TestAdditionalParityGuards:
-    def test_orientation_features_keep_fixed_count_when_gyro_missing(self, synthetic_window):
+    def test_orientation_features_require_full_imu_columns(self, synthetic_window):
         accel_only = synthetic_window[['aX', 'aY', 'aZ']].copy()
-        feats = create_feature_vector(
-            accel_only, include_frequency=False,
-            orientation_robust=True, include_per_axis=False
-        )
-        assert feats.shape[1] == 41
-        for key in ['gyro_mag_mean', 'gyro_jerk_mag_mean']:
-            assert key in feats.columns
-            assert feats[key].iloc[0] == 0.0
+        with pytest.raises(ValueError, match="require full 6-axis IMU columns"):
+            create_feature_vector(
+                accel_only, include_frequency=False,
+                orientation_robust=True, include_per_axis=False
+            )
 
     def test_fft_lowpass_window_mode_matches_manual_chunking(self):
         from utils.data_processing import fft_lowpass_filter

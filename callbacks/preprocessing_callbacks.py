@@ -457,6 +457,8 @@ def register_callbacks(app):
             if os.path.exists(metadata_file):
                 with open(metadata_file, 'r') as f:
                     metadata = json.load(f)
+                if not isinstance(metadata, dict):
+                    metadata = {}
                 sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
             else:
                 metadata = {}
