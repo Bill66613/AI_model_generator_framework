@@ -1,8 +1,10 @@
-# THESIS UPDATE PLAN — Session 2026-05-05
+# THESIS UPDATE PLAN — Comprehensive Session Plan
 
-**Status**: Initial draft for review
-**PR Context**: PR #3 (bugfix/tflite_deployment) will be merged — 21 files changed, 2 new findings, TFLite improvements
-**Goal**: Update thesis with latest changes, create structured plan, identify user support needed
+**Date**: 2026-05-05  
+**Status**: Merged plan (our branch + develop branch)  
+**PR Context**: PR #3 (bugfix/tflite_deployment) will be merged — 21 files changed, 2 new findings, TFLite improvements  
+**Sinh viên:** Nguyễn Trường Minh Hoàng (MSSV: 2270757)  
+**Đề tài:** Xây dựng Framework Tạo Mô hình AI cho Ứng dụng Theo dõi Chuyển động Con người
 
 ---
 
@@ -10,10 +12,29 @@
 
 The thesis is ~80% complete with most chapters written in Vietnamese. The main gaps are:
 
-1. **Technical Content**: Need to incorporate 2 new findings from PR #3 (Kalman filter, CNN metadata fix)
+1. **Technical Content**: Need to incorporate 2 new findings from PR #3 (Kalman filter, CNN metadata fix) + existing 14 findings
 2. **Data Collection**: Placeholder numbers in Chapter 4 need real experimental results
 3. **User Assets**: Missing UI screenshots, confusion matrices, deployment accuracy data
 4. **Structure**: Good overall narrative; needs polish and consistency checks
+
+---
+
+## 📊 FRAMEWORK STATUS
+
+### Framework Code Status
+- ✅ **11+ Code Generators** hoàn thiện (RF, SVM, NN, CNN, ARM Cortex-M, MicroPython, Zephyr, etc.)
+- ✅ **16 Technical Findings** đã được ghi nhận và sửa chữa (14 original + 2 from PR #3)
+- ✅ **6-tab End-to-End Workflow** từ dữ liệu thô đến triển khai thiết bị
+- ✅ **Multi-device Deployment Matrix** hỗ trợ 8+ vi xử lý
+- ✅ **Production-ready** với ~15,000+ dòng code Python
+
+### Thesis Status Gap Analysis
+| Vietnamese Thesis (Official) | Framework Reality |
+|-----|-----|
+| ⚠️ Cần cập nhật | ✅ Production-ready |
+| ❌ Thiếu 16 technical findings | ✅ Has all findings documented |
+| ❌ Thiếu figures/screenshots | ✅ Framework can generate figures |
+| ⚠️ Placeholder numbers | ✅ Can collect real experimental data |
 
 ---
 
@@ -65,7 +86,8 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 **Current State**: Reframed for multi-device deployment; XIAO as reference platform; 6 objectives listed
 
 **Updates Needed**:
-- ✅ No major changes required (narrative is correct)
+- [ ] Verify 6 research objectives reflect framework reality
+- [ ] Add concrete statistics (11 generators, 156 features, 8+ MCUs supported)
 - Consider mentioning Kalman filter as 7th objective if it's a major contribution
 
 **User Support Needed**: None
@@ -105,11 +127,20 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
    - CNN: raw window input (150×6), không FE, không scaling
    - Feature-based: FE → scaling → model weights
    - Validator phải architecture-aware (Finding 9 + Finding 15)
+   - Update feature extraction section with 6 modes (33-156 features)
+   - Add training-deployment parity validation methodology
+   - Include code generation factory pattern explanation
 
 3. **UPDATE: §3.Z Triển khai TFLite Micro**
    - For RF/SVM: ONNX→TF pipeline hoặc Keras surrogate via knowledge distillation
    - TreeEnsembleClassifier (RF) không được hỗ trợ bởi onnx2tf → fallback to surrogate
    - Surrogate: small Keras MLP trained on RF/SVM's soft predictions
+
+4. **ADD: §3.W Đảm bảo Tương đồng Huấn luyện-Triển khai**
+   - Subsection: Zero-padding vs Edge-replication (Finding 1)
+   - Subsection: Statistical Formula Parity (Finding 2)
+   - Subsection: Feature Order Consistency (Finding 7)
+   - Subsection: Automated Validation Pipeline
 
 **User Support Needed**:
 - [ ] Kalman filter before/after signal plots (show noise reduction + parity)
@@ -152,6 +183,18 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
    - Inference time với Kalman overhead
    - Confusion matrix (actual data, not placeholder)
 
+5. **UPDATE: Before/After Accuracy for Technical Fixes**
+   - Zero-padding → edge-replication improvement
+   - Training-deployment parity fix impact
+
+**Critical Missing Data**:
+- [ ] Real accuracy numbers (placeholder: RF 94.5%, NN 96.2%, SVM 93.8%)
+- [ ] Real inference timing (placeholder: 12-18ms on ARM Cortex-M4)
+- [ ] Real memory footprint (placeholder: 95-182KB flash)
+- [ ] Real power consumption (placeholder: 30mW average)
+- [ ] Confusion matrix from trained models
+- [ ] Before/after accuracy comparison for zero-padding fix
+
 **User Support Needed**:
 - [ ] **CRITICAL**: Retrain models with new pipeline
 - [ ] **CRITICAL**: Collect device test data (XIAO + optional ESP32/M5Stack)
@@ -188,6 +231,11 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
    - Direct C++ generation vẫn là recommended path (faithful, no approximation, smaller binary)
    - Agreement metric (80-90%) shows surrogate quality
 
+4. **ADD: §5.W Competitive Advantage vs Commercial Platforms**
+   - Edge Impulse: $20+/month vs free; black box vs transparent; no Kalman filter
+   - SensiML: Enterprise pricing; vendor lock-in vs open source
+   - Framework: Full transparency, multi-platform, 16 documented findings
+
 **User Support Needed**: None (analysis of existing data)
 
 ---
@@ -204,6 +252,7 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 1. **ADD to contributions list**:
    - **#8**: Kalman filter with exact deployment parity — first zero-gap preprocessing filter
    - **#9** (optional): Multi-architecture code generation (CNN + feature-based in unified pipeline)
+   - Update to emphasize all 16 technical findings
 
 2. **UPDATE: Future work**:
    - Cross-device benchmark (currently only XIAO quantified)
@@ -219,42 +268,49 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 
 ### HIGH PRIORITY (Required for defense)
 
-1. **`figures/kalman_signal_comparison.png`**
+1. **`figures/system_architecture.png`**
+   - 6-tab workflow: Data → Preprocess → Feature Engineering → Training → Code Gen → Device Test
+   - Multi-platform deployment matrix
+
+2. **`figures/kalman_signal_comparison.png`**
    - 3 subplots: Raw signal, IIR filtered, Kalman filtered
    - Show noise reduction + phase preservation
    - Caption: "So sánh các phương pháp lọc tín hiệu IMU"
 
-2. **`figures/kalman_parity_verification.png`**
+3. **`figures/kalman_parity_verification.png`**
    - Python vs C++ Kalman output (overlapping lines → identical)
    - Caption: "Xác minh tương đồng hoàn toàn giữa Python và C++ Kalman filter"
 
-3. **`figures/confusion_matrix_nn.png`** ← ALREADY IN TODO
+4. **`figures/confusion_matrix_nn.png`**
    - From retrained NN model (after Kalman + edge-replication fixes)
 
-4. **`figures/ui_kalman_settings.png`**
+5. **`figures/ui_kalman_settings.png`**
    - Screenshot of Preprocessing tab with Kalman filter settings
    - Shows Q, R parameter inputs
 
 ### MEDIUM PRIORITY (Nice to have)
 
-5. **`figures/cnn_vs_feature_pipeline.png`**
-   - Diagram showing two pipelines: CNN (raw window → Conv → predict) vs Feature-based (window → FE → scale → predict)
-   - Illustrates Finding 15 context
+6. **`figures/cnn_vs_feature_pipeline.png`**
+   - Diagram: CNN (raw window → Conv → predict) vs Feature-based (window → FE → scale → predict)
 
-6. **`figures/tflite_deployment_strategies.png`**
+7. **`figures/tflite_deployment_strategies.png`**
    - Flowchart: Model type → Deployment path (Direct C++, TFLite ONNX, TFLite Surrogate)
 
-7. **`figures/deployment_accuracy.png`** ← ALREADY IN TODO
+8. **`figures/deployment_accuracy.png`**
    - Bar chart: accuracy before/after fixes (zero-padding, Kalman, double-scaling)
+
+9. **`figures/feature_modes_comparison.png`**
+   - Bar chart: 6 modes with feature counts (33, 53, 90, 156, 66, 6)
+
+10. **`figures/ui_preprocessing_draggable.png`**
+    - Screenshot showing draggable window selection (UNIQUE FEATURE vs Edge Impulse)
 
 ### EXISTING FIGURES (Already in TODO)
 
-8. **`figures/system_architecture.png`**
-9. **`figures/workflow_diagram.png`**
-10. **`figures/ui_data_upload.png`**
-11. **`figures/ui_preprocessing_draggable.png`**
-12. **`figures/ui_results_display.png`**
-13. **`figures/padding_comparison.png`**
+11. **`figures/workflow_diagram.png`**
+12. **`figures/ui_data_upload.png`**
+13. **`figures/ui_results_display.png`**
+14. **`figures/padding_comparison.png`**
 
 ---
 
@@ -317,16 +373,12 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 
 **Expected output**: `figures/ui_kalman_settings.png`
 
-**Timeline**: 10 minutes
-
 ---
 
 #### Task 2.2: Data Upload Screenshot
 **What you need to do**: Take screenshot of Data tab with dataset loaded
 
 **Expected output**: `figures/ui_data_upload.png`
-
-**Timeline**: 5 minutes
 
 ---
 
@@ -335,16 +387,12 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 
 **Expected output**: `figures/ui_results_display.png`
 
-**Timeline**: 5 minutes
-
 ---
 
 #### Task 2.4: Preprocessing Draggable Windows Screenshot
 **What you need to do**: Screenshot Preprocessing tab showing draggable window selection
 
 **Expected output**: `figures/ui_preprocessing_draggable.png`
-
-**Timeline**: 5 minutes
 
 ---
 
@@ -355,8 +403,6 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 
 **What I'll do**: Generate confusion matrix plot
 
-**Expected output**: `figures/confusion_matrix_nn.png`
-
 ---
 
 #### Task 3.2: Kalman Signal Comparison
@@ -364,17 +410,10 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 
 **What I'll do**: 3-subplot comparison (raw, IIR, Kalman)
 
-**Expected output**: `figures/kalman_signal_comparison.png`
-
 ---
 
 #### Task 3.3: Architecture Diagrams
 **What I'll do**: Create system architecture, pipeline flowcharts using LaTeX TikZ or Python matplotlib
-
-**Expected output**:
-- `figures/system_architecture.png`
-- `figures/cnn_vs_feature_pipeline.png`
-- `figures/tflite_deployment_strategies.png`
 
 ---
 
@@ -382,8 +421,6 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 
 #### Task 4.1: Chapter 3 Kalman Section
 **Status**: Ready to write (LaTeX content)
-
-**Vietnamese text needed**: Yes
 
 **Depends on**: Task 2.1 (Kalman screenshot), Task 3.2 (signal comparison plot)
 
@@ -401,8 +438,6 @@ The thesis is ~80% complete with most chapters written in Vietnamese. The main g
 
 #### Task 4.3: Chapter 5 Discussion Updates
 **Status**: Ready to write (analysis)
-
-**Depends on**: Understanding Kalman impact from results
 
 ---
 
@@ -452,17 +487,18 @@ Once you confirm the plan and timeline, I'll:
 1. Update `TECHNICAL_FINDINGS.md` with Findings 15-16
 2. Start writing LaTeX content for chapters (using placeholders where data is needed)
 3. Generate diagrams and figures I can create without data
-4. Create a `TODO_FOR_USER.md` checklist you can follow
+4. Provide detailed checklist in `TODO_FOR_USER.md`
 
 ---
 
 ## DOCUMENT STATUS
 
-- [x] Initial plan created
+- [x] Initial plan created (copilot/update-thesis-report)
+- [x] PR #3 findings integrated (from develop)
+- [x] Merged comprehensive plan created
 - [ ] User reviewed and approved
 - [ ] User timeline confirmed
 - [ ] LaTeX content written
 - [ ] Figures generated
 - [ ] Real data collected and integrated
 - [ ] Final review and compilation check
-

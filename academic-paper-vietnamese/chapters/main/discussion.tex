@@ -15,10 +15,10 @@ Có lẽ phát hiện quan trọng nhất là tác động đáng kể của câ
 
 Cân bằng lớp đã cải thiện recall thiểu số lên 0.93-0.95 (+42-47\%), một sự chuyển đổi làm cho hệ thống có thể triển khai trong các bối cảnh quan trọng về an toàn. Điều này xác thực nghiên cứu trong học tập mất cân bằng \cite{he2009learning, chawla2002smote} và nhấn mạnh một bài học quan trọng: \textbf{độ chính xác tổng thể có thể gây hiểu lầm}. Một mô hình với độ chính xác tổng thể 91\% có thể có độ chính xác lớp đa số 98\% nhưng chỉ 65\% độ chính xác lớp thiểu số—một sự đánh đổi không thể chấp nhận trong nhiều lĩnh vực.
 
-Framework của chúng tôi giải quyết điều này bằng cách làm cho cân bằng lớp là một cài đặt mặc định, không phải tùy chọn. Lựa chọn thiết kế này phản ánh một triết lý ưu tiên triển khai thực tế mạnh mẽ hơn các số liệu hiệu suất benchmark có thể che giấu những điểm yếu quan trọng.
+Framework này giải quyết điều này bằng cách làm cho cân bằng lớp là một cài đặt mặc định, không phải tùy chọn. Lựa chọn thiết kế này phản ánh một triết lý ưu tiên triển khai thực tế mạnh mẽ hơn các số liệu hiệu suất benchmark có thể che giấu những điểm yếu quan trọng.
 
 \subsection{Tính Khả Thi Triển Khai Biên}
-Các kết quả thời gian suy luận (9-18ms mỗi cửa sổ trên vi điều khiển 64MHz) trên nền tảng tham chiếu Seeed XIAO nRF52840 xác thực rằng pipeline do framework sinh ra có thể vận hành thời gian thực trên ít nhất một lớp phần cứng đại diện (ARM Cortex-M4F). Điều quan trọng là nên diễn giải các số đo này như bằng chứng khả thi cho kiến trúc đa đích, thay vì như benchmark duy nhất cho mọi thiết bị mà framework hỗ trợ. Với cửa sổ 1,5 giây và bước trượt 0,75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms—các mô hình của chúng tôi đạt được điều này với biên độ 40-80×, để lại khoảng trống cho:
+Các kết quả thời gian suy luận (9-18ms mỗi cửa sổ trên vi điều khiển 64MHz) trên nền tảng tham chiếu Seeed XIAO nRF52840 xác thực rằng pipeline do framework sinh ra có thể vận hành thời gian thực trên ít nhất một lớp phần cứng đại diện (ARM Cortex-M4F). Điều quan trọng là nên diễn giải các số đo này như bằng chứng khả thi cho kiến trúc đa đích, thay vì như benchmark duy nhất cho mọi thiết bị mà framework hỗ trợ. Với cửa sổ 1,5 giây và bước trượt 0,75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms—các mô hình đề xuất đạt được điều này với biên độ 40-80×, để lại khoảng trống cho:
 \begin{itemize}
     \item Ensemble đa mô hình (kết hợp dự đoán RF + NN)
     \item Các phương thức cảm biến bổ sung (nhịp tim, GPS)
@@ -38,32 +38,32 @@ Giao diện cửa sổ thời gian kéo thả mới lạ đại diện cho một
     \item Chú thích thủ công các dấu thời gian trong bảng tính (tẻ nhạt, dễ lỗi)
 \end{enumerate}
 
-Giao diện của chúng tôi loại bỏ các điểm ma sát này bằng cách cho phép thao tác trực quan trực tiếp của các biểu đồ tín hiệu. Kiểm tra người dùng sơ bộ (không được báo cáo chính thức ở đây) cho thấy điều này giảm thời gian tiền xử lý 60-80\% so với chú thích dấu thời gian thủ công, và giảm đáng kể ngưỡng chuyên môn cho chuẩn bị tập dữ liệu.
+Giao diện kéo thả loại bỏ các điểm ma sát này bằng cách cho phép thao tác trực quan trực tiếp của các biểu đồ tín hiệu. Kiểm tra người dùng sơ bộ (không được báo cáo chính thức ở đây) cho thấy điều này giảm thời gian tiền xử lý 60-80\% so với chú thích dấu thời gian thủ công, và giảm đáng kể ngưỡng chuyên môn cho chuẩn bị tập dữ liệu.
 
-Thiết kế này phù hợp với các nguyên tắc của giao diện thao tác trực tiếp \cite{shneiderman2016designing}, nơi người dùng tương tác với các biểu diễn trực quan của dữ liệu thay vì các đặc tả văn bản trừu tượng. Công việc tương lai nên tiến hành các nghiên cứu khả năng sử dụng chính thức so sánh giao diện của chúng tôi với phương pháp tự động của Edge Impulse và phân đoạn lập trình.
+Thiết kế này phù hợp với các nguyên tắc của giao diện thao tác trực tiếp \cite{shneiderman2016designing}, nơi người dùng tương tác với các biểu diễn trực quan của dữ liệu thay vì các đặc tả văn bản trừu tượng. Công việc tương lai nên tiến hành các nghiên cứu khả năng sử dụng chính thức so sánh giao diện này với phương pháp tự động của Edge Impulse và phân đoạn lập trình.
 
 \section{So Sánh với Công Trình Liên Quan}
 
 \subsection{Các Nền Tảng Thương Mại}
-So sánh của chúng tôi với Edge Impulse và SensiML tiết lộ các đánh đổi giữa chi phí, kiểm soát và tiện lợi:
+So sánh với Edge Impulse và SensiML tiết lộ các đánh đổi giữa chi phí, kiểm soát và tiện lợi:
 
-\textbf{Edge Impulse} ưu tiên dễ sử dụng với kỹ thuật đặc trưng tự động và các quy trình triển khai, nhưng với chi phí đăng ký \$20-100/tháng và tính minh bạch tiền xử lý hạn chế. Framework của chúng tôi khớp với khả năng tiếp cận của nó trong khi cung cấp kiểm soát đầy đủ và loại bỏ chi phí định kỳ—quan trọng cho nghiên cứu học thuật và các bối cảnh thế giới đang phát triển bị giới hạn tài nguyên.
+\textbf{Edge Impulse} ưu tiên dễ sử dụng với kỹ thuật đặc trưng tự động và các quy trình triển khai, nhưng với chi phí đăng ký \$20-100/tháng và tính minh bạch tiền xử lý hạn chế. Framework này khớp với khả năng tiếp cận của nó trong khi cung cấp kiểm soát đầy đủ và loại bỏ chi phí định kỳ—quan trọng cho nghiên cứu học thuật và các bối cảnh thế giới đang phát triển bị giới hạn tài nguyên.
 
-\textbf{SensiML} nhắm mục tiêu triển khai IoT thương mại với khả năng AutoML tinh vi nhưng chi phí \$99-500/tháng và hỗ trợ ít nền tảng hơn. Độ chính xác của nó trên kiểm tra HAR của chúng tôi (93.1\%) tụt hậu cả framework của chúng tôi (96.2\%) và Edge Impulse (94.8\%), có thể do các lựa chọn thuật toán khác nhau hoặc các bộ đặc trưng không được tối ưu hóa cho dữ liệu IMU.
+\textbf{SensiML} nhắm mục tiêu triển khai IoT thương mại với khả năng AutoML tinh vi nhưng chi phí \$99-500/tháng và hỗ trợ ít nền tảng hơn. Độ chính xác của nó trên kiểm tra HAR được thực hiện (93.1\%) tụt hậu cả framework này (96.2\%) và Edge Impulse (94.8\%), có thể do các lựa chọn thuật toán khác nhau hoặc các bộ đặc trưng không được tối ưu hóa cho dữ liệu IMU.
 
-\textbf{Triển khai TensorFlow Lite thủ công} đạt độ chính xác 96.5\% (tốt hơn một chút so với 96.2\% của chúng tôi), nhưng yêu cầu kiến thức cấp chuyên gia về lượng tử hóa mô hình, tích hợp runtime TFLM và tối ưu hóa đặc thù nền tảng—kỹ năng vượt quá hầu hết các nhà nghiên cứu và người đam mê. Framework của chúng tôi thu hẹp khoảng cách này đến 0.3\% trong khi không yêu cầu chuyên môn hệ thống nhúng.
+\textbf{Triển khai TensorFlow Lite thủ công} đạt độ chính xác 96.5\% (tốt hơn một chút so với 96.2\% của framework này), nhưng yêu cầu kiến thức cấp chuyên gia về lượng tử hóa mô hình, tích hợp runtime TFLM và tối ưu hóa đặc thù nền tảng—kỹ năng vượt quá hầu hết các nhà nghiên cứu và người đam mê. Framework này thu hẹp khoảng cách này đến 0.3\% trong khi không yêu cầu chuyên môn hệ thống nhúng.
 
-Kết luận: framework của chúng tôi chiếm một vị thế độc đáo kết hợp hiệu suất cấp chuyên nghiệp, tính minh bạch đầy đủ, chi phí bằng không và khả năng triển khai đa đích từ cùng một pipeline huấn luyện—một kết hợp không có sẵn trong các giải pháp hiện có.
+Kết luận: framework này chiếm một vị thế độc đáo kết hợp hiệu suất cấp chuyên nghiệp, tính minh bạch đầy đủ, chi phí bằng không và khả năng triển khai đa đích từ cùng một pipeline huấn luyện—một kết hợp không có sẵn trong các giải pháp hiện có.
 
 \subsection{Các Hệ Thống HAR Học Thuật}
-So với nghiên cứu HAR học thuật sử dụng các phương pháp dựa trên IMU tương tự \cite{anguita2013har}, độ chính xác của chúng tôi (96.2\%) cạnh tranh với các kết quả đã công bố trên các tập dữ liệu benchmark (92-97\% điển hình). Tuy nhiên, hầu hết các hệ thống học thuật chỉ báo cáo các nguyên mẫu Python hoặc phân tích ngoại tuyến; ít cung cấp mã nhúng sẵn sàng triển khai. Đóng góp của chúng tôi nằm ở việc bắc cầu "khoảng cách triển khai" này bằng cách tự động hóa việc dịch từ các mô hình scikit-learn đã huấn luyện sang firmware vi điều khiển sản xuất.
+So với nghiên cứu HAR học thuật sử dụng các phương pháp dựa trên IMU tương tự \cite{anguita2013har}, độ chính xác đạt được (96.2\%) cạnh tranh với các kết quả đã công bố trên các tập dữ liệu benchmark (92-97\% điển hình). Tuy nhiên, hầu hết các hệ thống học thuật chỉ báo cáo các nguyên mẫu Python hoặc phân tích ngoại tuyến; ít cung cấp mã nhúng sẵn sàng triển khai. Đóng góp của luận văn nằm ở việc bắc cầu "khoảng cách triển khai" này bằng cách tự động hóa việc dịch từ các mô hình scikit-learn đã huấn luyện sang firmware vi điều khiển sản xuất.
 
-Ngoài ra, xử lý hệ thống của chúng tôi về mất cân bằng lớp giải quyết một điểm yếu trong nhiều tài liệu HAR, nơi các tập kiểm tra cân bằng hoặc các số liệu bị chi phối bởi lớp đa số che giấu các vấn đề hiệu suất thực tế \cite{he2009learning}.
+Ngoài ra, xử lý hệ thống được đề xuất về mất cân bằng lớp giải quyết một điểm yếu trong nhiều tài liệu HAR, nơi các tập kiểm tra cân bằng hoặc các số liệu bị chi phối bởi lớp đa số che giấu các vấn đề hiệu suất thực tế \cite{he2009learning}.
 
 \section{Các Hạn Chế và Mối Đe Dọa đối với Tính Hợp Lệ}
 
 \subsection{Hạn Chế Tập Dữ Liệu}
-Xác thực của chúng tôi sử dụng dữ liệu từ một đối tượng đơn thực hiện năm hoạt động. Mặc dù đủ để chứng minh khả năng framework, tổng quát hóa đến các quần thể đa dạng (các độ tuổi, loại cơ thể, mức độ di động khác nhau) yêu cầu các nghiên cứu đa đối tượng. Các lớp hoạt động cũng hạn chế—các ứng dụng thực tế có thể cần phát hiện:
+Thực nghiệm xác thực sử dụng dữ liệu từ một đối tượng đơn thực hiện năm hoạt động. Mặc dù đủ để chứng minh khả năng framework, tổng quát hóa đến các quần thể đa dạng (các độ tuổi, loại cơ thể, mức độ di động khác nhau) yêu cầu các nghiên cứu đa đối tượng. Các lớp hoạt động cũng hạn chế—các ứng dụng thực tế có thể cần phát hiện:
 \begin{itemize}
     \item Sự kiện té ngã (quan trọng cho chăm sóc người cao tuổi)
     \item Các hoạt động phức tạp (nấu ăn, dọn dẹp, lái xe)
@@ -74,7 +74,7 @@ Xác thực của chúng tôi sử dụng dữ liệu từ một đối tượng
 Công việc tương lai nên xác thực framework sử dụng các tập dữ liệu HAR có sẵn công khai (ví dụ: UCI HAR, WISDM, PAMAP2) bao gồm các đối tượng đa dạng và phân loại hoạt động mở rộng.
 
 \subsection{Lựa Chọn Kích Thước Cửa Sổ}
-Cửa sổ 1,5 giây (150 mẫu @ 100Hz) với bước trượt 0,75 giây là một lựa chọn cân bằng bối cảnh thời gian và khả năng phản hồi. Nghiên cứu trước đây cho thấy kích thước cửa sổ ảnh hưởng đáng kể đến độ chính xác \cite{banos2014wisdm}: các cửa sổ ngắn hơn (<0.5s) có thể bỏ lỡ các chu kỳ chuyển động đầy đủ, trong khi các cửa sổ dài hơn (>2s) giảm độ phân giải thời gian. Framework của chúng tôi hiện tại sử dụng kích thước cửa sổ cố định; các chiến lược cửa sổ thích ứng (thay đổi kích thước dựa trên cường độ hoạt động được phát hiện) có thể cải thiện hiệu suất nhưng thêm độ phức tạp.
+Cửa sổ 1,5 giây (150 mẫu @ 100Hz) với bước trượt 0,75 giây là một lựa chọn cân bằng bối cảnh thời gian và khả năng phản hồi. Nghiên cứu trước đây cho thấy kích thước cửa sổ ảnh hưởng đáng kể đến độ chính xác \cite{banos2014wisdm}: các cửa sổ ngắn hơn (<0.5s) có thể bỏ lỡ các chu kỳ chuyển động đầy đủ, trong khi các cửa sổ dài hơn (>2s) giảm độ phân giải thời gian. Framework này hiện tại sử dụng kích thước cửa sổ cố định; các chiến lược cửa sổ thích ứng (thay đổi kích thước dựa trên cường độ hoạt động được phát hiện) có thể cải thiện hiệu suất nhưng thêm độ phức tạp.
 
 \subsection{Vị Trí và Hướng Cảm Biến}
 Các thử nghiệm giả định IMU được đeo ở cổ tay trong một hướng nhất quán. Triển khai thực tế gặp phải sự biến đổi:
@@ -84,7 +84,7 @@ Các thử nghiệm giả định IMU được đeo ở cổ tay trong một hư
     \item Nhiều cảm biến đồng thời (ví dụ: cả hai cổ tay + hông) yêu cầu hợp nhất cảm biến
 \end{itemize}
 
-Các hệ thống mạnh mẽ yêu cầu trích xuất đặc trưng không phụ thuộc hướng (ví dụ: tính toán độ lớn gia tốc thay vì các trục riêng lẻ) hoặc các thuật toán ước lượng hướng. Bộ đặc trưng của framework chúng tôi bao gồm một số đặc trưng dựa trên độ lớn, nhưng đánh giá hệ thống về độ bền vững hướng là cần thiết.
+Các hệ thống mạnh mẽ yêu cầu trích xuất đặc trưng không phụ thuộc hướng (ví dụ: tính toán độ lớn gia tốc thay vì các trục riêng lẻ) hoặc các thuật toán ước lượng hướng. Bộ đặc trưng của framework này bao gồm một số đặc trưng dựa trên độ lớn, nhưng đánh giá hệ thống về độ bền vững hướng là cần thiết.
 
 \subsection{Sự Đa Dạng Nền Tảng Tính Toán}
 Framework hiện đã hiện thực generator cho nhiều họ đích, nhưng mức độ xác thực cần được phân tách thành hai lớp. Ở lớp thứ nhất, \textit{khả năng triển khai} đã được chứng minh bởi kiến trúc factory, các generator đặc thù nền tảng và các gói mã đầu ra tương ứng. Ở lớp thứ hai, \textit{benchmark định lượng liên thiết bị} vẫn mới chỉ được đo chi tiết trên XIAO. Vì vậy, phát biểu chính xác của luận văn không nên là ``framework đã benchmark trên mọi thiết bị'', mà là ``framework cung cấp năng lực triển khai đa thiết bị ở mức kiến trúc và sinh mã, với XIAO là nền tảng thực nghiệm tham chiếu đầu tiên''. Các bước tiếp theo cần bổ sung benchmark trên các kiến trúc khác—AVR (Arduino Uno), RISC-V (ESP32-C3), ARM Cortex-M0+ (Raspberry Pi Pico)—để định lượng đầy đủ tính di động. Đặc điểm bộ nhớ và tốc độ chắc chắn sẽ khác nhau, đặc biệt trên các bộ xử lý AVR 8-bit thiếu hỗ trợ dấu phẩy động phần cứng.
@@ -95,7 +95,7 @@ Kết quả cụ thể cho nhận dạng hoạt động con người sử dụng
 \section{Các Đánh Đổi Thiết Kế và Các Lựa Chọn Thay Thế}
 
 \subsection{ML Cổ Điển vs Học Sâu}
-Chúng tôi cố ý chọn học máy cổ điển (Random Forest, SVM, Neural Networks) thay vì học sâu hiện đại (CNN, LSTM, Transformer) do:
+Luận văn này cố ý chọn học máy cổ điển (Random Forest, SVM, Neural Networks) thay vì học sâu hiện đại (CNN, LSTM, Transformer) do:
 \begin{itemize}
     \item \textbf{Ràng Buộc Triển Khai}: Các mô hình cổ điển biên dịch thành mã C++ nhỏ (95-182KB), trong khi các mạng sâu yêu cầu các runtime suy luận chuyên biệt (TensorFlow Lite Micro) thêm 100-300KB overhead
     \item \textbf{Hiệu Quả Huấn Luyện}: Các mô hình cổ điển huấn luyện trong giây đến phút trên CPU; các mạng sâu yêu cầu GPU và giờ huấn luyện
@@ -105,21 +105,21 @@ Chúng tôi cố ý chọn học máy cổ điển (Random Forest, SVM, Neural N
 Tuy nhiên, học sâu xuất sắc trên các tập dữ liệu lớn (>100K mẫu) và đầu vào tín hiệu thô (bỏ qua kỹ thuật đặc trưng thủ công). Các phiên bản framework tương lai nên tích hợp hỗ trợ TensorFlow Lite cho người dùng có tài nguyên tính toán và các tập dữ liệu được chú thích lớn.
 
 \subsection{Đặc Trưng Thủ Công vs Đặc Trưng Học}
-Bộ 90 đặc trưng miền thời gian của chúng tôi sử dụng các thống kê thủ công (15 thống kê × 6 trục). Điều này yêu cầu kiến thức miền (biết đặc trưng nào phân biệt các hoạt động) nhưng đảm bảo khả năng diễn giải, biểu diễn gọn nhẹ, và tương đồng bit-exact giữa Python và C++. Học sâu từ đầu đến cuối có thể học các đặc trưng tự động, nhưng với chi phí các mô hình lớn hơn và tính minh bạch giảm.
+Bộ 90 đặc trưng miền thời gian được sử dụng bao gồm các thống kê thủ công (15 thống kê × 6 trục). Điều này yêu cầu kiến thức miền (biết đặc trưng nào phân biệt các hoạt động) nhưng đảm bảo khả năng diễn giải, biểu diễn gọn nhẹ, và tương đồng bit-exact giữa Python và C++. Học sâu từ đầu đến cuối có thể học các đặc trưng tự động, nhưng với chi phí các mô hình lớn hơn và tính minh bạch giảm.
 
 Một phương pháp trung gian—sử dụng các bộ mã hóa tự động convolutional cho trích xuất đặc trưng học theo sau bởi ML cổ điển cho phân loại—có thể kết hợp lợi ích. Điều này vẫn là công việc tương lai.
 
 \subsection{Tạo Mã Trực tiếp vs Runtime Suy luận: Đánh Giá Thực tiễn}
 \label{sec:codegen_tradeoff_discussion}
 
-Phần~\ref{sec:codegen_rationale} trình bày lý do thiết kế cho việc chọn tạo mã trực tiếp thay vì runtime suy luận. Sau quá trình phát triển và xác thực hoàn chỉnh, chúng tôi có thể đánh giá liệu lựa chọn này có được minh chứng trong thực tế hay không.
+Phần~\ref{sec:codegen_rationale} trình bày lý do thiết kế cho việc chọn tạo mã trực tiếp thay vì runtime suy luận. Sau quá trình phát triển và xác thực hoàn chỉnh, có thể đánh giá liệu lựa chọn này có được minh chứng trong thực tế hay không.
 
 \paragraph{Lợi ích Đã được Xác nhận}
 Ba lợi ích dự kiến đã được xác nhận qua thực nghiệm:
 
 Thứ nhất, \textit{dấu chân bộ nhớ tối thiểu}: Neural Network chỉ chiếm 95KB flash---bao gồm trọng số mô hình, logic suy luận, trích xuất đặc trưng 15 thống kê, và chuẩn hóa StandardScaler. Với TFLite Micro, cùng chức năng sẽ yêu cầu thêm 150--250KB cho runtime interpreter, đẩy tổng lên 245--345KB và chiếm $>$25\% flash khả dụng chỉ cho suy luận. Trên nền tảng tham chiếu Seeed XIAO (1MB flash), điều này vẫn khả thi; trên các vi điều khiển với 256KB flash (ví dụ: STM32F103, ATmega2560), phương pháp runtime sẽ không thể triển khai.
 
-Thứ hai, \textit{minh bạch cho gỡ lỗi}---đây là yếu tố có tác động lớn nhất ngoài dự kiến. Khi mô hình đã triển khai luôn dự đoán \texttt{walking\_downstairs}, chúng tôi có thể: (a) đọc chính xác mã C++ đã tạo để xác minh logic suy luận, (b) in giá trị đặc trưng trung gian trên serial để so sánh với Python, (c) xác định lỗi zero-padding và kurtosis formula bằng cách truy vết từng dòng. Với runtime đóng gói, bước (b) và (c) sẽ yêu cầu công cụ debugging chuyên biệt hoặc không thể thực hiện. Kinh nghiệm phát triển thực tế cho thấy 3 trong 10 phát hiện kỹ thuật (Finding 1: zero-padding, Finding 2: kurtosis, Finding 7: feature order) chỉ có thể phát hiện nhờ khả năng kiểm tra mã đã tạo dòng-theo-dòng.
+Thứ hai, \textit{minh bạch cho gỡ lỗi}---đây là yếu tố có tác động lớn nhất ngoài dự kiến. Khi mô hình đã triển khai luôn dự đoán \texttt{walking\_downstairs}, có thể: (a) đọc chính xác mã C++ đã tạo để xác minh logic suy luận, (b) in giá trị đặc trưng trung gian trên serial để so sánh với Python, (c) xác định lỗi zero-padding và kurtosis formula bằng cách truy vết từng dòng. Với runtime đóng gói, bước (b) và (c) sẽ yêu cầu công cụ debugging chuyên biệt hoặc không thể thực hiện. Kinh nghiệm phát triển thực tế cho thấy 3 trong 10 phát hiện kỹ thuật (Finding 1: zero-padding, Finding 2: kurtosis, Finding 7: feature order) chỉ có thể phát hiện nhờ khả năng kiểm tra mã đã tạo dòng-theo-dòng.
 
 Thứ ba, \textit{hỗ trợ trực tiếp ML cổ điển}: Framework hỗ trợ Random Forest---thuật toán không có đường dẫn chuyển đổi trực tiếp sang TFLite Micro. Chuỗi scikit-learn $\rightarrow$ ONNX $\rightarrow$ TFLite giới thiệu rủi ro sai lệch; trong khi phương pháp trực tiếp đọc \texttt{model.estimators\_} (danh sách cây quyết định) và tạo mã duyệt cây nhị phân chính xác.
 
@@ -147,7 +147,7 @@ Triển khai các chiến lược tinh vi này sẽ cải thiện khả năng s�
 Một phát hiện quan trọng trong quá trình phát triển và xác thực framework là tầm quan trọng thiết yếu của \textit{tương đồng huấn luyện-triển khai} (training-deployment parity)---sự đảm bảo rằng quá trình trích xuất đặc trưng trong môi trường huấn luyện (Python) tạo ra kết quả \textbf{giống hệt} với quá trình trích xuất đặc trưng trên thiết bị biên (C++/MicroPython). Vấn đề này ít được nghiên cứu trong tài liệu edge ML nhưng có tác động nghiêm trọng đến hiệu suất triển khai thực tế \cite{paleyes2022challenges, sculley2015hidden}.
 
 \subsection{Các Nguồn Không khớp Được Xác định}
-Trong quá trình phát triển, chúng tôi xác định và giải quyết nhiều nguồn sai lệch giữa pipeline huấn luyện Python và mã suy luận C++ đã tạo:
+Trong quá trình phát triển, đã xác định và giải quyết nhiều nguồn sai lệch giữa pipeline huấn luyện Python và mã suy luận C++ đã tạo:
 
 \paragraph{Artifact Đệm Số Không (Zero-Padding Artifact)}
 Pipeline trích xuất đặc trưng ban đầu đệm các cửa sổ ngắn hơn kích thước mục tiêu bằng hàng toàn số không. Trên thiết bị thực, bộ đệm trượt luôn chứa đầy dữ liệu cảm biến thực (không có giá trị zero), vì cảm biến liên tục đo gia tốc trọng trường. Sự khác biệt này tạo ra phân phối đặc trưng hoàn toàn khác nhau giữa huấn luyện ($\text{acc\_mag\_min} = 0$) và triển khai ($\text{acc\_mag\_min} \approx 9{,}81$), đẩy tất cả đặc trưng đầu vào ra ngoài vùng huấn luyện.
@@ -225,7 +225,7 @@ Kinh nghiệm này dẫn đến nguyên tắc thiết kế tăng cường cho IM
     \item \textbf{Phát hiện tự động}: Framework nên phát hiện tự động lớp tĩnh/động thay vì yêu cầu người dùng cấu hình thủ công, giảm rào cản kỹ thuật
 \end{enumerate}
 
-Quan điểm này khác biệt với đa số nghiên cứu tăng cường dữ liệu cho HAR, vốn áp dụng biến đổi đồng nhất \cite{um2017data, le_guennec2016augmentation}. Chúng tôi cho rằng sự phân biệt nhận biết lớp là đặc biệt quan trọng cho các hệ thống triển khai biên, nơi số lượng lớp thường nhỏ và sai sót trên lớp tĩnh (ví dụ: phát hiện nhầm hoạt động khi bệnh nhân đứng yên) có thể có hậu quả lâm sàng nghiêm trọng.
+Quan điểm này khác biệt với đa số nghiên cứu tăng cường dữ liệu cho HAR, vốn áp dụng biến đổi đồng nhất \cite{um2017data, le_guennec2016augmentation}. Luận văn này cho rằng sự phân biệt nhận biết lớp là đặc biệt quan trọng cho các hệ thống triển khai biên, nơi số lượng lớp thường nhỏ và sai sót trên lớp tĩnh (ví dụ: phát hiện nhầm hoạt động khi bệnh nhân đứng yên) có thể có hậu quả lâm sàng nghiêm trọng.
 
 \section{Từ chối Hoạt động Dựa trên Ngưỡng Tin cậy}
 \label{sec:confidence_discussion}
@@ -279,6 +279,103 @@ Các thiết bị đeo tiêu dùng (đồng hồ thông minh, băng thể dục)
     \item Huấn luyện cá nhân hóa (phản hồi thời gian thực về cường độ hoạt động)
 \end{itemize}
 
+\section{Phân Tích Các Phát Hiện Kỹ Thuật Quan Trọng}
+
+\subsection{Bộ lọc Kalman: Đột Phá về Training-Deployment Parity}
+\label{sec:disc_kalman_parity}
+
+Việc triển khai bộ lọc Kalman constant-velocity đại diện cho một đột phá quan trọng trong việc giải quyết vấn đề khoảng cách tương đồng huấn luyện-triển khai (training-deployment parity gap). Đây là lần đầu tiên framework có một bộ lọc tiền xử lý với \textbf{khoảng cách parity bằng không}.
+
+\subsubsection{So sánh với Các Phương pháp IIR Truyền thống}
+Các bộ lọc IIR Butterworth truyền thống tồn tại lỗ hổng parity vốn có:
+\begin{itemize}
+    \item \textbf{Huấn luyện}: \texttt{filtfilt} (non-causal, zero-phase) xử lý dữ liệu theo hai chiều
+    \item \textbf{Triển khai}: \texttt{lfilter} (causal, forward-only) chỉ có thể xử lý theo một chiều do ràng buộc thời gian thực
+\end{itemize}
+
+Khoảng cách này gây sai lệch đặc biệt nghiêm trọng với các đặc trưng nhạy cảm với pha như skewness và kurtosis, có thể dẫn đến suy giảm hiệu suất mô hình 2-5\% khi triển khai thực tế.
+
+\subsubsection{Ưu thế Thiết kế của Kalman Filter}
+Bộ lọc Kalman khắc phục vấn đề này từ gốc thông qua thiết kế vốn có:
+\begin{enumerate}
+    \item \textbf{Tính nhân quả tự nhiên}: Kalman filter về bản chất là causal---chỉ sử dụng observation hiện tại và trạng thái trước đó
+    \item \textbf{Tính thích ứng}: Gain điều chỉnh tự động dựa trên prediction error, tạo ra đặc tính lọc thích ứng
+    \item \textbf{Mô hình vật lý}: Constant-velocity model phù hợp với bản chất chuyển động của dữ liệu IMU
+    \item \textbf{Tham số trực quan}: Process noise (Q) và measurement noise (R) có ý nghĩa vật lý rõ ràng
+\end{enumerate}
+
+\textbf{So sánh với Edge Impulse}: Edge Impulse không cung cấp Kalman filtering như một tùy chọn tiền xử lý. Spectral analysis block của họ sử dụng các bandpass filter cố định, thiếu khả năng thích ứng và đảm bảo parity của Kalman filter.
+
+\subsection{Phân Tích Kiến trúc Tạo Mã Đa Kiến trúc}
+\label{sec:disc_multi_arch}
+
+Việc hỗ trợ đồng thời các mô hình feature-based (RF/SVM/NN) và end-to-end (CNN) trong cùng một framework đặt ra những thách thức kiến trúc độc đáo mà Finding 16 đã chỉ ra.
+
+\subsubsection{Sự Phức Tạp Metadata theo Kiến trúc}
+Case study về CNN metadata mismatch (Finding 16) minh họa tầm quan trọng của architecture-aware code generation:
+
+\textbf{Vấn đề}: CNN model hiển thị filename "f33" (33 features) mặc dù thực tế sử dụng 6 channels per timestep.
+
+\textbf{Nguyên nhân gốc}: Fallback logic không phân biệt được giữa:
+\begin{itemize}
+    \item Feature-based models: cần statistical feature names (e.g., "acc\_x\_mean", "gyro\_y\_kurtosis")  
+    \item CNN models: cần channel placeholders (e.g., "ch0", "ch1", ..., "ch5")
+\end{itemize}
+
+\textbf{Giải pháp kiến trúc}: Architecture-aware metadata generation với logic phân nhánh rõ ràng cho từng loại mô hình.
+
+\subsubsection{Phân Biệt với Edge Impulse}
+Edge Impulse xử lý sự phức tạp này bằng cách có "processing blocks" riêng biệt cho từng loại mô hình. Framework này phải quản lý cả hai pipeline trong cùng một codebase thống nhất, đòi hỏi:
+\begin{itemize}
+    \item Validation logic nhận biết kiến trúc
+    \item Metadata semantics khác nhau cho từng model type
+    \item Input dimension handling linh hoạt (90 features vs 900 raw inputs)
+\end{itemize}
+
+Điều này thể hiện trade-off thiết kế: complexity tăng để đổi lấy flexibility và unified user experience.
+
+\subsection{Hạn chế TFLite và Giải pháp Keras Surrogate}
+\label{sec:disc_tflite_limitations}
+
+Finding 15 tiết lộ những hạn chế quan trọng trong hệ sinh thái ONNX-ML và TFLite đối với các thuật toán ML cổ điển.
+
+\subsubsection{Phân tích Chi tiết về ONNX-ML Bottleneck}
+Pipeline chuyển đổi bị gián đoạn tại bước ONNX$\rightarrow$TensorFlow:
+\begin{enumerate}
+    \item \texttt{skl2onnx}: Thành công tạo ONNX-ML operators (TreeEnsembleClassifier, SVMClassifier)
+    \item \texttt{onnx2tf}: \textbf{Không hỗ trợ} ONNX-ML operators---chỉ hỗ trợ standard ONNX operators
+    \item \textbf{Kết quả}: RF/SVM không thể chuyển đổi trực tiếp sang TFLite
+\end{enumerate}
+
+Đây là một hạn chế hệ thống trong hệ sinh thái, không phải lỗi triển khai cụ thể của framework.
+
+\subsubsection{Đánh giá Keras Surrogate Method}
+Giải pháp Keras surrogate đưa ra trade-offs quan trọng:
+
+\textbf{Ưu điểm}:
+\begin{itemize}
+    \item Cho phép RF/SVM sử dụng TFLite pipeline
+    \item Tận dụng được quantization INT8 và runtime optimizations
+    \item Tương thích với hệ sinh thái TensorFlow hiện có
+\end{itemize}
+
+\textbf{Nhược điểm}:
+\begin{itemize}
+    \item \textbf{Approximation loss}: Keras MLP chỉ đạt 80-90\% agreement với RF/SVM gốc
+    \item \textbf{Memory overhead}: MLP surrogate có thể lớn hơn direct C++ implementation
+    \item \textbf{Training complexity}: Cần additional training step và hyperparameter tuning
+\end{itemize}
+
+\textbf{Khuyến nghị sử dụng}: 
+\begin{itemize}
+    \item \textbf{RF/SVM}: Ưu tiên direct C++ generation (exact, compact, fast)
+    \item \textbf{NN/CNN}: Sử dụng TFLite để tận dụng ecosystem mature
+    \item \textbf{TFLite surrogate}: Chỉ khi yêu cầu standardized runtime integration
+\end{itemize}
+
+\subsubsection{Implications cho Edge AI Ecosystem}
+Findings này chỉ ra một gap quan trọng trong edge AI toolchain: ONNX-ML và standard ONNX có operator domains khác nhau, tạo ra compatibility issues ở interface layers. Điều này nhấn mạnh giá trị của direct code generation approach cho classical ML algorithms.
+
 \section{Các Hướng Nghiên Cứu Tương Lai}
 
 \subsection{Các Mở Rộng Ngắn Hạn}
@@ -314,6 +411,6 @@ Các cải tiến chuyển đổi yêu cầu thay đổi kiến trúc:
 
 Sự phổ biến của các cảm biến đeo được và điện toán biên phổ biến tạo ra các cơ hội chưa từng có cho các ứng dụng theo dõi chuyển động trải dài y tế, thể thao, nghiên cứu và xa hơn nữa. Tuy nhiên, việc nhận ra tiềm năng này đã bị cản trở bởi sự phức tạp của phát triển mô hình AI và sự khan hiếm các công cụ có thể tiếp cận bắc cầu khoảng cách giữa thu thập dữ liệu và triển khai biên.
 
-Nghiên cứu này chứng minh rằng khoảng cách này không phải là không thể vượt qua. Bằng cách kết hợp các giao diện tiền xử lý trực quan, các quy trình huấn luyện mô hình tự động và tạo mã thông minh, chúng tôi đã tạo ra một hệ thống trao quyền cho người dùng không có chuyên môn chuyên biệt để phát triển các ứng dụng theo dõi chuyển động cấp chuyên nghiệp. Bản chất mã nguồn mở của framework đảm bảo tính bền vững và tiến hóa được điều khiển bởi cộng đồng, trong khi kiến trúc modular của nó cung cấp một nền tảng cho đổi mới nghiên cứu đang diễn ra.
+Nghiên cứu này chứng minh rằng khoảng cách này không phải là không thể vượt qua. Bằng cách kết hợp các giao diện tiền xử lý trực quan, các quy trình huấn luyện mô hình tự động và tạo mã thông minh, đã tạo ra một hệ thống trao quyền cho người dùng không có chuyên môn chuyên biệt để phát triển các ứng dụng theo dõi chuyển động cấp chuyên nghiệp. Bản chất mã nguồn mở của framework đảm bảo tính bền vững và tiến hóa được điều khiển bởi cộng đồng, trong khi kiến trúc modular của nó cung cấp một nền tảng cho đổi mới nghiên cứu đang diễn ra.
 
-Khi edge AI tiếp tục trưởng thành, các công cụ như framework đề xuất sẽ đóng một vai trò ngày càng quan trọng trong việc dân chủ hóa quyền truy cập vào các công nghệ tiên tiến. Hy vọng của chúng tôi là công việc này truyền cảm hứng cho các nỗ lực tương tự để làm cho các khả năng AI tinh vi có thể tiếp cận được với các nhà nghiên cứu, nhà phát triển và nhà đổi mới trên toàn thế giới—cuối cùng tăng tốc tốc độ khám phá và triển khai trong theo dõi chuyển động và xa hơn nữa.
+Khi edge AI tiếp tục trưởng thành, các công cụ như framework đề xuất sẽ đóng một vai trò ngày càng quan trọng trong việc dân chủ hóa quyền truy cập vào các công nghệ tiên tiến. Mong rằng công việc này truyền cảm hứng cho các nỗ lực tương tự để làm cho các khả năng AI tinh vi có thể tiếp cận được với các nhà nghiên cứu, nhà phát triển và nhà đổi mới trên toàn thế giới—cuối cùng tăng tốc tốc độ khám phá và triển khai trong theo dõi chuyển động và xa hơn nữa.

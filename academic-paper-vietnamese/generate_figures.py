@@ -390,69 +390,84 @@ def generate_optimization_comparison():
 def generate_workflow_diagram():
     """Generate user workflow diagram showing the journey from data to deployment."""
 
-    fig, ax = plt.subplots(figsize=(16, 6))
+    fig, ax = plt.subplots(figsize=(16, 5))
+    ax.set_facecolor('#f8f9fa')
+    fig.patch.set_facecolor('#f8f9fa')
     ax.axis('off')
 
-    # Workflow steps
+    # Workflow steps (Vietnamese labels)
     steps = [
-        {'name': '1. Upload\nData', 'x': 0.08, 'color': '#e8f5e9'},
-        {'name': '2. Visual\nInspection', 'x': 0.22, 'color': '#c8e6c9'},
-        {'name': '3. Select\nWindows', 'x': 0.36, 'color': '#a5d6a7'},
-        {'name': '4. Extract\nFeatures', 'x': 0.50, 'color': '#81c784'},
-        {'name': '5. Train\nModel', 'x': 0.64, 'color': '#66bb6a'},
-        {'name': '6. Generate\nCode', 'x': 0.78, 'color': '#4caf50'},
-        {'name': '7. Deploy\nEdge', 'x': 0.92, 'color': '#43a047'},
+        {'name': '1. Tải\nDữ liệu',    'time': '~5 phút',    'x': 0.08},
+        {'name': '2. Kiểm tra\nTrực quan', 'time': '~3 phút', 'x': 0.22},
+        {'name': '3. Chọn\nCửa sổ',    'time': '~10 phút',   'x': 0.36},
+        {'name': '4. Trích xuất\nĐặc trưng', 'time': '~2 phút', 'x': 0.50},
+        {'name': '5. Huấn\nluyện',      'time': '~5–30 phút', 'x': 0.64},
+        {'name': '6. Tạo\nMã',          'time': '~1 phút',    'x': 0.78},
+        {'name': '7. Triển khai\nBiên', 'time': '~5 phút',    'x': 0.92},
     ]
 
-    box_width = 0.11
-    box_height = 0.25
-    y_center = 0.5
+    # Colour palette: blue-teal gradient for academic feel
+    box_colors = [
+        '#dbeafe', '#bfdbfe', '#93c5fd', '#60a5fa',
+        '#3b82f6', '#2563eb', '#1d4ed8',
+    ]
+    edge_color = '#1e3a5f'
+    text_color = '#1e293b'
+    arrow_color = '#475569'
 
-    # Draw boxes
-    for step in steps:
-        rect = plt.Rectangle((step['x'] - box_width/2, y_center - box_height/2),
-                             box_width, box_height,
-                             facecolor=step['color'],
-                             edgecolor='#2e7d32',
-                             linewidth=2.5,
-                             zorder=2)
+    box_width = 0.11
+    box_height = 0.30
+    y_center = 0.56
+
+    # Draw step boxes
+    for step, color in zip(steps, box_colors):
+        rect = plt.Rectangle(
+            (step['x'] - box_width / 2, y_center - box_height / 2),
+            box_width, box_height,
+            facecolor=color, edgecolor=edge_color, linewidth=1.8, zorder=2,
+            joinstyle='round',
+        )
         ax.add_patch(rect)
         ax.text(step['x'], y_center, step['name'],
-                ha='center', va='center', fontsize=14, fontweight='bold',
-                color='#1b5e20', zorder=3)
+                ha='center', va='center', fontsize=12, fontweight='bold',
+                color=text_color, zorder=3, linespacing=1.4)
 
-    # Draw arrows with thicker lines
+    # Draw arrows between boxes
     for i in range(len(steps) - 1):
-        x_start = steps[i]['x'] + box_width/2
-        x_end = steps[i+1]['x'] - box_width/2
-        ax.annotate('',
-                    xy=(x_end, y_center),
-                    xytext=(x_start, y_center),
-                    arrowprops=dict(arrowstyle='->', lw=4, color='#424242'))
+        x_start = steps[i]['x'] + box_width / 2 + 0.003
+        x_end   = steps[i + 1]['x'] - box_width / 2 - 0.003
+        ax.annotate(
+            '', xy=(x_end, y_center), xytext=(x_start, y_center),
+            arrowprops=dict(arrowstyle='->', lw=2.5, color=arrow_color,
+                            mutation_scale=18),
+            zorder=4,
+        )
 
-    # Add time estimates below with larger font
-    time_labels = ['5 min', '3 min', '10 min',
-                   '2 min', '5-30 min', '1 min', '5 min']
-    for step, time_label in zip(steps, time_labels):
-        ax.text(step['x'], 0.15, time_label,
-                ha='center', va='center', fontsize=14, style='italic',
-                color='#757575', fontweight='bold')
+    # Time labels below each box
+    for step in steps:
+        ax.text(step['x'], y_center - box_height / 2 - 0.06,
+                step['time'],
+                ha='center', va='top', fontsize=10, style='italic',
+                color='#64748b')
 
-    ax.text(0.5, 0.05, 'Estimated Total Time: 30-60 minutes',
-            ha='center', va='center', fontsize=16, fontweight='bold',
-            color='#d84315',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='#ffccbc',
-                      edgecolor='#ff5722', linewidth=3))
+    # Total time banner
+    ax.text(0.5, 0.06,
+            'Tổng thời gian ước tính: 30–60 phút',
+            ha='center', va='center', fontsize=13, fontweight='bold',
+            color='#1e3a5f',
+            bbox=dict(boxstyle='round,pad=0.45', facecolor='#dbeafe',
+                      edgecolor='#2563eb', linewidth=1.8))
 
     ax.set_xlim(0, 1)
-    ax.set_ylim(0, 0.8)
-    ax.set_title('User Workflow: From Raw Data to Edge Deployment',
-                 fontsize=24, fontweight='bold', pad=20, color='#212121')
+    ax.set_ylim(0, 0.9)
+    ax.set_title('Quy trình Làm việc: Từ Dữ liệu Thô đến Triển khai Biên',
+                 fontsize=18, fontweight='bold', pad=14,
+                 color='#1e293b')
 
-    plt.tight_layout()
+    plt.tight_layout(pad=0.5)
 
     output_path = FIGURES_DIR / "workflow_diagram.png"
-    plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='#f8f9fa')
     print(f"✓ Workflow diagram saved to: {output_path}")
 
     plt.close()

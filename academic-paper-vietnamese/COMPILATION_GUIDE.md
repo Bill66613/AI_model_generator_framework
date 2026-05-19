@@ -157,9 +157,11 @@ If you haven't generated figures yet but want to compile, comment out these line
 mpm --install=multirow
 ```
 
-### Error 3: "Citation undefined: article:human_motion_tracking_survey"
+### Error 3: "Citation undefined" or "Reference undefined"
 
-**Solution:** This is normal on first pass. Run the full 4-step sequence (pdflatex → bibtex → pdflatex × 2).
+**Solution:** These are normal on first pass. Run the full 4-step sequence (pdflatex → bibtex → pdflatex × 2).
+
+All citations (`warden2019tinyml`, `ray2023tinyml_survey`, etc.) are defined in `references.bib`. Forward references to labels in later chapters (e.g., `sec:training_deployment_parity` referenced in `methodology.tex` but defined in `discussion.tex`) also resolve on the second pdflatex pass.
 
 ### Error 4: "Overfull \hbox" warnings
 
