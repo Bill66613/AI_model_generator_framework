@@ -1,6 +1,6 @@
 # THESIS DATA COLLECTION — Input Template
 
-**Date**: _____________
+**Date**: 2026-05-20
 **Collector**: Nguyen Truong Minh Hoang
 **Purpose**: Real experimental data for thesis Chapter 4 (Results)
 
@@ -9,50 +9,204 @@
 ## 1. TRAINING RESULTS
 
 ### 1.1 Neural Network (MLP)
-- **Architecture**: Input(33 or 53) → Hidden(128) → Hidden(64) → Output(5)
-- **Training time**: _______ seconds
-- **Train accuracy**: _______%
-- **Validation accuracy**: _______%
-- **Test accuracy**: _______%
+
+- **Architecture**: Input(63) → Hidden(100) → Hidden(50) → Output(3)
+- **Training time**: 0.22 seconds
+- **Train accuracy**: 99.17%
+- **Validation accuracy**: 100% (best_val_accuracy, early stopped at epoch 13)
+- **Test accuracy**: 100%
 - **Deployment accuracy** (with confidence threshold ≥0.6): _______%
 - **Rejection rate**: _______%
-- **Notes**: _______________________________________________________________
+- **Notes**: Orientation-invariant + DFT feature set (63 features), 3 classes: running/still/walking. sklearn MLPClassifier, early stopping enabled.
+Per-Class Performance (test set):
+| Activity | Precision | Recall | F1-Score | Support |
+|----------|-----------|--------|----------|---------|
+| Running  | 1.0000    | 1.0000 | 1.0000   | 56      |
+| Still    | 1.0000    | 1.0000 | 1.0000   | 51      |
+| Walking  | 1.0000    | 1.0000 | 1.0000   | 49      |
+| Macro Avg| 1.0000    | 1.0000 | 1.0000   | 156     |
 
 ### 1.2 Random Forest
-- **Architecture**: n_estimators=100, max_depth=None
-- **Training time**: _______ seconds
-- **Train accuracy**: _______%
-- **Validation accuracy**: _______%
-- **Test accuracy**: _______%
+
+- **Architecture**: n_estimators=50, max_depth=10
+- **Training time**: 0.12 seconds
+- **Train accuracy**: 100%
+- **Validation accuracy**: N/A (no held-out val split for RF)
+- **Test accuracy**: 100%
 - **Deployment accuracy** (with confidence threshold ≥0.6): _______%
 - **Rejection rate**: _______%
-- **Notes**: _______________________________________________________________
+- **Notes**: 63 orientation-invariant + DFT features, 3 classes: running/still/walking.
+Per-Class Performance (test set):
+| Activity | Precision | Recall | F1-Score | Support |
+|----------|-----------|--------|----------|---------|
+| Running  | 1.0000    | 1.0000 | 1.0000   | 56      |
+| Still    | 1.0000    | 1.0000 | 1.0000   | 51      |
+| Walking  | 1.0000    | 1.0000 | 1.0000   | 49      |
+| Macro Avg| 1.0000    | 1.0000 | 1.0000   | 156     |
 
 ### 1.3 Support Vector Machine (SVM)
+
 - **Architecture**: kernel='rbf', C=1.0, gamma='scale'
-- **Training time**: _______ seconds
-- **Train accuracy**: _______%
-- **Validation accuracy**: _______%
-- **Test accuracy**: _______%
+- **Training time**: 0.09 seconds
+- **Train accuracy**: 100%
+- **Validation accuracy**: N/A (no held-out val split for SVM)
+- **Test accuracy**: 100%
 - **Deployment accuracy** (with confidence threshold ≥0.6): _______%
 - **Rejection rate**: _______%
-- **Notes**: _______________________________________________________________
+- **Notes**: 63 orientation-invariant + DFT features, 3 classes: running/still/walking.
+Per-Class Performance (test set):
+| Activity | Precision | Recall | F1-Score | Support |
+|----------|-----------|--------|----------|---------|
+| Running  | 1.0000    | 1.0000 | 1.0000   | 56      |
+| Still    | 1.0000    | 1.0000 | 1.0000   | 51      |
+| Walking  | 1.0000    | 1.0000 | 1.0000   | 49      |
+| Macro Avg| 1.0000    | 1.0000 | 1.0000   | 156     |
 
 ### 1.4 PyTorch MLP (Optional)
-- **Architecture**: _______________
-- **Training time**: _______ seconds
-- **Train accuracy**: _______%
-- **Validation accuracy**: _______%
-- **Test accuracy**: _______%
+
+- **Architecture**: Input(63) → Hidden layers → Output(3), orientation-invariant + DFT features
+- **Training time**: 2.54 seconds
+- **Train accuracy**: 99.86%
+- **Validation accuracy**: 100% (best_val_accuracy, early stopped at epoch 17)
+- **Test accuracy**: 100%
 - **Deployment accuracy** (with confidence threshold ≥0.6): _______%
 - **Rejection rate**: _______%
-- **Notes**: _______________________________________________________________
+- **Notes**: PyTorch custom MLP, Adam optimizer, early stopping. 63 features, 3 classes.
+Per-Class Performance (test set):
+| Activity | Precision | Recall | F1-Score | Support |
+|----------|-----------|--------|----------|---------|
+| Running  | 1.000     | 1.000  | 1.000    | 56      |
+| Still    | 1.000     | 1.000  | 1.000    | 51      |
+| Walking  | 1.000     | 1.000  | 1.000    | 49      |
+| Macro Avg| 1.000     | 1.000  | 1.000    | 156     |
+
+### 1.5 PyTorch 1D-CNN (Optional)
+
+- **Architecture**: 1D-CNN (window_size=150, n_channels=6), orientation-invariant + DFT features
+- **Training time**: 10.29 seconds
+- **Train accuracy**: 100%
+- **Validation accuracy**: 100% (best_val_accuracy, early stopped at epoch 33)
+- **Test accuracy**: 100%
+- **Deployment accuracy** (with confidence threshold ≥0.6): 99.4%, mean confidence 98.8%
+- **Rejection rate**: 0.6%
+- **Notes**: PyTorch 1D-CNN, Adam optimizer, early stopping. Raw 6-axis input (window_size=150 @ 100Hz = 1.5s), 3 classes.
+Per-Class Performance (test set):
+| Activity | Precision | Recall | F1-Score | Support |
+|----------|-----------|--------|----------|---------|
+| Running  | 1.000     | 1.000  | 1.000    | 56      |
+| Still    | 1.000     | 1.000  | 1.000    | 51      |
+| Walking  | 1.000     | 1.000  | 1.000    | 49      |
+| Macro Avg| 1.000     | 1.000  | 1.000    | 156     |
+| Weighted | 1.000     | 1.000  | 1.000    | 156     |
+
+---
+
+### 1.6 Neural Network (MLP) — 5 Activities
+
+- **Architecture**: Input(63) → Hidden(100) → Hidden(50) → Output(5)
+- **Training time**: 0.42 seconds
+- **Train accuracy**: 99.72%
+- **Validation accuracy**: 98.25% (best_val_accuracy, early stopped at epoch 25)
+- **Test accuracy**: 98.69%
+- **Deployment accuracy** (with confidence threshold ≥0.6): _______%
+- **Rejection rate**: _______%
+- **Notes**: Same feature set (63 features), 5 classes: running/still/walking/walking_downstairs/walking_upstairs.
+Per-Class Performance (test set):
+| Activity           | Precision | Recall | F1-Score | Support |
+|--------------------|-----------|--------|----------|---------|
+| Running            | 1.0000    | 1.0000 | 1.0000   | 56      |
+| Still              | 1.0000    | 1.0000 | 1.0000   | 51      |
+| Walking            | 1.0000    | 0.9796 | 0.9897   | 49      |
+| Walking Downstairs | 0.9487    | 0.9737 | 0.9610   | 38      |
+| Walking Upstairs   | 0.9714    | 0.9714 | 0.9714   | 35      |
+| Macro Avg          | 0.9840    | 0.9849 | 0.9844   | 229     |
+
+### 1.7 Random Forest — 5 Activities
+
+- **Architecture**: n_estimators=50, max_depth=10
+- **Training time**: 0.15 seconds
+- **Train accuracy**: 99.81%
+- **Validation accuracy**: N/A
+- **Test accuracy**: 98.25%
+- **Deployment accuracy** (with confidence threshold ≥0.6): _______%
+- **Rejection rate**: _______%
+- **Notes**: 63 features, 5 classes.
+Per-Class Performance (test set):
+| Activity           | Precision | Recall | F1-Score | Support |
+|--------------------|-----------|--------|----------|---------|
+| Running            | 1.0000    | 1.0000 | 1.0000   | 56      |
+| Still              | 1.0000    | 1.0000 | 1.0000   | 51      |
+| Walking            | 0.9792    | 0.9592 | 0.9691   | 49      |
+| Walking Downstairs | 0.9250    | 0.9737 | 0.9487   | 38      |
+| Walking Upstairs   | 1.0000    | 0.9714 | 0.9855   | 35      |
+| Macro Avg          | 0.9808    | 0.9809 | 0.9807   | 229     |
+
+### 1.8 Support Vector Machine (SVM) — 5 Activities
+
+- **Architecture**: kernel='rbf', C=1.0, gamma='scale'
+- **Training time**: 0.15 seconds
+- **Train accuracy**: 97.55%
+- **Validation accuracy**: N/A
+- **Test accuracy**: 97.38%
+- **Deployment accuracy** (with confidence threshold ≥0.6): _______%
+- **Rejection rate**: _______%
+- **Notes**: 63 features, 5 classes.
+Per-Class Performance (test set):
+| Activity           | Precision | Recall | F1-Score | Support |
+|--------------------|-----------|--------|----------|---------|
+| Running            | 1.0000    | 1.0000 | 1.0000   | 56      |
+| Still              | 1.0000    | 1.0000 | 1.0000   | 51      |
+| Walking            | 0.9783    | 0.9184 | 0.9474   | 49      |
+| Walking Downstairs | 0.8810    | 0.9737 | 0.9250   | 38      |
+| Walking Upstairs   | 1.0000    | 0.9714 | 0.9855   | 35      |
+| Macro Avg          | 0.9719    | 0.9727 | 0.9716   | 229     |
+
+### 1.9 PyTorch MLP — 5 Activities
+
+- **Architecture**: Input(63) → Hidden layers → Output(5), orientation-invariant + DFT features
+- **Training time**: 1.94 seconds
+- **Train accuracy**: 99.81%
+- **Validation accuracy**: 98.69% (best_val_accuracy, early stopped at epoch 41)
+- **Test accuracy**: 99.13%
+- **Deployment accuracy** (with confidence threshold ≥0.6): _______%
+- **Rejection rate**: _______%
+- **Notes**: PyTorch MLP, 5 classes.
+Per-Class Performance (test set):
+| Activity           | Precision | Recall | F1-Score | Support |
+|--------------------|-----------|--------|----------|---------|
+| Running            | 1.0000    | 1.0000 | 1.0000   | 56      |
+| Still              | 1.0000    | 1.0000 | 1.0000   | 51      |
+| Walking            | 1.0000    | 0.9796 | 0.9897   | 49      |
+| Walking Downstairs | 0.9500    | 1.0000 | 0.9744   | 38      |
+| Walking Upstairs   | 1.0000    | 0.9714 | 0.9855   | 35      |
+| Macro Avg          | 0.9900    | 0.9902 | 0.9899   | 229     |
+
+### 1.10 PyTorch 1D-CNN — 5 Activities
+
+- **Architecture**: 1D-CNN (window_size=150, n_channels=6), raw 6-axis input
+- **Training time**: 10.09 seconds
+- **Train accuracy**: 99.25%
+- **Validation accuracy**: 99.56% (best_val_accuracy, early stopped at epoch 24)
+- **Test accuracy**: 99.13%
+- **Deployment accuracy** (with confidence threshold ≥0.6): _______%
+- **Rejection rate**: _______%
+- **Notes**: PyTorch 1D-CNN, 5 classes.
+Per-Class Performance (test set):
+| Activity           | Precision | Recall | F1-Score | Support |
+|--------------------|-----------|--------|----------|---------|
+| Running            | 1.0000    | 0.9821 | 0.9910   | 56      |
+| Still              | 1.0000    | 1.0000 | 1.0000   | 51      |
+| Walking            | 0.9796    | 0.9796 | 0.9796   | 49      |
+| Walking Downstairs | 0.9744    | 1.0000 | 0.9870   | 38      |
+| Walking Upstairs   | 1.0000    | 1.0000 | 1.0000   | 35      |
+| Macro Avg          | 0.9908    | 0.9923 | 0.9915   | 229     |
 
 ---
 
 ## 2. ON-DEVICE TEST RESULTS
 
 ### 2.1 Device Information
+
 - **Device**: Seeed XIAO nRF52840
 - **IMU**: LSM6DS3 (built-in)
 - **Firmware**: Generated from framework (Date: _____________)
@@ -113,7 +267,7 @@
 |----------------------------|---------------|-------------------|-------|
 | LPF only (no Kalman) | ____.__% | ____.__% | _____________ |
 | LPF + Kalman (Q=0.001, R=0.1) | ____.__% | ____.__% | _____________ |
-| **Improvement** | **+___.__%** | **+___.__%** | |
+| **Improvement** | **+_**.**%** | **+_**.**%** | |
 
 **Observations**: ______________________________________________________________
 ________________________________________________________________________________
@@ -131,6 +285,7 @@ ________________________________________________________________________________
 | SVM | _____ bytes | _____ bytes | _____% | _____% | _____________ |
 
 **Maximum capacity** (Seeed XIAO nRF52840):
+
 - Flash: 1 MB (1,048,576 bytes)
 - SRAM: 256 KB (262,144 bytes)
 
@@ -172,7 +327,7 @@ ________________________________________________________________________________
 |--------|---------------------|---------------|-------------------|-------|
 | Direct C++ | N/A | ____.__% | ____.__% | _____________ |
 | TFLite (ONNX pipeline) | N/A | [FAILED] | N/A | onnx2tf doesn't support TreeEnsemble |
-| TFLite (Keras surrogate) | ___.__% | ____.__% | ____.__% | _____________ |
+| TFLite (Keras surrogate) | _**.**% | ____.__% | ____.__% | _____________ |
 
 **Observations**: ______________________________________________________________
 ________________________________________________________________________________
@@ -197,11 +352,13 @@ ________________________________________________________________________________
 ### 8.1 Test Set Predictions (for confusion matrix generation)
 
 **Files to provide**:
+
 - [ ] `test_predictions_nn.csv` — Columns: `true_label, predicted_label, confidence`
 - [ ] `test_predictions_rf.csv`
 - [ ] `test_predictions_svm.csv`
 
 **Format example**:
+
 ```
 true_label,predicted_label,confidence
 running,running,0.9234
@@ -213,6 +370,7 @@ walking,walking_downstairs,0.6543
 ### 8.2 Device Test Logs (Optional)
 
 **Files to provide**:
+
 - [ ] `device_test_nn_[activity].csv` — Raw sensor data + predictions from Device Test tab
 - [ ] `device_test_rf_[activity].csv`
 - [ ] `device_test_svm_[activity].csv`
@@ -226,6 +384,7 @@ walking,walking_downstairs,0.6543
 ### 9.1 Raw vs Filtered Signals
 
 **Files to provide** (Optional but helpful):
+
 - [ ] `signal_raw.csv` — One activity, 3 seconds, raw sensor data
 - [ ] `signal_lpf_only.csv` — Same segment, LPF only
 - [ ] `signal_kalman.csv` — Same segment, LPF + Kalman
@@ -287,9 +446,9 @@ Before sending this file to me, verify:
 ---
 
 **Next steps after you provide this data**:
+
 1. I'll integrate numbers into Chapter 4 LaTeX tables
 2. I'll generate confusion matrices from test prediction CSVs
 3. I'll create Kalman comparison plots (if signal CSVs provided)
 4. I'll write updated LaTeX content for Chapters 3-5
 5. I'll update THESIS_REPORT_INSTRUCTIONS.md with completion status
-
