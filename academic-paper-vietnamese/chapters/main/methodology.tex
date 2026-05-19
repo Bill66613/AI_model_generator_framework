@@ -78,153 +78,218 @@ Framework được đề xuất triển khai một quy trình từ đầu đến
 \label{fig:architecture}
 \end{figure}
 
-\section{Thu thập Dữ liệu và Nền tảng Tham chiếu}
+\section{Dữ liệu Cảm biến Quán tính cho Nhận dạng Hoạt động}
+\label{sec:imu_data_rationale}
 
-\subsection{Thiết bị tham chiếu cho thu thập và benchmark}
-Để thu thập dữ liệu và đo benchmark phần cứng đại diện, nghiên cứu sử dụng vi điều khiển Seeed XIAO nRF52840 Sense \cite{web:XIAO}, có bộ xử lý ARM Cortex-M4F (64MHz, 256KB RAM, 1MB Flash) và cảm biến IMU 6 trục LSM6DS3 tích hợp giao tiếp qua I2C tại địa chỉ 0x6A. LSM6DS3 cung cấp dữ liệu gia tốc kế 3 trục (được cấu hình ở phạm vi $\pm$2g) và dữ liệu con quay hồi chuyển 3 trục, được lấy mẫu ở 100Hz để đảm bảo độ phân giải thời gian đầy đủ để bắt giữ động lực học chuyển động con người trong khi cân bằng các ràng buộc bộ nhớ. Việc lựa chọn thiết bị này không hàm ý framework chỉ nhắm đến duy nhất XIAO; trong luận văn này, XIAO đóng vai trò nền tảng tham chiếu thuộc lớp ARM Cortex-M4F phổ biến trong các ứng dụng đeo, còn năng lực cốt lõi của framework nằm ở khả năng đóng gói cùng một mô hình sang nhiều đích triển khai khác nhau.
+Nhận dạng hoạt động con người dựa trên cảm biến đặt ra yêu cầu cơ bản: tín hiệu đầu vào phải mã hóa đủ thông tin để phân biệt các hoạt động có cấu trúc động học khác nhau. Phần này trình bày cơ sở lý thuyết giải thích tại sao cảm biến quán tính (IMU) là lựa chọn phù hợp và các nguyên tắc chi phối cách framework tiếp nhận dữ liệu đó.
 
-\subsection{Giao thức Thu thập Dữ liệu}
-Firmware thu thập dữ liệu triển khai quy trình sau:
-\begin{enumerate}
-    \item Khởi tạo giao tiếp I2C và xác minh kết nối IMU
-    \item Cấu hình cảm biến gia tốc kế (phạm vi $\pm$2g) và con quay hồi chuyển
-    \item Thu thập các số đọc cảm biến thô ở 100Hz (khoảng 10ms)
-    \item Chuyển đổi giá trị gia tốc kế sang m/s² sử dụng hệ số chuyển đổi 9,80665
-    \item Duy trì các số đọc con quay hồi chuyển ở độ/giây (deg/s)
-    \item Đầu ra định dạng CSV: aX, aY, aZ, gX, gY, gZ, Time\_seconds
-\end{enumerate}
+\subsection{Gia tốc kế và Con quay hồi chuyển: Tính Bổ sung Thông tin}
+\label{sec:imu_complementarity}
 
-Tốc độ lấy mẫu chuẩn hóa 100Hz đảm bảo tính nhất quán giữa thu thập dữ liệu huấn luyện và triển khai suy luận thời gian thực, loại bỏ các vấn đề không khớp tần số có thể làm suy giảm hiệu suất mô hình. Trong pha triển khai, framework tách riêng pipeline học máy khỏi lớp driver cảm biến và lớp đóng gói mã; do đó, thiết bị thu thập dữ liệu có thể khác với thiết bị suy luận cuối cùng miễn là các giả định về cột cảm biến, đơn vị đo và tần số lấy mẫu vẫn được giữ nhất quán.
+Cảm biến gia tốc kế đo gia tốc tuyến tính trên mỗi trục, bao gồm thành phần trọng lực chiếu lên thiết bị. Tín hiệu này phản ánh trực tiếp biên độ và tính tuần hoàn của chuyển động chi: mỗi bước chân tạo ra một xung gia tốc đặc trưng, chạy tạo biên độ lớn hơn đi bộ, trong khi trạng thái đứng yên duy trì độ lớn tín hiệu xấp xỉ $g = 9{,}81$~m/s². Tuy nhiên, gia tốc kế đơn thuần gặp phải một hạn chế cơ bản: khi thiết bị nghiêng hoặc xoay, vectơ trọng trường chiếu lên cả ba trục thay đổi theo, khiến tín hiệu bị nhập nhằng giữa chuyển động tịnh tiến thực sự và thay đổi định hướng thiết bị. Hệ quả thực tế là leo cầu thang và xuống cầu thang tạo ra biên dạng gia tốc trục thẳng đứng tương tự nhau---cùng biên độ, cùng tần số bước---nhưng khác nhau rõ rệt ở chuyển động xoay của cổ chân và đầu gối trong mỗi bước.
+
+Cảm biến con quay hồi chuyển đo vận tốc góc (°/s) và không bị ảnh hưởng bởi gia tốc trọng trường. Tín hiệu này nắm bắt chính xác động học xoay của chi: leo cầu thang tạo vận tốc góc dương trong pha gập cổ chân để nâng trọng lượng, trong khi xuống cầu thang tạo vận tốc góc âm cùng trục---sự phân biệt không thể đạt được chỉ từ gia tốc kế. Nhiều cặp hoạt động có biên độ gia tốc tương tự nhau nhưng khác nhau về đặc điểm xoay, như đứng yên so với giậm chân tại chỗ, hay đi bộ trên mặt phẳng so với đi bộ trên dốc.
+
+Tổ hợp sáu trục (ba gia tốc kế cộng ba con quay hồi chuyển) nắm bắt đồng thời cả trạng thái tịnh tiến và trạng thái xoay, cung cấp biểu diễn động học đầy đủ cho bài toán phân loại \cite{filippeschi2017survey_imu}. Ưu thế này được xác nhận trên các tập dữ liệu chuẩn: UCI-HAR \cite{anguita2013har} và PAMAP2 \cite{reiss2012pamap2} đạt độ chính xác cao hơn so với cấu hình chỉ dùng ba trục gia tốc kế như trong WISDM \cite{banos2014wisdm}. Framework tiếp nhận dữ liệu với bất kỳ số trục nào---ba trục, sáu trục hoặc nhiều hơn---nhưng đề xuất cấu hình sáu trục như điểm cân bằng giữa khả năng phân biệt hoạt động và chi phí tính toán triển khai. Mở rộng thêm trục (chín trục với từ kế) bổ sung thông tin định hướng tuyệt đối nhưng phụ thuộc môi trường từ trường và không cải thiện đáng kể khả năng nhận dạng các hoạt động thể chất thông thường.
+
+\subsection{Tần số Lấy mẫu: Định lý Nyquist và Nội dung Phổ Hoạt động}
+\label{sec:sampling_rate_rationale}
+
+Định lý lấy mẫu Shannon-Nyquist quy định: để tái tạo chính xác tín hiệu liên tục từ chuỗi rời rạc, tần số lấy mẫu $f_s$ phải thỏa mãn $f_s \geq 2 f_{\max}$, trong đó $f_{\max}$ là thành phần tần số cao nhất trong tín hiệu. Vận dụng điều này vào bài toán HAR đòi hỏi xác định nội dung phổ thực tế của tín hiệu IMU trong các hoạt động phổ biến. Phân tích phổ cho thấy phần lớn năng lượng tín hiệu tập trung trong dải tần thấp: hoạt động đứng yên và chuyển tiếp chậm dưới 1~Hz; bước đi có tần số cơ bản 1--2~Hz với các sóng hài đến khoảng 8~Hz; chạy có tần số cơ bản 2--3~Hz và các thành phần xung tác động chân (heel-strike transients) đến khoảng 20~Hz \cite{whittle2014gait}. Tần số lấy mẫu tối thiểu lý thuyết để bảo toàn toàn bộ thông tin phân biệt là khoảng 40~Hz. Các tập dữ liệu chuẩn lấy mẫu ở các mức khác nhau: WISDM ở 20~Hz (có thể aliasing sóng hài của hoạt động chạy), UCI-HAR ở 50~Hz, PAMAP2 ở 100~Hz.
+
+Framework không áp đặt tần số lấy mẫu cố định---người dùng cấu hình theo đặc tính cảm biến và yêu cầu ứng dụng. Tuy nhiên, có một ràng buộc thiết kế không thể bỏ qua: \textbf{tần số lấy mẫu phải nhất quán giữa giai đoạn huấn luyện và giai đoạn suy luận triển khai}. Yêu cầu này xuất phát từ nguyên tắc tương đồng huấn luyện-triển khai: toàn bộ các đặc trưng thống kê miền thời gian được tính trên cửa sổ cố định theo \textit{số mẫu}, không phải theo khoảng thời gian tuyệt đối. Nếu tần số lấy mẫu thay đổi giữa hai giai đoạn, cùng một cửa sổ 150 mẫu sẽ tương ứng với các khoảng thời gian khác nhau, làm biến dạng hệ thống toàn bộ phân phối đặc trưng và suy giảm độ chính xác mô hình mà không có bất kỳ cảnh báo nào. Để đảm bảo tính nhất quán này, framework nhúng tần số lấy mẫu đã chọn dưới dạng hằng số biên dịch trong mã triển khai được sinh ra.
+
+Về đánh đổi thực tế: tần số lấy mẫu cao hơn cung cấp thêm chu kỳ tín hiệu trong mỗi cửa sổ, làm phong phú thêm các đặc trưng thống kê---đặc biệt là tỷ lệ qua không và tỷ lệ qua trung bình vốn nhạy với mật độ chu kỳ---nhưng đồng thời tăng kích thước bộ đệm vòng cần thiết trên vi điều khiển và kéo dài thời gian trích xuất đặc trưng mỗi chu kỳ suy luận. Sự đánh đổi này thuộc về quyết định thiết kế của người dùng, không phải của framework.
 
 \section{Quy trình Tiền xử lý Tương tác}
 
-\subsection{Tải lên và Trực quan hóa Dữ liệu}
-Người dùng tải lên các tập dữ liệu CSV đa lớp chứa các phép đo IMU có dấu thời gian. Hệ thống hỗ trợ tổ chức tệp theo hoạt động (ví dụ: \texttt{walking.csv}, \texttt{running.csv}) trong đó mỗi tệp tương ứng với một lớp hoạt động. Sau khi tải lên, framework hiển thị các biểu đồ đồng bộ của các tín hiệu gia tốc kế và con quay hồi chuyển thô trên tất cả sáu trục, cho phép kiểm tra trực quan chất lượng dữ liệu. Hình \ref{fig:ui_data_upload} cho thấy giao diện tải lên dữ liệu với chọn tệp và trực quan hóa tập dữ liệu ban đầu.
+\subsection{Tải lên và trực quan hóa dữ liệu}
+Người dùng tải lên các tập dữ liệu CSV chứa các phép đo IMU, tổ chức theo hoạt động (mỗi tệp tương ứng với một lớp). Framework tự động phát hiện tên cột cảm biến, tần số lấy mẫu và hiển thị biểu đồ đồng bộ của tín hiệu thô trên tất cả các trục, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_data_upload.png}
-    \caption{Giao diện web cho tải lên tệp CSV và quản lý tập dữ liệu. Giao diện cho phép người dùng tải lên các tệp dữ liệu cảm biến, xác thực tên cột, tự động phát hiện tần số lấy mẫu và cung cấp bản xem trước tương tác của chuỗi thời gian sáu trục thô.}
-    \label{fig:ui_data_upload}
-\end{figure}
+\subsection{Các phương pháp lọc và làm sạch tín hiệu}
+\label{sec:signal_filtering}
 
-\subsection{Làm sạch và Làm mịn Tín hiệu}
-Mô-đun tiền xử lý cung cấp các hoạt động làm sạch có thể cấu hình:
-\begin{itemize}
-    \item \textbf{Loại bỏ Ngoại lệ}: Xác định và loại bỏ các mẫu vượt quá ngưỡng độ lệch chuẩn đã chỉ định (mặc định: $3\sigma$), giải quyết các bất thường cảm biến và hiện vật nhiễu điện từ.
-    \item \textbf{Làm mịn}: Áp dụng các bộ lọc trung bình động với kích thước cửa sổ do người dùng xác định (mặc định: 5 mẫu) để giảm nhiễu tần số cao trong khi bảo tồn các đặc tính chuyển động.
-\end{itemize}
-Dữ liệu đã làm sạch được trực quan hóa cùng với các tín hiệu gốc, cho phép người dùng xác minh hiệu quả tiền xử lý trước khi phân đoạn.
+Dữ liệu IMU thô chứa nhiễu cảm biến, nhiễu điện từ và các xung bất thường cần được loại bỏ trước khi trích xuất đặc trưng. Framework cung cấp năm phương pháp lọc, mỗi phương pháp có đặc tính khác nhau về mức độ làm mịn, tính nhân quả và---quan trọng nhất cho triển khai nhúng---\textit{tính tương đồng huấn luyện-triển khai} (training-deployment parity). Người dùng chọn phương pháp phù hợp qua giao diện tương tác; kết quả lọc được trực quan hóa cùng tín hiệu gốc để đánh giá hiệu quả trước khi phân đoạn.
 
-\subsection{Bộ lọc Kalman cho Tiền xử lý Tín hiệu}
+\subsubsection{Loại bỏ ngoại lệ (outlier removal)}
+Xác định và loại bỏ các mẫu có giá trị vượt quá ngưỡng $k\sigma$ so với trung bình cục bộ (mặc định $k=3$). Đây là bước làm sạch thô, xử lý các xung nhiễu điện từ hoặc bất thường phần cứng (spike artifacts) tạo ra giá trị nằm ngoài phạm vi vật lý hợp lệ của cảm biến. Phương pháp này không thay đổi hình dạng tín hiệu mà chỉ loại bỏ các điểm dữ liệu cô lập rõ ràng sai, nên không có vấn đề parity---nó chỉ áp dụng một lần trên tập dữ liệu huấn luyện (offline) và không cần triển khai trên thiết bị.
+
+\subsubsection{Bộ lọc Butterworth low-pass}
+Bộ lọc IIR Butterworth được thiết kế sao cho đáp ứng biên độ trong dải thông là cực đại phẳng (maximally flat). Hàm truyền liên tục bậc $n$ với tần số cắt $f_c$:
+$$|H(f)|^2 = \frac{1}{1 + (f/f_c)^{2n}}$$
+Sau khi rời rạc hóa bằng biến đổi song tuyến, bộ lọc có dạng phương trình sai phân:
+$$y[k] = \sum_{i=0}^{n} b_i\, x[k-i] - \sum_{j=1}^{n} a_j\, y[k-j]$$
+trong đó các hệ số $(b_i, a_j)$ được xác định từ $f_c$ và $n$. Lọc một chiều thuận gây lệch pha; để khắc phục, kỹ thuật lọc hai chiều (forward-backward) áp dụng: lọc thuận thu $y_f[k]$, đảo ngược thứ tự mẫu, lọc thuận lần hai, đảo ngược lại, cho đáp ứng hiệu dụng $|H_{\text{eff}}(f)|^2 = |H(f)|^4$ với pha bằng không. Cấu hình mặc định: bậc 2, tần số cắt 5~Hz.
+
+\textbf{Parity triển khai}: Suy luận HAR đệm đầy cửa sổ $W$ mẫu trước khi bắt đầu xử lý---thiết bị không cần phản hồi theo từng mẫu mà xử lý theo lô. Khi cửa sổ đầy, thiết bị thực hiện chính xác cùng thao tác lọc hai chiều trên bộ đệm: lọc thuận, đảo ngược, lọc thuận lần hai, đảo ngược lại. Các hệ số $(b_i, a_j)$ được tính trước tại thời điểm sinh mã nhúng (sử dụng cùng $f_c$ và $n$ với huấn luyện) và nhúng dưới dạng hằng số trong mã nhúng. Phép tính toán học hoàn toàn đồng nhất giữa hai môi trường.
+
+\subsubsection{Bộ lọc Savitzky-Golay}
+Bộ lọc Savitzky-Golay \cite{savitzky1964smoothing} khớp đa thức bậc $d$ lên cửa sổ $2m+1$ mẫu bằng bình phương tối thiểu, lấy giá trị đa thức tại điểm trung tâm làm đầu ra. Bài toán tối ưu tại mỗi điểm $n$:
+$$\min_{p}\sum_{j=-m}^{m}\bigl(p(j) - x[n+j]\bigr)^2, \quad \deg p = d$$
+Nghiệm có dạng tích chập FIR tuyến tính:
+$$\hat{x}[n] = \sum_{j=-m}^{m} c_j\, x[n+j]$$
+trong đó $\mathbf{c} = (A^\top A)^{-1} A^\top \mathbf{e}_0$, với $A$ là ma trận Vandermonde của cửa sổ và $\mathbf{e}_0$ chọn giá trị tại $j=0$. So với trung bình động, Savitzky-Golay bảo tồn tốt hơn các đỉnh và đặc tính hình dạng tín hiệu (peak-preserving). Cấu hình mặc định: $m=2$ (cửa sổ 5 mẫu), $d=2$.
+
+\textbf{Parity triển khai}: Bộ lọc yêu cầu $m$ mẫu ở cả hai phía điểm trung tâm---không thể áp dụng streaming theo từng mẫu. Tuy nhiên, khi cửa sổ suy luận đã đệm đầy, toàn bộ $2m+1$ mẫu lân cận đều có sẵn tại mỗi vị trí nội bộ. Các hệ số $c_j$ được tính trước tại thời điểm sinh mã nhúng và nhúng dưới dạng mảng hằng số; tích chập được áp dụng trên bộ đệm với mở rộng biên bằng cách lặp giá trị tại biên. Phép tính đồng nhất với phía huấn luyện.
+
+\subsubsection{Bộ lọc FFT low-pass (miền tần số)}
+Phương pháp lọc trong miền tần số thực hiện ba bước: biến đổi Fourier rời rạc (DFT), triệt tiêu các bin tần số cao, rồi biến đổi ngược (IDFT):
+$$X[k] = \sum_{n=0}^{N-1} x[n]\, e^{-j2\pi kn/N}, \quad k = 0,\ldots,N-1$$
+$$\hat{X}[k] = X[k]\cdot\mathbf{1}\!\left[k \leq k_c\right], \quad k_c = \left\lfloor \frac{f_c \cdot N}{f_s} \right\rfloor$$
+$$\hat{x}[n] = \frac{1}{N}\sum_{k=0}^{N-1}\hat{X}[k]\, e^{j2\pi kn/N}$$
+Đặc điểm nổi bật: đáp ứng tần số lý tưởng (brick-wall, không rolloff) và không gây méo pha, khác với Butterworth. Phương pháp này về bản chất yêu cầu toàn bộ $N$ mẫu của cửa sổ trước khi lọc (không áp dụng theo từng mẫu streaming được) và có chi phí bộ nhớ $\mathcal{O}(N)$.
+
+\textbf{Parity triển khai}: Khi cửa sổ suy luận đã đệm đầy $W$ mẫu, thiết bị thực thi cùng ba bước DFT~$\to$~masking~$\to$~IDFT trực tiếp trên bộ đệm với cùng $k_c$. Để đảm bảo độ chính xác số, phép tính sử dụng số dấu phẩy động 32-bit nhất quán, tránh các xấp xỉ điểm cố định có thể gây sai lệch kết quả. Thuật toán hoàn toàn đồng nhất với phía huấn luyện.
+
+\subsubsection{Bộ lọc Kalman (constant-velocity)}
 \label{sec:kalman_filter}
 
-Framework giới thiệu bộ lọc Kalman constant-velocity 1D cho mỗi kênh cảm biến IMU như một giải pháp tiền xử lý tín hiệu tiên tiến \cite{kalman1960new}. Đây là bước đột phá quan trọng trong việc giải quyết \textit{khoảng cách tương đồng huấn luyện-triển khai} (training-deployment parity gap) mà các bộ lọc IIR truyền thống gặp phải.
+Bộ lọc Kalman constant-velocity 1D \cite{kalman1960new} áp dụng cho mỗi kênh cảm biến IMU được đề xuất như giải pháp lọc có \textit{khoảng cách parity bằng không}. Bộ lọc Kalman hoạt động hoàn toàn theo chiều thuận (forward-only, causal) trong cả hai môi trường: Python huấn luyện \textit{và} C++ triển khai---loại bỏ lớp lỗi mà tất cả bốn phương pháp trên gặp phải.
 
-\subsubsection{Vấn đề Parity với Bộ lọc IIR}
-Các bộ lọc Butterworth low-pass truyền thống tồn tại lỗ hổng tương đồng:
-\begin{itemize}
-    \item \textbf{Huấn luyện (Python)}: Sử dụng \texttt{filtfilt} (zero-phase, non-causal) --- xử lý dữ liệu theo hai chiều (thuận và ngược) để loại bỏ méo pha
-    \item \textbf{Triển khai (C++)}: Sử dụng \texttt{lfilter} (causal, forward-only) --- chỉ xử lý theo một chiều do ràng buộc thời gian thực
-\end{itemize}
+\textbf{Mô hình toán học.} Mỗi kênh cảm biến được mô hình hóa bằng trạng thái gồm vị trí (giá trị cảm biến) và vận tốc:
+$$\mathbf{x}_k = \begin{bmatrix} p_k \\ v_k \end{bmatrix}, \quad
+F = \begin{bmatrix} 1 & \Delta t \\ 0 & 1 \end{bmatrix}, \quad
+H = \begin{bmatrix} 1 & 0 \end{bmatrix}$$
 
-Khoảng cách này gây sai lệch pha và biên độ trong các đặc trưng thống kê nhạy cảm như skewness và kurtosis, dẫn đến hiệu suất mô hình giảm sút khi triển khai thực tế.
-
-\subsubsection{Mô hình Toán học Kalman Filter}
-Bộ lọc Kalman được triển khai với mô hình constant-velocity cho mỗi kênh:
-
-\textbf{State vector}: 
-$$\mathbf{x}_k = \begin{bmatrix} p_k \\ v_k \end{bmatrix}$$
-với $p_k$ là vị trí (tín hiệu cảm biến) và $v_k$ là vận tốc tại thời điểm $k$.
-
-\textbf{Transition matrix}: 
-$$F = \begin{bmatrix} 1 & \Delta t \\ 0 & 1 \end{bmatrix}$$
-
-\textbf{Observation matrix}: 
-$$H = \begin{bmatrix} 1 & 0 \end{bmatrix}$$
-
-\textbf{Process noise covariance}: 
+Ma trận hiệp phương sai nhiễu quá trình:
 $$Q = q \begin{bmatrix} \frac{\Delta t^3}{3} & \frac{\Delta t^2}{2} \\ \frac{\Delta t^2}{2} & \Delta t \end{bmatrix}$$
 
-\textbf{Measurement noise covariance}: $R = r$ (scalar)
+Nhiễu đo: $R = r$ (scalar). Hai tham số điều chỉnh được: $q$ (process noise, mặc định $10^{-3}$---nhỏ hơn = mượt hơn) và $r$ (measurement noise, mặc định $10^{-1}$---lớn hơn = mượt hơn). Kalman gain $K_k$ tự động thích ứng theo tín hiệu: tăng khi tín hiệu biến đổi nhanh (bám sát), giảm khi tín hiệu ổn định (lọc mạnh hơn).
 
-Các tham số có thể điều chỉnh:
-\begin{itemize}
-    \item \textit{process\_noise} ($q$): Giá trị nhỏ hơn tạo ra đầu ra mượt hơn. Mặc định: $10^{-3}$
-    \item \textit{measurement\_noise} ($r$): Giá trị lớn hơn tạo ra đầu ra mượt hơn. Mặc định: $10^{-1}$
-\end{itemize}
+\subsubsection{So sánh tổng hợp các phương pháp lọc}
 
-\subsubsection{Ưu điểm Parity của Kalman Filter}
-Bộ lọc Kalman mang lại những lợi thế quan trọng so với bộ lọc IIR:
+Bảng~\ref{tab:filter_parity_comparison} tổng hợp năm phương pháp theo tiêu chí quan trọng nhất cho hệ thống triển khai nhúng:
 
 \begin{table}[H]
     \centering
-    \caption{So sánh Bộ lọc IIR và Kalman Filter về Parity}
-    \label{tab:kalman_iir_comparison}
+    \caption{So sánh các phương pháp lọc theo tính tương đồng huấn luyện-triển khai}
+    \label{tab:filter_parity_comparison}
     \small
-    \begin{tabular}{@{}p{3cm}p{5cm}p{4cm}@{}}
+    \begin{tabular}{@{}p{2.8cm}ccp{4.2cm}@{}}
         \toprule
-        Đặc tính & IIR (Butterworth) & Kalman Filter \\
+        Phương pháp & Causal? & Parity & Ghi chú triển khai \\
         \midrule
-        Bộ lọc huấn luyện & \texttt{filtfilt} (non-causal) & Forward-only (causal) \\
-        Bộ lọc thiết bị & \texttt{lfilter} (causal) & Forward-only (causal) \\
-        \textbf{Tương đồng Parity} & \textbf{(!)} Có khoảng cách (phase difference) & \checkmark\ Hoàn toàn chính xác \\
-        Kiểm soát độ mượt & Tần số cắt + bậc filter & Tham số Q và R \\
-        Tính thích ứng & Không (hệ số cố định) & Có (gain thích ứng theo tín hiệu) \\
-        Bộ nhớ mỗi kênh & $2 \times \text{order}$ floats & 2 state + 4 covariance floats \\
+        Loại bỏ ngoại lệ & --- & \checkmark & Chỉ offline (không cần trên thiết bị) \\
+        Butterworth LP & Không$^\dag$ & \checkmark & Per-window two-pass filtfilt trên bộ đệm cửa sổ \\
+        Savitzky-Golay & Không$^\dag$ & \checkmark & FIR convolution với hệ số tiền tính \\
+        FFT low-pass & Không$^\dag$ & \checkmark & DFT trực tiếp trên bộ đệm cửa sổ \\
+        \textbf{Kalman filter} & \textbf{Có} & \checkmark & Forward-only; hoạt động cả streaming lẫn windowed \\
         \bottomrule
     \end{tabular}
+    \vspace{4pt}
+    \begin{minipage}{\linewidth}
+    \footnotesize
+    $^\dag$Non-causal trong streaming; parity đạt được nhờ HAR đệm toàn bộ cửa sổ trước khi trích xuất đặc trưng, cho phép áp dụng bộ lọc hai chiều trên bộ đệm.
+    \end{minipage}
 \end{table}
 
-\textbf{Đóng góp về Parity}: Bộ lọc Kalman là bộ lọc tiền xử lý đầu tiên trong framework với \textit{khoảng cách parity bằng không}. Cả IIR và Savitzky-Golay đều có sự khác biệt nội tại giữa huấn luyện-triển khai (zero-phase vs causal, offline vs streaming). Bộ lọc Kalman loại bỏ hoàn toàn lớp lỗi này.
+Kết luận thiết kế: bốn phương pháp lọc tín hiệu (Butterworth, Savitzky-Golay, FFT, Kalman) đều đạt parity hoàn toàn chính xác khi suy luận HAR được thực hiện theo lô cửa sổ. Chìa khóa là nhận thức rằng quy trình suy luận đã đệm toàn bộ $W$ mẫu trước khi bắt đầu trích xuất đặc trưng---ràng buộc non-causal chỉ áp dụng cho streaming theo từng mẫu, không áp dụng cho xử lý theo lô trên bộ đệm đầy. Kalman filter vẫn có lợi thế bổ sung: causal theo bản chất nên hoạt động được trong cả chế độ streaming lẫn xử lý theo lô---lý tưởng cho hiển thị tín hiệu thời gian thực trong quá trình thu thập dữ liệu. Riêng loại bỏ ngoại lệ không được nhân bản trên thiết bị vì lý do cơ bản: phương pháp cần thống kê toàn cục từ toàn bộ bản ghi, trong khi mỗi chu kỳ suy luận chỉ có một cửa sổ 1,5~giây đơn lẻ không đủ để ước lượng phân phối tín hiệu.
 
-\subsection{Phân đoạn Cửa sổ Thời gian Kéo thả}
-Một đóng góp mới của framework này là \textit{giao diện cửa sổ kéo thả tương tác} cho phân đoạn hoạt động. Các tính năng chính bao gồm:
-\begin{itemize}
-    \item \textbf{Đặt Cửa sổ Trực quan}: Người dùng nhấp và kéo trực tiếp trên các biểu đồ tín hiệu để xác định ranh giới thời gian của các trường hợp hoạt động, cung cấp kiểm soát trực quan đối với phân đoạn mà không cần mã hóa.
-    \item \textbf{Hỗ trợ Đa Cửa sổ}: Nhiều cửa sổ không chồng lấp có thể được xác định mỗi tệp hoạt động, phù hợp với các tập dữ liệu với nhiều trường hợp của cùng một hoạt động.
-    \item \textbf{Phản hồi Thời gian Thực}: Các cửa sổ đã chọn được làm nổi bật trên biểu đồ với các màu riêng biệt và các đoạn được trích xuất có sẵn ngay lập tức để kiểm tra.
-    \item \textbf{Gán nhãn Từng Cửa sổ}: Mỗi cửa sổ được tự động gán nhãn hoạt động từ tệp cha, nhưng có thể được gán nhãn lại thủ công nếu cần (ví dụ: trích xuất các đoạn \textit{standing} từ các tệp \textit{walking} trong các giai đoạn chuyển tiếp).
-\end{itemize}
-Cách tiếp cận này giảm đáng kể thời gian chú thích so với nhập dấu thời gian thủ công hoặc phân đoạn lập trình và loại bỏ các lỗi phổ biến trong đặc tả ranh giới. Hình \ref{fig:ui_preprocessing} chứng minh giao diện cửa sổ kéo thả tương tác, là tính năng phân biệt chính của framework này.
+\subsection{Phân đoạn và sinh cửa sổ huấn luyện}
+\label{sec:windowing_generation}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_preprocessing_draggable.png}
-    \caption{Giao diện cửa sổ kéo thả tương tác cho phân đoạn hoạt động. Người dùng kiểm tra trực quan chuỗi thời gian gia tốc kế và con quay hồi chuyển, kéo các cửa sổ hình chữ nhật qua các vùng tương ứng với các hoạt động riêng biệt, gán nhãn hoạt động và điều chỉnh ranh giới qua tương tác nhấp và kéo. Điều này loại bỏ tính toán dấu thời gian thủ công và làm cho framework có thể tiếp cận được cho những người không lập trình.}
-    \label{fig:ui_preprocessing}
-\end{figure}
+Máy học trên tín hiệu liên tục đòi hỏi chuyển đổi chuỗi thời gian thành các vector có độ dài cố định phù hợp làm đầu vào mô hình. Framework thực hiện điều này qua hai thao tác bổ sung nhau: người dùng xác định các đoạn tín hiệu sạch đại diện cho từng hoạt động, và hệ thống tự động sinh các cửa sổ huấn luyện từ đó bằng giải thuật cửa sổ trượt.
+
+\subsubsection{Giải thuật cửa sổ trượt tự động}
+
+Cho đoạn tín hiệu $N$ mẫu, kích thước cửa sổ $W$ mẫu và độ chồng lắp $o$~(\%), bước trượt $S = W \cdot (1 - o/100)$ mẫu, số cửa sổ sinh được là:
+\begin{equation}
+    n_w = \left\lfloor \frac{N - W}{S} \right\rfloor + 1
+    \label{eq:sliding_window}
+\end{equation}
+Ví dụ: một đoạn 5~giây (500 mẫu ở 100~Hz) với $W = 150$, $o = 50\%$ (tức $S = 75$) sinh ra $\lfloor(500-150)/75\rfloor + 1 = 6$ cửa sổ huấn luyện, mỗi cửa sổ mang nhãn hoạt động của đoạn nguồn. Với dữ liệu thực tế (bản ghi 30--60~giây mỗi hoạt động), giải thuật này sinh hàng chục đến hàng trăm cửa sổ từ mỗi phiên thu thập mà không cần chú thích thủ công từng cửa sổ.
+
+Cơ sở lý thuyết cho lựa chọn $o = 50\%$: độ chồng lắp làm tăng gấp đôi số mẫu huấn luyện từ cùng lượng dữ liệu thô, đồng thời giảm hiệu ứng biên---cùng một sự kiện chuyển động (ví dụ: va chạm gót chân trong bước đi) xuất hiện ở vị trí tương đối khác nhau trong các cửa sổ kế tiếp, giúp mô hình học đặc trưng bất biến vị trí trong cửa sổ. Độ chồng lắp cao hơn ($>$75\%) tạo ra nhiều mẫu hơn nhưng với tương quan cao (các cửa sổ liên tiếp gần như giống hệt nhau), làm tăng nguy cơ rò rỉ thông tin giữa tập huấn luyện và kiểm tra nếu chia không cẩn thận.
+
+\subsubsection{Lựa chọn đoạn tương tác và sinh dữ liệu}
+
+Không phải toàn bộ bản ghi đều có chất lượng đồng đều: giai đoạn bắt đầu và kết thúc thường chứa các chuyển tiếp hoạt động, nhiễu điện, hoặc đoạn nghỉ ngắn không đại diện cho hoạt động mục tiêu. Giao diện lựa chọn đoạn tương tác cho phép người dùng kéo thả trực tiếp trên biểu đồ tín hiệu để đánh dấu các vùng sạch, bỏ qua các đoạn chuyển tiếp hoặc nhiễu. Nhiều đoạn không chồng lắp trên cùng một tệp được hỗ trợ---cho phép trích xuất nhiều chu kỳ hoạt động riêng biệt từ một bản ghi dài mà không cần cắt tệp thủ công. Sau khi xác nhận, cửa sổ trượt chạy tự động trên từng đoạn theo Phương trình~\ref{eq:sliding_window}, sinh toàn bộ tập huấn luyện trong một thao tác.
+
+Thiết kế này tách bạch rõ hai quyết định: \textit{đâu là dữ liệu đáng tin cậy} (người dùng kiểm soát) và \textit{cách biến dữ liệu đó thành mẫu huấn luyện} (hệ thống tự động hóa hoàn toàn). Nhãn hoạt động được kế thừa từ tệp nguồn nhưng có thể gán lại thủ công---ví dụ, trích xuất các đoạn \textit{standing} từ tệp \textit{walking} trong các giai đoạn chuyển tiếp. So với chú thích dấu thời gian thủ công từng khung, cách tiếp cận này giảm đáng kể công sức thu thập trong khi vẫn bảo tồn kiểm soát chất lượng dữ liệu.
 
 \section{Trích xuất Đặc trưng}
 \label{sec:feature_extraction}
 
-\subsection{Phương pháp Cửa sổ Trượt}
-Các tín hiệu đã tiền xử lý được phân đoạn thành các cửa sổ chồng lấp kích thước cố định để trích xuất đặc trưng. Sau khi xác thực thực nghiệm và so sánh với các khuyến nghị tài liệu \cite{banos2014wisdm}, cấu hình đã được tối ưu hóa là:
+\subsection{Tham số cửa sổ và ràng buộc nhất quán}
+
+Trích xuất đặc trưng thực hiện trên các cửa sổ được sinh theo giải thuật trình bày ở Mục~\ref{sec:windowing_generation}, với cấu hình đã xác thực: kích thước $W = 150$ mẫu (1,5 giây ở $f_s = 100$~Hz) và bước trượt $S = 75$ mẫu (50\% chồng lấp). Tại đây, điểm mấu chốt không phải là lựa chọn tham số mà là \textbf{ràng buộc nhất quán huấn luyện-triển khai}: ($W$, $S$, $f_s$) phải đồng nhất giữa giai đoạn huấn luyện và suy luận. Thay đổi $W$ sau khi huấn luyện làm thay đổi số mẫu trên mỗi đặc trưng thống kê, dẫn đến phân phối đặc trưng lệch khỏi phân phối đã học---tương tự như thay đổi độ phân giải ảnh giữa huấn luyện và suy luận trong thị giác máy tính. Framework đảm bảo điều này bằng cách nhúng $W$ và $f_s$ dưới dạng hằng số vào mã suy luận được sinh ra.
+
+\subsection{Các loại trích xuất đặc trưng}
+\label{sec:feature_modes}
+
+Có sáu loại trích xuất đặc trưng (feature extraction type) tiêu biểu, được thiết kế để đáp ứng các yêu cầu khác nhau về số chiều vector (dimensionality), khả năng triển khai nhúng (embedded deployment), và bất biến hướng (orientation invariance). Bảng~\ref{tab:feature_modes} so sánh toàn diện sáu loại.
+
+\begin{table}[ht]
+\centering
+\caption{Sáu loại trích xuất đặc trưng: tín hiệu nguồn, cấu thành và đặc tính triển khai}
+\label{tab:feature_modes}
+\small
+\begin{tabular}{p{3.8cm}p{3.5cm}p{3.0cm}ccc}
+\hline
+\textbf{Loại (Type)} & \textbf{Tín hiệu nguồn} & \textbf{Đặc trưng tính} & \textbf{\#} & \textbf{Nhúng} & \textbf{OI\textsuperscript{*}} \\
+\hline
+\texttt{orientation\_invariant\_time\_only}
+  & acc\_mag, gyro\_mag, acc\_jerk\_mag
+  & 15 thống kê thời gian / tín hiệu
+  & 41 & \checkmark & \checkmark \\[4pt]
+\texttt{orientation\_invariant}
+  & Như trên + DFT(acc\_mag), DFT(gyro\_mag)
+  & Như trên + 10 đặc trưng phổ / DFT
+  & 63 & \checkmark & \checkmark \\[4pt]
+\texttt{time\_domain}
+  & aX, aY, aZ, gX, gY, gZ
+  & 15 thống kê thời gian / trục
+  & 90 & \checkmark & $\times$ \\[4pt]
+\texttt{all}
+  & aX, aY, aZ, gX, gY, gZ
+  & 15 thời gian + 11 tần số / trục
+  & 156 & $\times$ & $\times$ \\[4pt]
+\texttt{frequency\_domain}
+  & aX, aY, aZ, gX, gY, gZ
+  & 11 đặc trưng phổ / trục
+  & 66 & $\times$ & $\times$ \\[4pt]
+\texttt{raw}
+  & aX, aY, aZ, gX, gY, gZ
+  & Giá trị cảm biến thô
+  & 6 & \checkmark & $\times$ \\
+\hline
+\end{tabular}
+\vspace{4pt}
+\begin{minipage}{\linewidth}
+\footnotesize
+\textsuperscript{*}OI = Orientation-Invariant (bất biến hướng).
+Tín hiệu tổng hợp: $\text{acc\_mag} = \sqrt{a_X^2+a_Y^2+a_Z^2}$;
+$\text{gyro\_mag} = \sqrt{g_X^2+g_Y^2+g_Z^2}$;
+$\text{acc\_jerk\_mag} = \tfrac{d}{dt}\,\text{acc\_mag}$.
+\end{minipage}
+\end{table}
+
+\subsubsection*{Các loại bất biến hướng (Orientation-Invariant)}
+
+Khi thiết bị đeo không cố định (đặt trong túi, đeo ở các vị trí khác nhau trên cơ thể), hướng của các trục cảm biến biến đổi giữa người dùng và lần đo. Hai loại bất biến hướng giải quyết vấn đề này bằng cách tính đặc trưng trên biên độ tổng hợp (vector magnitude)---đại lượng bất biến với phép xoay (rotation-invariant).
+
+\textbf{Loại \texttt{orientation\_invariant\_time\_only} (41 đặc trưng)}: Sử dụng ba tín hiệu tổng hợp (acc\_mag, gyro\_mag, acc\_jerk\_mag) để tính thống kê thời gian (time-domain statistics). Đây là loại tối thiểu khả dụng (minimum viable), phù hợp cho vi điều khiển hạn chế bộ nhớ và khi hướng gắn cảm biến không thể kiểm soát.
+
+\textbf{Loại \texttt{orientation\_invariant} (63 đặc trưng)}: Mở rộng bằng 20 đặc trưng phổ DFT (Discrete Fourier Transform) tính trên acc\_mag và gyro\_mag. Đây là \textit{loại khuyến nghị mặc định}: cân bằng tốt giữa tính phong phú đặc trưng và khả năng triển khai nhúng---bộ sinh mã phát sinh đoạn tính DFT bằng tổng sin/cos trực tiếp, không yêu cầu thư viện FFT bên ngoài.
+
+\subsubsection*{Loại mỗi trục, miền thời gian (Per-Axis Time-Domain), 90 đặc trưng}
+
+Loại \texttt{time\_domain} áp dụng 15 đặc trưng thống kê (statistical features) lên từng trục cảm biến riêng lẻ ($6 \times 15 = 90$ đặc trưng). Mỗi đặc trưng là biểu thức dạng đóng xác định (closed-form deterministic expression) chỉ phụ thuộc vào $W$ mẫu của cửa sổ---không đệ quy, không phụ thuộc trạng thái---đảm bảo kết quả tính toán bit-identical trên mọi nền tảng:
 \begin{itemize}
-    \item \textbf{Tốc độ Lấy mẫu}: 100Hz (cố định)
-    \item \textbf{Kích thước Cửa sổ}: 150 mẫu (1,5 giây ở 100Hz)
-    \item \textbf{Chồng lấp}: 50\% (bước 75 mẫu)
+    \item \textbf{Xu hướng trung tâm (central tendency)}: Trung bình (mean), trung vị (median)
+    \item \textbf{Phân tán (dispersion)}: Độ lệch chuẩn (std), phương sai (variance), phạm vi (range = max $-$ min), IQR (interquartile range)
+    \item \textbf{Cực trị (extrema)}: Tối thiểu (min), tối đa (max), Q1 (phần trăm 25), Q3 (phần trăm 75)
+    \item \textbf{Hình dạng (shape)}: Độ lệch (skewness) $\gamma = \frac{E[(X-\mu)^3]}{\sigma^3}$, độ nhọn (kurtosis) $\kappa = \frac{E[(X-\mu)^4]}{\sigma^4} - 3$
+    \item \textbf{Năng lượng (energy)}: RMS $= \sqrt{\frac{1}{N}\sum_{i=1}^{N} x_i^2}$, năng lượng tín hiệu (signal energy) $E = \sum_{i=1}^{N} x_i^2$
+    \item \textbf{Proxy tần số (frequency proxy)}: Tỷ lệ qua không (zero-crossing rate), tỷ lệ qua trung bình (mean-crossing rate)
 \end{itemize}
-Cửa sổ 1,5 giây cung cấp ngữ cảnh thời gian đầy đủ để bắt giữ các chu kỳ chuyển động hoàn chỉnh cho hầu hết các hoạt động (thời lượng bước đi bộ $\approx$ 1,0-1,2 giây \cite{whittle2014gait}), trong khi chồng lấp 50\% đảm bảo tính liên tục thời gian và giảm hiệu ứng cạnh tại ranh giới cửa sổ. Điều này mang lại dự đoán mỗi 0,75 giây, cân bằng khả năng phản hồi với hiệu quả tính toán.
+Biểu diễn thống kê này bắt giữ biên độ, động lực học, đặc tính phân phối và thông tin giả tần số đủ để phân biệt các hoạt động có dấu hiệu sinh cơ học riêng biệt. Loại này phù hợp khi hướng cảm biến cố định và cần khai thác tối đa thông tin từng trục.
 
-\textit{Lưu ý Triển khai}: Các tham số này hiện được mã hóa cứng trong cả quy trình huấn luyện (\texttt{utils/model\_training.py}) và mô-đun tạo mã (\texttt{deployment/base\_generator.py}) để đảm bảo tính nhất quán huấn luyện-triển khai. Công việc tương lai có thể phơi bày chúng như các tham số có thể cấu hình bởi người dùng với xác thực để ngăn chặn các cấu hình không tương thích. Framework giả định các mẫu được gán nhãn vượt quá kích thước cửa sổ tối thiểu (1,5 giây); các đoạn ngắn hơn không được đệm bằng không và có thể tạo ra các đặc trưng không hợp lệ.
+\subsubsection*{Các loại tần số và thô (Frequency-Domain \& Raw)}
 
-\subsection{Bộ Đặc trưng}
-Cho mỗi cửa sổ và mỗi trục cảm biến (tổng cộng 6 trục), framework trích xuất 15 đặc trưng thống kê miền thời gian. Các đặc trưng miền tần số đã được cố ý loại trừ sau khi xác định các vấn đề tương đồng huấn luyện-triển khai: các triển khai FFT khác nhau đáng kể giữa Python (NumPy) và C++ nhúng (xấp xỉ hoặc ARM CMSIS-DSP), dẫn đến sự khác biệt giá trị đặc trưng làm suy giảm độ chính xác mô hình đã triển khai.
+\textbf{Loại \texttt{all} (156 đặc trưng)} và \textbf{\texttt{frequency\_domain} (66 đặc trưng)} bổ sung đặc trưng phổ (spectral features) mỗi trục (năng lượng phổ, tần số thống trị, entropy phổ). Mặc dù thường được sử dụng trong tài liệu HAR~\cite{banos2014wisdm}, các loại này \textbf{không hỗ trợ triển khai nhúng} vì ba lý do: \textit{(i)} các giá trị phổ nhạy với sai lệch số hơn nhiều so với tín hiệu đã lọc---sai lệch nhỏ trong biên độ phổ khuếch đại khi tính argmax hoặc tỷ lệ, làm tăng rủi ro không khớp huấn luyện-triển khai~\cite{banbury2021mlperf}; \textit{(ii)} tính DFT $N$-điểm mỗi cửa sổ tăng đáng kể chi phí tính toán và bộ nhớ trên vi điều khiển hạn chế tài nguyên; \textit{(iii)} các đặc trưng miền thời gian đã chứng minh hiệu quả tương đương trên các tập HAR chuẩn. Hai loại này phù hợp cho nghiên cứu so sánh trên máy tính.
 
-\textbf{Lý do Loại trừ Đặc trưng FFT}: Trong khi các đặc trưng miền tần số (năng lượng phổ, tần số thống trị, entropy phổ) thường được sử dụng trong tài liệu HAR \cite{banos2014wisdm}, chúng giới thiệu các thách thức triển khai đáng kể. FFT NumPy của Python sử dụng các thuật toán dấu phẩy động độ chính xác kép được tối ưu hóa cao (backends FFTPACK/FFTW), trong khi C++ nhúng thường dựa vào các xấp xỉ điểm cố định hoặc các thư viện đặc thù cho nền tảng (ARM CMSIS-DSP) với độ chính xác số khác nhau. Các thử nghiệm sơ bộ cho thấy rằng các cửa sổ đầu vào giống hệt nhau tạo ra các phổ độ lớn FFT khác nhau 5-15\% giữa Python và C++, khiến các mô hình đã huấn luyện phân loại sai 8-12\% cửa sổ trong triển khai mặc dù độ chính xác huấn luyện 95\%+. "Không khớp huấn luyện-triển khai" này là một vấn đề quan trọng nhưng ít được báo cáo trong edge ML \cite{banbury2021mlperf}. Bằng cách hạn chế các đặc trưng miền thời gian với các tính toán dạng đóng xác định (trung bình, phương sai, v.v.), hệ thống đảm bảo trích xuất đặc trưng giống hệt bit trên các nền tảng, loại bỏ chế độ lỗi này. Tỷ lệ qua không và tỷ lệ qua trung bình phục vụ như các proxy tần số, bắt giữ thông tin tuần hoàn mà không có chi phí FFT.
-
-\textbf{Các Đặc trưng Miền Thời gian (15 mỗi trục):}
-\begin{itemize}
-    \item \textbf{Xu hướng Trung tâm}: Trung bình, Trung vị
-    \item \textbf{Phân tán}: Độ lệch Chuẩn, Phương sai, Phạm vi (Max - Min), Phạm vi Liên tứ phân vị (IQR)
-    \item \textbf{Cực trị}: Tối thiểu, Tối đa, Phần trăm thứ 25 (Q1), Phần trăm thứ 75 (Q3)
-    \item \textbf{Hình dạng}: Độ lệch $\gamma = \frac{E[(X-\mu)^3]}{\sigma^3}$, Độ nhọn $\kappa = \frac{E[(X-\mu)^4]}{\sigma^4} - 3$ (hiệu chỉnh độ lệch)
-    \item \textbf{Năng lượng}: Căn Trung bình Bình phương (RMS) $= \sqrt{\frac{1}{N}\sum_{i=1}^{N} x_i^2}$, Năng lượng Tín hiệu $E = \sum_{i=1}^{N} x_i^2$
-    \item \textbf{Proxy Tần số}: Tỷ lệ Qua Không, Tỷ lệ Qua Trung bình (các lần qua tín hiệu qua trung bình)
-\end{itemize}
-
-Tổng số chiều vector đặc trưng: $15 \times 6 = 90$ đặc trưng mỗi cửa sổ. Cách tiếp cận chỉ miền thời gian này đảm bảo tương đồng hoàn hảo giữa huấn luyện (Python pandas/NumPy) và triển khai (tính toán trực tiếp C++), quan trọng để đạt được hiệu suất mô hình nhất quán trên các thiết bị biên. Biểu diễn thống kê toàn diện bắt giữ biên độ chuyển động, động lực học, đặc tính phân phối và thông tin giả tần số đầy đủ để phân biệt các hoạt động với các dấu hiệu sinh cơ học riêng biệt.
+\textbf{Loại \texttt{raw} (6 đặc trưng)}: Truyền trực tiếp các giá trị cảm biến thô mà không trích xuất đặc trưng. Phù hợp làm đường cơ sở (baseline) hoặc cung cấp đầu vào cho bộ phân loại học sâu bên ngoài.
 
 \subsection{Chiến lược Đệm Cửa sổ (Window Padding Strategy)}
 \label{sec:window_padding}
@@ -245,12 +310,12 @@ Framework sử dụng chiến lược lặp giá trị cuối cùng của cửa 
 \end{equation}
 Phương pháp này: (1) bảo toàn các đặc tính thống kê tín hiệu gốc, (2) không tạo ra artifact vật lý bất khả thi, và (3) đảm bảo tính nhất quán với dữ liệu suy luận trên thiết bị biên---nơi bộ đệm trượt luôn chứa đầy đủ dữ liệu cảm biến thực. Ngoài ra, các cửa sổ có ít hơn 30\% số mẫu mục tiêu được loại bỏ hoàn toàn, vì không chứa đủ thông tin chuyển động để trích xuất đặc trưng có ý nghĩa.
 
-\textit{Ý nghĩa thực nghiệm}: Trong quá trình phát triển, zero-padding khiến mô hình đã triển khai luôn dự đoán sai lớp \texttt{walking\_downstairs} bất kể hoạt động thực tế, do các đặc trưng đầu vào nằm ngoài phân phối huấn luyện (xem Mục~\ref{sec:training_deployment_parity} để phân tích chi tiết).
+\textit{Ý nghĩa thực nghiệm}: Trong quá trình phát triển, zero-padding khiến mô hình đã triển khai luôn dự đoán sai lớp \textit{walking\_downstairs} bất kể hoạt động thực tế, do các đặc trưng đầu vào nằm ngoài phân phối huấn luyện (xem Mục~\ref{sec:training_deployment_parity} để phân tích chi tiết).
 
 \subsection{Tăng cường Dữ liệu cho Huấn luyện (Data Augmentation)}
 \label{sec:data_augmentation}
 
-Để cải thiện tính tổng quát hóa của mô hình và giảm hiện tượng quá khớp (overfitting), đặc biệt với các tập dữ liệu nhỏ điển hình của thu thập dữ liệu đối tượng đơn, framework tích hợp một hệ thống tăng cường dữ liệu (data augmentation) được thiết kế riêng cho dữ liệu IMU \cite{um2017data, iwana2021empirical}. Tăng cường được thực hiện ở cấp cửa sổ---trước khi trích xuất đặc trưng---để tạo ra các biến thể thực tế của tín hiệu gốc mà không làm thay đổi bản chất hoạt động.
+Để cải thiện tính tổng quát hóa của mô hình và giảm hiện tượng quá khớp (overfitting), đặc biệt với các tập dữ liệu nhỏ điển hình của thu thập dữ liệu đối tượng đơn, các kỹ thuật tăng cường dữ liệu (data augmentation) được thiết kế riêng cho dữ liệu IMU có thể được áp dụng \cite{um2017data, iwana2021empirical}. Tăng cường được thực hiện ở cấp cửa sổ---trước khi trích xuất đặc trưng---để tạo ra các biến thể thực tế của tín hiệu gốc mà không làm thay đổi bản chất hoạt động.
 
 \subsubsection{Các Phương pháp Tăng cường}
 Năm phương pháp biến đổi được triển khai, mỗi phương pháp mô phỏng một nguồn biến thiên thực tế khác nhau trong dữ liệu cảm biến quán tính:
@@ -272,7 +337,7 @@ Năm phương pháp biến đổi được triển khai, mỗi phương pháp m�
 
 Một đóng góp quan trọng của framework là chiến lược tăng cường \textit{nhận biết lớp}, giải quyết một vấn đề tinh tế nhưng nghiêm trọng: việc áp dụng các phép biến đổi mạnh (jitter, rotation, scaling) lên các hoạt động tĩnh (static activities) như \textit{still}, \textit{standing} hay \textit{sitting} tạo ra tín hiệu nhân tạo có các dao động nhỏ giống với hoạt động cường độ thấp (ví dụ: \textit{walking\_downstairs} với rung nhẹ). Điều này gây \textbf{nhầm lẫn lớp} (class confusion), làm suy giảm đáng kể hiệu suất phát hiện hoạt động tĩnh.
 
-\textbf{Thiết kế giải pháp}: Framework tự động phát hiện các nhãn hoạt động tĩnh thông qua đối chiếu từ khóa (\textit{still}, \textit{stand}, \textit{sit}, \textit{lying}, \textit{idle}) và áp dụng chiến lược tăng cường phân biệt:
+\textbf{Thiết kế giải pháp}: Phân loại tĩnh/động được xác định theo ngưỡng biên độ dao động của tín hiệu gia tốc kế trong cửa sổ và có thể được người dùng chỉ định thủ công, sau đó áp dụng chiến lược tăng cường phân biệt:
 \begin{itemize}
     \item \textbf{Hoạt động động} (dynamic): Áp dụng đầy đủ cả năm phương pháp với tham số tiêu chuẩn ($\sigma_{\text{jitter}} = 0{,}05$)
     \item \textbf{Hoạt động tĩnh} (static): Chỉ áp dụng nhiễu vi mô (micro-jitter) với $\sigma = 0{,}01$---đủ để tạo tính đa dạng cảm biến thực tế mà không phá vỡ đặc tính ``gần bất động'' (near-stationary) vốn xác định hoạt động tĩnh
@@ -287,7 +352,7 @@ Người dùng cũng có thể xác định thủ công danh sách nhãn tĩnh q
 
 Trong triển khai thực tế, thiết bị biên thường ghi nhận các chuyển động không thuộc bất kỳ lớp nào đã huấn luyện (ví dụ: ngồi xuống, cúi người, hoặc đeo thiết bị ở vị trí bất thường). Các hệ thống phân loại truyền thống bắt buộc phải gán một nhãn cho mọi đầu vào, bất kể mức độ tin cậy, dẫn đến các dự đoán sai với độ tin cậy cao---hiện tượng được gọi là \textit{overconfident misclassification} \cite{hendrycks2017baseline, guo2017calibration}.
 
-\textbf{Cơ chế từ chối}: Framework tích hợp ngưỡng tin cậy (confidence threshold) trực tiếp vào mã triển khai đã tạo (C/C++ hoặc MicroPython). Mỗi mô hình tính toán xác suất từng lớp, và nếu xác suất tối đa $\max_c P(y=c|\mathbf{x})$ thấp hơn ngưỡng $\tau$ (mặc định: $\tau = 0{,}6$), dự đoán trả về ``unknown'' thay vì ép buộc một nhãn cụ thể:
+\textbf{Cơ chế từ chối}: Ngưỡng tin cậy (confidence threshold) có thể được tích hợp trực tiếp vào mã suy luận sinh ra cho thiết bị nhúng. Mỗi mô hình tính toán xác suất từng lớp, và nếu xác suất tối đa $\max_c P(y=c|\mathbf{x})$ thấp hơn ngưỡng $\tau$ (mặc định: $\tau = 0{,}6$), dự đoán trả về ``unknown'' thay vì ép buộc một nhãn cụ thể:
 \begin{equation}
     \hat{y} = \begin{cases}
         \arg\max_c P(y=c|\mathbf{x}) & \text{nếu } \max_c P(y=c|\mathbf{x}) \geq \tau \\
@@ -308,67 +373,78 @@ Giá trị $\tau = 0{,}6$ được chọn để cân bằng giữa tỷ lệ t�
 
 \section{Huấn luyện Mô hình Học máy}
 
-\subsection{Các Thuật toán Được Hỗ trợ}
-Framework tích hợp bốn nhóm thuật toán học máy, bao gồm cả học máy cổ điển (scikit-learn) và học sâu (PyTorch), được chọn vì hiệu quả đã được chứng minh trong nhận dạng hoạt động và tính khả thi cho triển khai nhúng:
+\subsection{Các Thuật toán Học máy Áp dụng}
+Bốn nhóm thuật toán học máy dưới đây, bao gồm cả học máy cổ điển và học sâu, đã được chứng minh hiệu quả trong nhận dạng hoạt động và phù hợp cho triển khai biên. Mỗi nhóm thể hiện đặc tính đánh đổi khác nhau giữa độ chính xác, yêu cầu dữ liệu và chi phí tài nguyên---các yếu tố cần cân nhắc khi lựa chọn cho ứng dụng cụ thể:
 
 \paragraph{Random Forest (RF)}
-Phương pháp ensemble kết hợp nhiều cây quyết định với bagging và ngẫu nhiên hóa đặc trưng. Cấu hình:
+Phương pháp ensemble kết hợp nhiều cây quyết định với bagging và ngẫu nhiên hóa đặc trưng \cite{breiman2001random}. Cấu hình điển hình cho bài toán HAR:
 \begin{itemize}
-    \item Mặc định: 100 cây, độ sâu tối đa 20
-    \item Cân bằng lớp: \texttt{class\_weight='balanced'} tự động trọng số các mẫu tỷ lệ nghịch với tần suất lớp
-    \item Tiêu chí: Độ bất thuần Gini
+    \item Số cây: 50--200 (tham chiếu: 100 cây), độ sâu tối đa 10--30
+    \item Cân bằng lớp: \texttt{class\_weight='balanced'} tự động trọng số mẫu tỷ lệ nghịch với tần suất lớp
+    \item Tiêu chí phân nhánh: Độ bất thuần Gini hoặc entropy thông tin
 \end{itemize}
+RF đặc biệt phù hợp cho HAR vì không yêu cầu chuẩn hóa đặc trưng; chịu đựng tốt với đặc trưng không liên quan (mỗi lần phân nhánh chỉ xét $\sqrt{D}$ đặc trưng ngẫu nhiên); kết quả giải thích được qua độ quan trọng đặc trưng; ổn định với nhiễu nhờ cơ chế bỏ phiếu đa số.
 
 \paragraph{Support Vector Machine (SVM)}
-Bộ phân loại phân biệt tìm các siêu phẳng tối ưu qua các phương pháp kernel. Cấu hình:
+Bộ phân loại phân biệt tìm siêu phẳng tối đa hóa biên phân tách giữa các lớp. Cấu hình điển hình:
 \begin{itemize}
-    \item Kernel: Radial Basis Function (RBF) với tỷ lệ gamma tự động
-    \item Chiến lược đa lớp: One-vs-One (OvO)
+    \item Kernel: Radial Basis Function (RBF), phù hợp cho dữ liệu phi tuyến; tham số gamma kiểm soát bán kính ảnh hưởng của từng điểm huấn luyện
+    \item Chiến lược đa lớp: One-vs-One (OvO) hoặc One-vs-Rest (OvR)
     \item Cân bằng lớp: \texttt{class\_weight='balanced'}
-    \item Chính quy hóa: C=1.0 (mặc định)
+    \item Chính quy hóa: Tham số $C$ kiểm soát đánh đổi biên rộng---vi phạm biên ($C \in \{0{,}1;\ 1;\ 10\}$)
 \end{itemize}
+SVM phù hợp khi số chiều đặc trưng cao so với số mẫu---điển hình trong HAR với 90 đặc trưng và vài trăm mẫu. Yêu cầu chuẩn hóa đặc trưng (StandardScaler) trước huấn luyện để đảm bảo các chiều đóng góp đồng đều vào hàm kernel.
 
 \paragraph{Neural Network (NN)}
-Perceptron đa lớp với lan truyền ngược. Cấu hình:
+Perceptron đa lớp (MLP) với lan truyền ngược, phù hợp học các ánh xạ phi tuyến phức tạp. Một kiến trúc tham chiếu cho bài toán 5 lớp với 90 đặc trưng đầu vào:
 \begin{itemize}
-    \item Kiến trúc: 90 đầu vào $\rightarrow$ 100 ẩn $\rightarrow$ num\_classes đầu ra
-    \item Kích hoạt: ReLU (lớp ẩn), Softmax (lớp đầu ra)
-    \item Trình tối ưu: Adam với tốc độ học 0,001, $\beta_1=0,9$, $\beta_2=0,999$
-    \item Chính quy hóa: Phạt L2 $\alpha=0,0001$
-    \item Huấn luyện: Dừng sớm với patience=10, tối đa 500 epochs
-    \item Kích thước Batch: Batch đầy đủ (toàn bộ tập huấn luyện)
+    \item Kiến trúc: [90 đầu vào] $\rightarrow$ [100 ẩn, ReLU] $\rightarrow$ [num\_classes, Softmax]
+    \item Trình tối ưu: Adam ($\eta=0{,}001$, $\beta_1=0{,}9$, $\beta_2=0{,}999$)
+    \item Chính quy hóa: Phạt L2 $\alpha=0{,}0001$; dừng sớm (patience=10)
+    \item Lịch trình: Tối đa 500 epoch, batch đầy đủ
 \end{itemize}
-Kiến trúc một lớp ẩn cung cấp khả năng đầy đủ để học các mẫu hoạt động phi tuyến trong khi vẫn đủ nhỏ để triển khai hiệu quả trên vi điều khiển (ma trận trọng số cố định, không phân bổ bộ nhớ động). Ngoài ra, framework hỗ trợ kiến trúc MLP tùy chỉnh qua PyTorch với nhiều lớp ẩn cấu hình được và hệ thống xuất trọng số đã huấn luyện sang định dạng tương thích scikit-learn để tạo mã triển khai.
+Kiến trúc một lớp ẩn vừa đủ năng lực học mẫu phi tuyến vừa nhỏ gọn cho triển khai nhúng (ma trận trọng số cố định, không phân bổ bộ nhớ động). Kiến trúc tùy chỉnh với nhiều lớp ẩn hơn có thể xây dựng qua PyTorch, với cơ chế xuất trọng số sang định dạng tương thích để tạo mã triển khai.
 
 \paragraph{Convolutional Neural Network (CNN)}
-Mạng tích chập 1D được triển khai qua PyTorch, xử lý trực tiếp cửa sổ cảm biến thô (end-to-end) mà không cần trích xuất đặc trưng thủ công. Cấu hình:
+Mạng tích chập 1D xử lý trực tiếp cửa sổ cảm biến thô (end-to-end), học biểu diễn phân cấp từ tín hiệu mà không cần trích xuất đặc trưng thủ công. Một kiến trúc tham chiếu 1D-CNN:
 \begin{itemize}
-    \item Đầu vào: Cửa sổ thô 150 mẫu $\times$ 6 kênh cảm biến
-    \item Kiến trúc: 2--3 lớp Conv1D (kernel size 3--5, bộ lọc 32--64) + BatchNorm + MaxPool + Flatten + Dense
+    \item Đầu vào: Cửa sổ thô $W \times C$ ($W=150$ mẫu, $C=6$ kênh cảm biến)
+    \item Khối tích chập: 2--3 lớp Conv1D (kernel $3$--$5$, bộ lọc $32$--$64$) + BatchNorm + MaxPool
+    \item Phân loại: Flatten + Dense + Dropout ($0{,}3$--$0{,}5$) + Softmax
     \item Trình tối ưu: Adam với OneCycleLR scheduler
-    \item Chính quy hóa: Dropout 0,3--0,5 giữa các lớp Dense
-    \item Xuất mã: Trọng số được xuất thành mảng hằng số C/C++ qua \texttt{export\_cnn\_weights()}, hoặc chuyển đổi sang TFLite Micro với lượng tử hóa INT8
+    \item Triển khai: Xuất trọng số thành mảng C/C++ hoặc chuyển đổi sang TFLite Micro (INT8)
 \end{itemize}
-CNN phù hợp cho các bài toán cần độ chính xác cao hơn nơi các đặc trưng thống kê thủ công chưa đủ phân biệt---mô hình học trực tiếp các biểu diễn phân cấp từ tín hiệu thô, nhưng đổi lại yêu cầu nhiều dữ liệu huấn luyện hơn và bộ nhớ triển khai lớn hơn (500~KB--2~MB so với 50--200~KB cho mô hình cổ điển).
+CNN phù hợp khi tập dữ liệu đủ lớn và các đặc trưng thống kê thủ công chưa đủ phân biệt---mô hình học trực tiếp các biểu diễn phân cấp từ tín hiệu thô. Đổi lại, CNN yêu cầu nhiều dữ liệu huấn luyện hơn và bộ nhớ triển khai lớn hơn (500~KB--2~MB so với 50--200~KB cho mô hình cổ điển).
+
+\paragraph{Convolutional Neural Network 2D (2D-CNN)}
+Biến thể hai chiều xử lý cửa sổ cảm biến như ảnh $W \times C$ (thời gian × kênh), cho phép học tương quan chéo kênh (cross-channel correlation) giữa các trục cảm biến thông qua kernel hai chiều. Một kiến trúc tham chiếu 2D-CNN:
+\begin{itemize}
+    \item Đầu vào: Ma trận $W \times C$ ($W=150$ bước thời gian, $C=6$ kênh cảm biến)
+    \item Kernel tích chập: Conv2D($3 \times C$) học đồng thời mẫu thời gian và tương quan giữa các trục cảm biến
+    \item Khối tiếp theo: BatchNorm + MaxPool(thời gian) + Flatten + Dense + Dropout + Softmax
+    \item Trình tối ưu: Adam với OneCycleLR scheduler
+    \item Triển khai: Cùng đường dẫn xuất mã với 1D-CNN
+\end{itemize}
+2D-CNN phù hợp khi tương quan không gian giữa các trục cảm biến mang thông tin phân biệt---ví dụ, leo cầu thang tạo mẫu tương quan đặc trưng giữa gia tốc thẳng đứng và con quay hồi chuyển. So với 1D-CNN, 2D-CNN học các đặc trưng liên kênh một cách tường minh, nhưng đòi hỏi nhiều dữ liệu hơn để hội tụ do không gian tham số lớn hơn.
 
 \subsection{Giao thức Huấn luyện và Đánh giá}
 
 \subsubsection{Chiến lược Chia Dữ liệu}
-Framework triển khai một phân chia ba chiều nghiêm ngặt để ngăn chặn rò rỉ thông tin và đảm bảo ước lượng hiệu suất không thiên vị:
+Để ngăn rò rỉ thông tin và đảm bảo ước lượng hiệu suất không thiên vị, giao thức phân chia ba chiều là phương pháp được khuyến nghị trong học máy \cite{goodfellow2016deep}:
 \begin{enumerate}
-    \item \textbf{Tập Huấn luyện (60\%)}: Chỉ sử dụng cho huấn luyện mô hình (khớp các tham số mô hình)
-    \item \textbf{Tập Xác thực (20\%)}: Sử dụng cho điều chỉnh siêu tham số, lựa chọn mô hình và giám sát tiến trình huấn luyện
-    \item \textbf{Tập Kiểm tra (20\%)}: Hoàn toàn được giữ lại chỉ cho đánh giá cuối cùng; không bao giờ được truy cập trong quá trình huấn luyện hoặc tối ưu hóa siêu tham số
+    \item \textbf{Tập Huấn luyện (60\%)}: Dùng để khớp các tham số mô hình
+    \item \textbf{Tập Xác thực (20\%)}: Dùng để điều chỉnh siêu tham số, lựa chọn mô hình và giám sát tiến trình huấn luyện
+    \item \textbf{Tập Kiểm tra (20\%)}: Được giữ lại hoàn toàn; chỉ đánh giá một lần duy nhất sau khi huấn luyện hoàn tất
 \end{enumerate}
 
-Tất cả các phân chia sử dụng lấy mẫu phân tầng để bảo tồn tỷ lệ lớp trên các tập, quan trọng cho các nhiệm vụ nhận dạng hoạt động mất cân bằng.
+Tất cả các phân chia nên sử dụng lấy mẫu phân tầng để bảo tồn tỷ lệ lớp, đặc biệt quan trọng với tập HAR có phân phối không đồng đều.
 
 \textit{Phân biệt Tập Xác thực so với Kiểm tra}: Tập xác thực cho phép phát triển mô hình lặp lại—người dùng có thể điều chỉnh siêu tham số, thử các thuật toán khác nhau hoặc điều chỉnh các bước tiền xử lý trong khi giám sát độ chính xác xác thực mà không làm nhiễm tập kiểm tra. Tập kiểm tra được đánh giá \textit{chính xác một lần} cho mỗi mô hình đã huấn luyện để báo cáo hiệu suất cuối cùng, cung cấp một ước lượng không thiên vị về khái quát hóa cho dữ liệu chưa thấy. Phương pháp luận này tuân theo các thực hành tốt nhất trong nghiên cứu học máy \cite{goodfellow2016deep} và loại bỏ rò rỉ thông tin tinh tế xảy ra khi đánh giá lặp lại trên một tập giữ lại duy nhất.
 
-\textit{Tùy chọn Xác thực Chéo}: Đối với phân tích khám phá, framework cũng hỗ trợ xác thực chéo 5-fold được thực hiện trên tập huấn luyện+xác thực kết hợp (80\% dữ liệu), trong khi vẫn bảo tồn tập kiểm tra (20\%) là hoàn toàn chưa thấy. Điều này cung cấp các ước lượng hiệu suất mạnh mẽ cho các nghiên cứu so sánh thuật toán mà không yêu cầu một phân chia xác thực riêng biệt.
+\textit{Xác thực Chéo}: Đối với phân tích khám phá khi dữ liệu hạn chế, xác thực chéo 5-fold có thể thực hiện trên tập huấn luyện+xác thực kết hợp (80\% dữ liệu), trong khi vẫn bảo tồn tập kiểm tra (20\%) là hoàn toàn chưa thấy. Phương pháp này cung cấp ước lượng hiệu suất mạnh mẽ cho các nghiên cứu so sánh thuật toán mà không yêu cầu phân chia xác thực riêng biệt.
 
 \subsubsection{Xử lý Mất cân bằng Lớp}
-Các tập dữ liệu chuyển động thường thể hiện mất cân bằng lớp nghiêm trọng (ví dụ: nhiều mẫu \textit{standing} hơn \textit{walking\_downstairs}). Huấn luyện mất cân bằng thiên vị các mô hình về các lớp đa số, làm suy giảm nhận dạng lớp thiểu số. Framework giải quyết điều này qua:
+Các tập dữ liệu HAR thường thể hiện mất cân bằng lớp (ví dụ: nhiều mẫu \textit{standing} hơn \textit{walking\_downstairs}), khiến mô hình huấn luyện trực tiếp thiên vị về các lớp đa số và suy giảm khả năng nhận dạng lớp thiểu số. Hai kỹ thuật chính được áp dụng để xử lý vấn đề này:
 \begin{itemize}
     \item \textbf{Cân bằng Trọng số Lớp}: Đối với RF và SVM, tham số \texttt{class\_weight='balanced'} gán trọng số $w_c = \frac{n\_samples}{n\_classes \times n\_samples_c}$ trong đó $n\_samples_c$ là số lượng của lớp $c$. Điều này tăng đóng góp mất mát của các phân loại sai lớp thiểu số trong quá trình huấn luyện.
     \item \textbf{Phân chia Phân tầng}: Các phân chia huấn luyện-kiểm tra bảo tồn tỷ lệ lớp sử dụng lấy mẫu phân tầng.
@@ -376,7 +452,7 @@ Các tập dữ liệu chuyển động thường thể hiện mất cân bằng
 Cân bằng lớp là quan trọng cho triển khai thực tế nơi tất cả các lớp hoạt động phải được phát hiện một cách đáng tin cậy, không chỉ những lớp thường xuyên nhất.
 
 \subsection{Tối ưu hóa Siêu tham số}
-Framework hỗ trợ điều chỉnh siêu tham số tự động qua GridSearchCV của scikit-learn với xác thực chéo 5-fold. Các siêu tham số có thể tìm kiếm:
+Điều chỉnh siêu tham số có hệ thống là bước quan trọng để đạt hiệu suất tốt nhất. GridSearchCV là một phương pháp phổ biến, duyệt toàn bộ lưới tổ hợp tham số và đánh giá từng tổ hợp qua xác thực chéo 5-fold. Các không gian tìm kiếm điển hình cho từng thuật toán:
 
 \textbf{Random Forest:}
 \begin{itemize}
@@ -400,32 +476,23 @@ Framework hỗ trợ điều chỉnh siêu tham số tự động qua GridSearch
     \item \texttt{learning\_rate\_init}: [0.001, 0.01]
 \end{itemize}
 
-Tối ưu hóa xác định các cấu hình tối đa hóa độ chính xác xác thực chéo, thường cải thiện hiệu suất cơ sở 2-5\%. Hình \ref{fig:ui_training} cho thấy giao diện cấu hình huấn luyện nơi người dùng chọn thuật toán, bật tối ưu hóa siêu tham số, cấu hình cân bằng lớp và giám sát tiến trình huấn luyện.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_training_config.png}
-    \caption{Bảng cấu hình mô hình cho thấy lựa chọn thuật toán (Random Forest, Neural Network, SVM, CNN), các tùy chọn điều chỉnh siêu tham số với GridSearchCV, các chiến lược cân bằng lớp (trọng số cân bằng, phân chia phân tầng) và giám sát tiến trình huấn luyện thời gian thực.}
-    \label{fig:ui_training}
-\end{figure}
+Tối ưu hóa xác định các cấu hình tối đa hóa độ chính xác xác thực chéo, thường cải thiện hiệu suất cơ sở 2--5\%.
 
 \section{Tạo Mã cho Triển khai Biên}
 
 \subsection{Kiến trúc}
 Hệ thống con tạo mã dịch các mô hình đã huấn luyện thành các gói triển khai phù hợp với nhiều họ thiết bị và môi trường thực thi khác nhau, thay vì nhắm đến một bo mạch đơn lẻ. Kiến trúc tuân theo mẫu thiết kế Factory, trong đó generator được chọn theo ba trục: \textit{loại mô hình}, \textit{họ nền tảng đích} và \textit{cách tiếp cận triển khai}. Danh sách khóa nền tảng và backend cụ thể được tóm tắt trong Bảng~\ref{tab:deployment_target_matrix}.
 
-Ở mức tổ chức mã, kiến trúc gồm ba lớp chính:
+Kiến trúc gồm ba lớp chính:
 \begin{itemize}
-    \item \textbf{BaseCodeGenerator}: cung cấp phần dùng chung như sinh tệp, trích xuất đặc trưng, tuần tự hóa tham số, kiểm tra tương đồng và ví dụ tích hợp.
-    \item \textbf{Generator theo mô hình}: \texttt{RandomForestCodeGenerator}, \texttt{SVMCodeGenerator}, \texttt{NeuralNetworkCodeGenerator}, \texttt{CNNCodeGenerator} hiện thực logic suy luận đặc thù thuật toán.
-    \item \textbf{Generator theo nền tảng/backend}: các lớp như \texttt{ARMCortexMCodeGenerator}, \texttt{MicroPythonCodeGenerator}, \texttt{ZephyrCodeGenerator}, cùng các backend TFLite Micro và ONNX Runtime, chịu trách nhiệm điều chỉnh mã theo môi trường đích.
+    \item \textbf{Lớp cơ sở (Base Generator)}: cung cấp phần dùng chung gồm sinh tệp, trích xuất đặc trưng, tuần tự hóa tham số, kiểm tra tương đồng và ví dụ tích hợp.
+    \item \textbf{Lớp đặc thù thuật toán}: mỗi thuật toán (RF, SVM, NN, CNN) có generator riêng hiện thực logic suy luận tương ứng.
+    \item \textbf{Lớp đặc thù nền tảng}: các generator cho ARM Cortex-M, MicroPython, Zephyr, cùng các backend TFLite Micro và ONNX Runtime, chịu trách nhiệm điều chỉnh mã theo môi trường đích.
 \end{itemize}
-
-Bảng~\ref{tab:deployment_target_matrix} tóm tắt ma trận đích triển khai được hỗ trợ ở mức generator.
 
 \begin{table}[H]
     \centering
-    \caption{Ma trận đích triển khai được hỗ trợ trong kiến trúc generator}
+    \caption{Ma trận đích triển khai được hỗ trợ}
     \label{tab:deployment_target_matrix}
     \small
     \begin{tabular}{@{}p{2.6cm}p{2.8cm}p{2.6cm}p{4.6cm}@{}}
@@ -436,22 +503,22 @@ Bảng~\ref{tab:deployment_target_matrix} tóm tắt ma trận đích triển kh
         ARM Cortex-M thuần & arm\_cortex\_m & .c & Tích hợp bare-metal hoặc CMSIS trên các vi điều khiển ARM \\
         SDK/RTOS native & generic\_c, generic\_cpp, esp\_idf, zephyr & .h + .c/.cpp + ví dụ & Ứng dụng nhúng native, SDK hãng và RTOS \\
         MicroPython & micropython & module .py + ví dụ .py & Nguyên mẫu nhanh hoặc giáo dục trên board hỗ trợ MicroPython \\
-        Backend runtime thay thế & tflite\_micro, onnx\_runtime & mã glue + model nhị phân & Mở rộng cho các pipeline cần runtime suy luận chuẩn hóa \\
+        Backend runtime thay thế & tflite\_micro, onnx\_runtime & mã glue + model nhị phân & Mở rộng cho các pipeline cần runtime engine chuẩn hóa \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-\subsection{Lý do Chọn Tạo Mã Trực tiếp thay vì Runtime Suy luận}
+\subsection{Lý do Chọn Tạo Mã Trực tiếp thay vì Runtime Engine}
 \label{sec:codegen_rationale}
 
-Một quyết định thiết kế cốt lõi của framework là \textbf{tạo mã nguồn trực tiếp} (direct code generation) qua việc trích xuất trọng số, cấu trúc quyết định và tham số mô hình từ các đối tượng scikit-learn/PyTorch đã huấn luyện, sau đó tạo mã C/C++ thuần hoặc MicroPython triển khai thuật toán suy luận tương ứng---thay vì sử dụng các runtime suy luận đóng gói (packaged inference runtimes). Phần này phân tích các phương pháp thay thế và lập luận cho lựa chọn đã chọn.
+Việc lựa chọn phương pháp triển khai mô hình ML lên vi điều khiển có ảnh hưởng trực tiếp đến mức sử dụng tài nguyên, tính minh bạch và phạm vi thuật toán được hỗ trợ. Phần này phân tích ba cách tiếp cận chính và luận giải cho quyết định thiết kế trong bối cảnh HAR biên.
 
 \subsubsection{Các Phương pháp Triển khai Mô hình trên Vi điều khiển}
 
 Có ba cách tiếp cận chính để triển khai mô hình ML trên vi điều khiển, mỗi cách thể hiện đánh đổi khác nhau giữa tính tiện lợi, hiệu suất và kiểm soát:
 
-\paragraph{Phương pháp 1: Runtime suy luận (TensorFlow Lite Micro, ONNX Micro Runtime)}
-Mô hình được chuyển đổi sang định dạng trung gian (\texttt{.tflite}, \texttt{.onnx}), sau đó được tải bởi một runtime suy luận chung trên thiết bị. Runtime đọc biểu đồ tính toán và thực thi từng toán tử (operator) theo thứ tự.
+\paragraph{Phương pháp 1: Runtime Engine (TensorFlow Lite Micro, ONNX Micro Runtime)}
+Mô hình được chuyển đổi sang định dạng trung gian (\texttt{.tflite}, \texttt{.onnx}), sau đó được tải bởi một runtime engine chung trên thiết bị. Runtime đọc biểu đồ tính toán và thực thi từng toán tử (operator) theo thứ tự.
 
 \textit{Ưu điểm:} Hỗ trợ nhiều kiến trúc mô hình (CNN, LSTM, Transformer); hệ sinh thái lớn với cộng đồng hỗ trợ mạnh; các tối ưu hóa lượng tử hóa tích hợp (INT8, FP16).
 
@@ -464,50 +531,8 @@ Mô hình được biên dịch trước (ahead-of-time compilation) sang mã C 
 
 \textit{Nhược điểm:} Chuỗi công cụ đóng---mã đã tạo bởi EON Compiler khó kiểm toán và không thể sửa đổi. Apache TVM/microTVM yêu cầu kiến thức biên dịch cấp chuyên gia. Hầu hết các trình biên dịch mô hình bắt buộc mô hình đầu vào theo định dạng ONNX hoặc TFLite, loại trừ các mô hình scikit-learn cổ điển (RF, SVM) mà không qua bước chuyển đổi trung gian phức tạp.
 
-\subsection{Triển khai TFLite Micro}
-\label{sec:tflite_micro_deployment}
-
-Framework hỗ trợ đường dẫn triển khai TFLite Micro như một phương pháp bổ sung cho các kiến trúc mô hình phù hợp. Quá trình chuyển đổi tuân theo pipeline ONNX$\rightarrow$TensorFlow$\rightarrow$TFLite với các hạn chế quan trọng về phạm vi hỗ trợ \cite{tensorflow2015_whitepaper}.
-
-\subsubsection{Phạm vi Hỗ trợ theo Loại Mô hình}
-Nghiên cứu thực nghiệm cho thấy khả năng chuyển đổi khác nhau đáng kể giữa các loại mô hình:
-
-\paragraph{Neural Network và CNN: Chuyển đổi Trực tiếp (hỗ trợ)}
-Các mô hình neural network (MLP) và CNN từ PyTorch có thể chuyển đổi thành công qua pipeline:
-\begin{enumerate}
-    \item PyTorch model $\rightarrow$ ONNX (\texttt{torch.onnx.export})
-    \item ONNX $\rightarrow$ TensorFlow (\texttt{onnx-tf})
-    \item TensorFlow $\rightarrow$ TFLite (\texttt{tf.lite.TFLiteConverter})
-    \item TFLite $\rightarrow$ TFLite Micro (quantization INT8)
-\end{enumerate}
-
-\paragraph{Random Forest và SVM: Hạn chế ONNX-ML (không hỗ trợ trực tiếp)}
-Các mô hình Random Forest và SVM gặp rào cản chuyển đổi do hạn chế trong hệ sinh thái ONNX-ML:
-\begin{itemize}
-    \item \textbf{Scikit-learn $\rightarrow$ ONNX}: \texttt{skl2onnx} tạo các toán tử ONNX-ML như \texttt{TreeEnsembleClassifier} và \texttt{SVMClassifier}
-    \item \textbf{ONNX-ML $\rightarrow$ TensorFlow}: \texttt{onnx2tf} \textbf{không hỗ trợ} các toán tử ONNX-ML, chỉ hỗ trợ các toán tử ONNX chuẩn (operator domain "ai.onnx")
-    \item \textbf{Kết quả}: Pipeline bị gián đoạn, không thể chuyển đổi RF/SVM sang TFLite
-\end{itemize}
-
-\subsubsection{Giải pháp Keras Surrogate cho RF/SVM}
-Để khắc phục hạn chế ONNX-ML, framework triển khai \textit{phương pháp Keras surrogate}:
-
-\begin{enumerate}
-    \item \textbf{Sinh dữ liệu huấn luyện surrogate}: Sử dụng mô hình RF/SVM gốc để tạo soft predictions trên tập dữ liệu đại diện
-    \item \textbf{Huấn luyện Keras MLP}: Mạng neural đa lớp học ánh xạ từ features $\rightarrow$ soft predictions của RF/SVM
-    \item \textbf{Chuyển đổi MLP $\rightarrow$ TFLite}: Keras MLP có thể chuyển đổi thành công qua pipeline tiêu chuẩn
-\end{enumerate}
-
-\textbf{Hạn chế Surrogate}: Keras surrogate là \textit{xấp xỉ}, không phải triển khai chính xác. Độ thỏa thuận kỳ vọng 80-90\% giữa mô hình gốc và surrogate. Cho độ chính xác tối đa, \textit{tạo mã trực tiếp C++ vẫn là phương pháp được khuyến nghị cho RF/SVM}.
-
-\subsubsection{Khuyến nghị Sử dụng}
-\begin{itemize}
-    \item \textbf{NN/CNN}: Sử dụng TFLite Micro để tận dụng runtime tối ưu hóa và hỗ trợ quantization INT8
-    \item \textbf{RF/SVM}: Ưu tiên tạo mã trực tiếp C++ (chính xác, nhanh, nhỏ gọn). TFLite surrogate chỉ khi yêu cầu tích hợp runtime chuẩn hóa
-\end{itemize}
-
-\paragraph{Phương pháp 3: Tạo mã trực tiếp (Direct Code Generation)---phương pháp đề xuất}
-Framework trích xuất trực tiếp các tham số đã huấn luyện từ đối tượng scikit-learn/PyTorch---trọng số và bias của mạng nơ-ron (\texttt{coefs\_}, \texttt{intercepts\_} hoặc state\_dict PyTorch), support vectors và hệ số kernel của SVM, cấu trúc cây nhị phân của Random Forest, trọng số convolution và batch normalization của CNN---rồi tạo mã nguồn (C/C++ hoặc MicroPython) triển khai thuật toán suy luận tương ứng.
+\paragraph{Phương pháp 3: Tạo mã trực tiếp (Direct Code Generation)}
+Phương pháp này trích xuất trực tiếp các tham số đã huấn luyện từ đối tượng scikit-learn/PyTorch---trọng số và bias của mạng nơ-ron, support vectors và hệ số kernel của SVM, cấu trúc cây nhị phân của Random Forest, trọng số convolution và batch normalization của CNN---rồi tạo mã nguồn (C/C++ hoặc MicroPython) triển khai thuật toán suy luận tương ứng.
 
 \textit{Ưu điểm:} Không phụ thuộc bên ngoài---mã tự chứa hoàn toàn; dấu chân bộ nhớ tối thiểu (chỉ chứa trọng số + logic suy luận); minh bạch hoàn toàn---mọi phép tính có thể kiểm tra và xác minh; hỗ trợ trực tiếp các thuật toán ML cổ điển mà không cần chuyển đổi định dạng; xuất được nhiều ngôn ngữ đích (C, C++, MicroPython).
 
@@ -524,7 +549,7 @@ Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên 
     \small
     \begin{tabular}{@{}lp{2.5cm}p{2.5cm}p{2.5cm}@{}}
         \toprule
-        Tiêu chí & Runtime & Compiler & \textbf{Trực tiếp (Ours)} \\
+        Tiêu chí & Runtime & Compiler & \textbf{Trực tiếp} \\
         \midrule
         Overhead flash & 100--300KB & 15--50KB & \textbf{0KB} \\
         Overhead suy luận & 15--40\% & $<$5\% & \textbf{0\%} \\
@@ -551,7 +576,7 @@ Quyết định sử dụng tạo mã trực tiếp được lập luận bởi 
 Trên các vi điều khiển lớp wearable như Seeed XIAO nRF52840 (1MB flash, 256KB RAM), mỗi KB đều quan trọng. TFLite Micro interpreter chiếm khoảng 150--250KB flash \cite{warden2019tinyml, ray2023tinyml_survey}---tương đương 15--25\% tổng flash khả dụng---chỉ riêng runtime, trước khi tính trọng số mô hình. Phương pháp trực tiếp loại bỏ hoàn toàn overhead này: một mô hình Neural Network chỉ chiếm 95KB (trọng số + logic suy luận + trích xuất đặc trưng), để lại $>$900KB cho firmware ứng dụng và giúp việc chuyển sang các board cùng lớp tài nguyên trở nên khả thi hơn.
 
 \paragraph{(2) Minh bạch và Khả năng Xác minh}
-Một bài học quan trọng từ phát triển framework (xem Phần~\ref{sec:training_deployment_parity}) là \textit{khả năng kiểm tra mã suy luận đã tạo là yêu cầu thiết yếu}, không phải tính năng tùy chọn. Khi phát hiện lỗi zero-padding và sai lệch công thức kurtosis, có thể truy vết trực tiếp đến mã C++ đã tạo, so sánh từng dòng với triển khai Python, và sửa chữa. Với runtime đóng gói (TFLite Micro) hoặc trình biên dịch đóng (EON Compiler), quá trình gỡ lỗi này sẽ không thể thực hiện---lỗi sẽ biểu hiện như ``mô hình hoạt động kém trên thiết bị'' mà không có cách xác định nguyên nhân gốc.
+Một yêu cầu quan trọng trong thiết kế hệ thống suy luận nhúng là \textit{khả năng kiểm tra và xác minh mã đã tạo} (xem Phần~\ref{sec:training_deployment_parity}). Khi phát hiện lỗi zero-padding và sai lệch công thức kurtosis, có thể truy vết trực tiếp đến mã C++ đã tạo, so sánh từng dòng với triển khai Python, và sửa chữa. Với runtime đóng gói (TFLite Micro) hoặc trình biên dịch đóng (EON Compiler), quá trình gỡ lỗi này sẽ không thể thực hiện---lỗi sẽ biểu hiện như ``mô hình hoạt động kém trên thiết bị'' mà không có cách xác định nguyên nhân gốc.
 
 Khả năng xác minh này đặc biệt quan trọng cho ứng dụng y tế và an toàn, nơi các tiêu chuẩn quy định (FDA, IEC 62304) yêu cầu khả năng truy vết và kiểm toán đầy đủ cho mọi thành phần phần mềm liên quan đến quyết định lâm sàng.
 
@@ -568,7 +593,49 @@ Tạo mã trực tiếp không phải giải pháp phổ quát. Nó không phù 
     \item \textbf{Lượng tử hóa nâng cao}: INT8 inference với hiệu chỉnh phạm vi per-channel yêu cầu hạ tầng runtime mà TFLite Micro cung cấp sẵn
     \item \textbf{Mô hình thay đổi thường xuyên}: Nếu mô hình cần cập nhật OTA (over-the-air) mà không biên dịch lại firmware, runtime interpreter là lựa chọn tốt hơn
 \end{itemize}
-Framework đã tích hợp đường dẫn TFLite Micro (Mục~\ref{sec:tflite_micro_deployment}) bên cạnh tạo mã trực tiếp, cho phép người dùng chọn phương pháp phù hợp: tạo mã trực tiếp cho ML cổ điển và CNN nhỏ, TFLite Micro cho các mô hình cần lượng tử hóa INT8 đầy đủ.
+Đường dẫn TFLite Micro (Mục~\ref{sec:tflite_micro_deployment}) tồn tại song song với tạo mã trực tiếp; người dùng chọn phương pháp phù hợp: tạo mã trực tiếp cho ML cổ điển và CNN nhỏ, TFLite Micro cho các mô hình cần lượng tử hóa INT8 đầy đủ.
+
+\subsection{Triển khai TFLite Micro}
+\label{sec:tflite_micro_deployment}
+
+Đường dẫn triển khai TFLite Micro là phương pháp bổ sung phù hợp cho các kiến trúc mô hình neural network. Quá trình chuyển đổi tuân theo pipeline ONNX $\to$ TensorFlow $\to$ TFLite với các hạn chế quan trọng về phạm vi hỗ trợ \cite{tensorflow2015_whitepaper}.
+
+\subsubsection{Phạm vi Hỗ trợ theo Loại Mô hình}
+Nghiên cứu thực nghiệm cho thấy khả năng chuyển đổi khác nhau đáng kể giữa các loại mô hình:
+
+\paragraph{Neural Network và CNN: Chuyển đổi Trực tiếp (hỗ trợ)}
+Các mô hình neural network (MLP) và CNN từ PyTorch có thể chuyển đổi thành công qua pipeline:
+\begin{enumerate}
+    \item PyTorch model $\rightarrow$ ONNX (\texttt{torch.onnx.export})
+    \item ONNX $\rightarrow$ TensorFlow (\texttt{onnx-tf})
+    \item TensorFlow $\rightarrow$ TFLite (\texttt{tf.lite.TFLiteConverter})
+    \item TFLite $\rightarrow$ TFLite Micro (quantization INT8)
+\end{enumerate}
+
+\paragraph{Random Forest và SVM: Hạn chế ONNX-ML (không hỗ trợ trực tiếp)}
+Các mô hình Random Forest và SVM gặp rào cản chuyển đổi do hạn chế trong hệ sinh thái ONNX-ML:
+\begin{itemize}
+    \item \textbf{Scikit-learn $\rightarrow$ ONNX}: \texttt{skl2onnx} tạo các toán tử ONNX-ML như \texttt{TreeEnsembleClassifier} và \texttt{SVMClassifier}
+    \item \textbf{ONNX-ML $\rightarrow$ TensorFlow}: \texttt{onnx2tf} \textbf{không hỗ trợ} các toán tử ONNX-ML, chỉ hỗ trợ các toán tử ONNX chuẩn (operator domain "ai.onnx")
+    \item \textbf{Kết quả}: Pipeline bị gián đoạn, không thể chuyển đổi RF/SVM sang TFLite
+\end{itemize}
+
+\subsubsection{Giải pháp Keras Surrogate cho RF/SVM}
+Để khắc phục hạn chế ONNX-ML, \textit{phương pháp Keras surrogate} có thể được áp dụng:
+
+\begin{enumerate}
+    \item \textbf{Sinh dữ liệu huấn luyện surrogate}: Sử dụng mô hình RF/SVM gốc để tạo soft predictions trên tập dữ liệu đại diện
+    \item \textbf{Huấn luyện Keras MLP}: Mạng neural đa lớp học ánh xạ từ features $\rightarrow$ soft predictions của RF/SVM
+    \item \textbf{Chuyển đổi MLP $\rightarrow$ TFLite}: Keras MLP có thể chuyển đổi thành công qua pipeline tiêu chuẩn
+\end{enumerate}
+
+\textbf{Hạn chế Surrogate}: Keras surrogate là \textit{xấp xỉ}, không phải triển khai chính xác. Độ thỏa thuận kỳ vọng 80-90\% giữa mô hình gốc và surrogate. Cho độ chính xác tối đa, \textit{tạo mã trực tiếp C++ vẫn là phương pháp được khuyến nghị cho RF/SVM}.
+
+\subsubsection{Khuyến nghị Sử dụng}
+\begin{itemize}
+    \item \textbf{NN/CNN}: Sử dụng TFLite Micro để tận dụng runtime tối ưu hóa và hỗ trợ quantization INT8
+    \item \textbf{RF/SVM}: Ưu tiên tạo mã trực tiếp C++ (chính xác, nhanh, nhỏ gọn). TFLite surrogate chỉ khi yêu cầu tích hợp runtime chuẩn hóa
+\end{itemize}
 
 \subsection{Cấu trúc Mã Đã Tạo}
 Đối với mỗi mô hình đã huấn luyện, trình tạo sản xuất một gói triển khai gồm các tệp tham số, tệp cài đặt và tệp ví dụ tích hợp. Cụ thể:
@@ -598,9 +665,9 @@ trong đó $s = \frac{x_{\max} - x_{\min}}{255}$ là hệ số tỷ lệ và $z 
 \paragraph{Lượng tử hóa Trong Huấn luyện (Quantization-Aware Training, QAT)}
 QAT chèn các toán tử ``giả lượng tử hóa'' (fake quantization) vào đồ thị tính toán trong quá trình huấn luyện, mô phỏng sai số lượng tử hóa để mô hình học cách bù đắp. QAT thường giảm suy giảm độ chính xác xuống dưới 0,3\% nhưng đòi hỏi sửa đổi pipeline huấn luyện và thực tế chỉ áp dụng cho mạng nơ-ron---Random Forest và SVM có cấu trúc rời rạc (ngưỡng quyết định, vector hỗ trợ) không tương thích với kỹ thuật đạo hàm giả (straight-through estimator) mà QAT dựa vào.
 
-\subsubsection{Chiến lược Lượng tử hóa trong Framework}
+\subsubsection{Chiến lược Lượng tử hóa theo Phương pháp Tạo Mã}
 
-Framework áp dụng lượng tử hóa theo hai đường dẫn khác nhau tùy vào phương pháp tạo mã:
+Tùy theo phương pháp tạo mã được chọn, lượng tử hóa được áp dụng theo hai đường dẫn khác nhau:
 
 \paragraph{Lượng tử hóa Trọng số trong Tạo Mã Trực tiếp}
 Trong đường dẫn tạo mã trực tiếp, lượng tử hóa được thực hiện ở cấp độ biểu diễn tham số trong mã C++ đã tạo. Chế độ tối ưu hóa kiểm soát số chữ số thập phân khi nhúng hằng số float32 vào mã nguồn---tương đương lượng tử hóa trọng số mức thấp:
@@ -618,7 +685,7 @@ trong đó $s$ là tích của hai scale tương ứng (trọng số và đầu 
 \paragraph{Lượng tử hóa INT8 Đầy đủ qua Đường dẫn TFLite Micro}
 Đường dẫn TFLite Micro (áp dụng cho NN và CNN) hỗ trợ static PTQ với INT8 đầy đủ---cả trọng số lẫn kích hoạt. Quy trình thực hiện:
 \begin{enumerate}
-    \item Mô hình Keras/PyTorch được chuyển đổi sang định dạng TFLite qua \texttt{tf.lite.TFLiteConverter}
+    \item Chuyển đổi mô hình Keras/PyTorch sang TFLite (\texttt{TFLiteConverter})
     \item Một tập hiệu chỉnh gồm 100--500 vectors đặc trưng đại diện được cung cấp để TFLiteConverter đo phân phối kích hoạt từng lớp
     \item Converter tự động tính $s$ và $z$ cho mỗi tensor theo Phương trình~\ref{eq:quantization}, tối ưu cho phạm vi kích hoạt thực tế
     \item Mô hình INT8 kết quả kết hợp với ARM CMSIS-NN \cite{banbury2021mlperf} để khai thác tập lệnh SIMD của Cortex-M4, thực thi 4 phép nhân int8 song song mỗi chu kỳ---tăng tốc 2--3$\times$ so với mô hình float32 tương đương
@@ -628,7 +695,7 @@ Bảng~\ref{tab:quantization_tradeoff} so sánh hai đường dẫn lượng t�
 
 \begin{table}[H]
     \centering
-    \caption{So sánh Chiến lược Lượng tử hóa trong Framework}
+    \caption{So sánh Chiến lược Lượng tử hóa theo Phương pháp Tạo Mã}
     \label{tab:quantization_tradeoff}
     \small
     \begin{tabular}{@{}p{3.5cm}p{3.5cm}p{4.2cm}@{}}
@@ -653,13 +720,13 @@ Bài toán HAR với đặc trưng thống kê miền thời gian có các đặ
     \item \textbf{Phạm vi đặc trưng có giới hạn vật lý}: Gia tốc IMU bị giới hạn ở $\pm$20~m/s², vận tốc góc ở $\pm$2000$^\circ$/s. Do đó, các đặc trưng thống kê (trung bình, RMS, độ lệch chuẩn) có phạm vi xác định, giúp xác định scale lượng tử hóa chính xác mà không cần tập hiệu chỉnh lớn.
     \item \textbf{Bền vững với nhiễu lượng tử hóa}: Random Forest quyết định theo ngưỡng nhị phân tại mỗi nút cây; sai số lượng tử hóa nhỏ hiếm khi đủ để đổi chiều quyết định phân nhánh, đặc biệt khi đặc trưng nằm xa ngưỡng. SVM nhạy hơn ở vùng ranh giới quyết định nhưng vẫn ổn định với int16.
     \item \textbf{Tham số scaler phải đồng bộ độ chính xác}: StandardScaler (trung bình $\mu$ và độ lệch chuẩn $\sigma$) được áp dụng trước mô hình. Để duy trì parity huấn luyện-triển khai, tham số scaler cần được nhúng với cùng độ chính xác với tham số mô hình---lượng tử hóa mô hình nhưng giữ scaler ở float32 đầy đủ sẽ gây ra sự không nhất quán hệ thống ảnh hưởng đến toàn bộ vector đặc trưng đầu vào.
-    \item \textbf{Kurtosis và Skewness nhạy hơn}: Các đặc trưng hình dạng phân phối có phạm vi giá trị rộng hơn và nhạy với lượng tử hóa mạnh hơn các đặc trưng năng lượng (RMS, Energy). Trong chế độ \textit{Balanced}, framework ưu tiên 3 chữ số thập phân để bảo toàn các đặc trưng này.
+    \item \textbf{Kurtosis và Skewness nhạy hơn}: Các đặc trưng hình dạng phân phối có phạm vi giá trị rộng hơn và nhạy với lượng tử hóa mạnh hơn các đặc trưng năng lượng (RMS, Energy). Do đó, chế độ \textit{Balanced} khuyến nghị sử dụng 3 chữ số thập phân để bảo toàn các đặc trưng này.
 \end{itemize}
 
 \subsection{Kiến trúc Tạo Mã Đa Kiến trúc}
 \label{sec:multi_architecture_codegen}
 
-Framework hỗ trợ hai loại pipeline mô hình với yêu cầu metadata và validation khác biệt đáng kể, đòi hỏi kiến trúc tạo mã có khả năng nhận biết kiến trúc (architecture-aware):
+Hai loại pipeline mô hình tồn tại với yêu cầu metadata và validation khác biệt đáng kể, đòi hỏi kiến trúc tạo mã có khả năng nhận biết loại mô hình (architecture-aware):
 
 \subsubsection{Pipeline Feature-based vs End-to-end}
 \paragraph{Feature-based Models (RF, SVM, NN)}
@@ -691,34 +758,17 @@ Một lỗi metadata đã được phát hiện và sửa chữa trong CNN pipel
     \item \textbf{Giải pháp}: Architecture-aware metadata generation---CNN models luôn sử dụng channel placeholders
 \end{itemize}
 
-Code logic đã được cập nhật:
-\begin{verbatim}
-# CNN models operate on raw windows, not extracted features
-if model_type in ('pytorch_cnn', 'cnn'):
-    n_channels = metadata.get('fe_config', {}).get('num_channels', 6)
-    feature_names = [f'ch{i}' for i in range(n_channels)]
-\end{verbatim}
+\textbf{Phân biệt với Edge Impulse}: Edge Impulse xử lý sự phức tạp này bằng cách có ``processing blocks'' riêng biệt cho feature-based và raw-input models. Tương tự, cần phân biệt loại mô hình tại thời điểm tạo mã để sinh metadata và validation logic chính xác.
 
-\textbf{Phân biệt với Edge Impulse}: Edge Impulse xử lý sự phức tạp này bằng cách có "processing blocks" riêng biệt cho feature-based và raw-input models. Framework này phải phân biệt loại mô hình tại thời điểm tạo mã để tạo ra metadata và validation logic chính xác.
-
-\subsubsection{Design Insights}
+\subsubsection{Lưu ý về Tính Nhất quán Metadata}
 Trường \texttt{trained\_models.json} có ngữ nghĩa khác nhau tùy theo loại mô hình:
 \begin{itemize}
-    \item \texttt{features}: \texttt{X\_train.shape[1]}---với CNN là \texttt{window\_size\_samples} (150), với MLP là feature count (33/53)
+    \item \texttt{features}: \texttt{X\_train.shape[1]}---với CNN là \texttt{window\_size\_samples} (150), với MLP là feature count (33, 53, hoặc 90)
     \item \texttt{num\_features\_extracted}: Luôn là output count của FE pipeline---có ý nghĩa cho feature-based models, chỉ mang tính thông tin cho CNN
 \end{itemize}
 
-Hình \ref{fig:ui_code_generation} cho thấy giao diện tạo mã với bản xem trước gói mã triển khai đã tạo, các tùy chọn cấu hình nền tảng/backend và các tệp đầu ra có thể tải xuống.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_code_generation.png}
-    \caption{Giao diện xem trước gói mã triển khai đã tạo. Framework hiển thị các tệp header, tệp triển khai và tệp ví dụ tích hợp tương ứng với nền tảng đích (Arduino, ARM Cortex-M, Generic C/C++, ESP-IDF, MicroPython, Zephyr, TFLite Micro, ONNX Runtime), cho phép người dùng chọn các chế độ tối ưu hóa (Accuracy, Speed, Power, Balanced) và tải xuống gói triển khai hoàn chỉnh.}
-    \label{fig:ui_code_generation}
-\end{figure}
-
 \subsection{Các Chiến lược Tối ưu hóa}
-Framework hỗ trợ bốn chế độ tối ưu hóa triển khai, có thể chọn trong quá trình tạo mã:
+Bốn chế độ tối ưu hóa triển khai có thể cấu hình khi tạo mã, mỗi chế độ thể hiện đánh đổi khác nhau giữa độ chính xác và chi phí tài nguyên:
 
 \paragraph{Chế độ Accuracy}
 Ưu tiên độ chính xác dự đoán:
@@ -754,7 +804,7 @@ Thỏa hiệp giữa độ chính xác, tốc độ và điện năng:
 \end{itemize}
 
 \subsection{Các Điều chỉnh Đặc thù Nền tảng}
-Thay vì khóa vào một bo mạch cụ thể, framework nhóm các điều chỉnh đặc thù theo họ đích triển khai:
+Điều chỉnh đặc thù nền tảng được nhóm theo họ thiết bị đích, tách biệt logic suy luận mô hình (dùng chung) khỏi các chi tiết phụ thuộc môi trường (đặc thù từng họ thiết bị):
 \begin{itemize}
     \item \textbf{Arduino-compatible boards}: sinh cấu trúc tệp \texttt{.ino}/\texttt{.cpp}/\texttt{.h}, dùng \texttt{Serial}, \texttt{Wire} và các đoạn mã khởi tạo cảm biến phù hợp cho từng board phổ biến.
     \item \textbf{ARM Cortex-M native}: sinh mã C độc lập, ưu tiên bộ nhớ tĩnh và sẵn sàng tích hợp vào firmware bare-metal hoặc CMSIS.
@@ -770,7 +820,7 @@ Các thử nghiệm xác thực sử dụng một tập dữ liệu Nhận dạn
 \begin{itemize}
     \item \textit{Running}, \textit{Still}, \textit{Walking}, \textit{Walking Downstairs}, \textit{Walking Upstairs}
 \end{itemize}
-Dữ liệu được thu thập bằng nền tảng Seeed XIAO nRF52840 Sense ở 100Hz qua nhiều phiên ghi. Trong luận văn này, thiết bị này được dùng như nền tảng cảm biến và benchmark tham chiếu; năng lực đa thiết bị của framework được đánh giá riêng thông qua kiến trúc generator và các loại gói sinh ra cho từng đích. Mỗi hoạt động được ghi trong 30-60 giây qua nhiều phiên, với sự chú ý cẩn thận đến các giai đoạn chuyển tiếp. Giao diện cửa sổ kéo thả được sử dụng để phân đoạn các bản ghi liên tục thành \textbf{mẫu được gán nhãn} (các đoạn hoạt động được chú thích thủ công), trích xuất nhiều cửa sổ đại diện mỗi hoạt động.
+Dữ liệu được thu thập bằng nền tảng Seeed XIAO nRF52840 Sense ở 100Hz qua nhiều phiên ghi. Trong luận văn này, thiết bị này được dùng như nền tảng cảm biến và benchmark tham chiếu; năng lực đa thiết bị được đánh giá riêng thông qua kiến trúc generator và các loại gói sinh ra cho từng đích. Mỗi hoạt động được ghi trong 30--60 giây qua nhiều phiên, với chú trọng vào việc ghi nhận đầy đủ các giai đoạn chuyển tiếp giữa các hoạt động. Giao diện cửa sổ kéo thả được sử dụng để phân đoạn các bản ghi liên tục thành \textbf{mẫu được gán nhãn} (các đoạn hoạt động được chú thích thủ công), trích xuất nhiều cửa sổ đại diện mỗi hoạt động.
 
 \textit{Quy trình Trích xuất Đặc trưng}: Mỗi mẫu được gán nhãn (thường dài 30-60 giây) sau đó được xử lý bằng cách tiếp cận cửa sổ trượt (Phần~\ref{sec:feature_extraction}) với cửa sổ 1,5 giây và chồng lấp 50\%. Điều này chuyển đổi các mẫu được gán nhãn thành 159 \textbf{vectors đặc trưng} (điểm dữ liệu huấn luyện) được chia thành các tập huấn luyện (101 mẫu, 63,5\%), xác thực (28 mẫu, 17,6\%) và kiểm tra (30 mẫu, 18,9\%). Tập dữ liệu chứa năm lớp hoạt động:
 \begin{itemize}
@@ -780,7 +830,14 @@ Dữ liệu được thu thập bằng nền tảng Seeed XIAO nRF52840 Sense �
     \item Walking Downstairs: 35 mẫu tổng cộng (22,0\%)
     \item Walking Upstairs: 34 mẫu tổng cộng (21,4\%)
 \end{itemize}
-Tỷ lệ mất cân bằng lớp: 1,17:1 (walking downstairs so với running/still/walking), đại diện cho một tập dữ liệu tương đối cân bằng phù hợp để chứng minh hiệu quả trọng số lớp mà không có mất cân bằng cực đoan. Mỗi vector đặc trưng chứa 90 đặc trưng miền thời gian (15 đặc trưng × 6 trục cảm biến).
+Tỷ lệ mất cân bằng lớp: 1,17:1 (walking downstairs so với running/still/walking), đại diện cho một tập dữ liệu tương đối cân bằng. Mỗi vector đặc trưng chứa 90 đặc trưng miền thời gian (15 đặc trưng × 6 trục cảm biến).
+
+\textbf{Cấu hình đánh giá}: Các thử nghiệm được thực hiện với hai cấu hình phân lớp:
+\begin{itemize}
+    \item \textbf{5 lớp} (đầy đủ): Running, Still, Walking, Walking Downstairs, Walking Upstairs---đánh giá khả năng phân biệt các hoạt động có tín hiệu IMU tương đồng
+    \item \textbf{3 lớp} (gộp): Running, Still, Walking (gộp ba biến thể đi bộ thành một lớp duy nhất)---đánh giá triển khai thực tế
+\end{itemize}
+Cấu hình 3 lớp phản ánh thực tế rằng các biến thể đi bộ (bằng phẳng, lên cầu thang, xuống cầu thang) tạo ra tín hiệu IMU rất tương đồng khi chỉ sử dụng một cảm biến đeo cổ tay, gây nhầm lẫn hệ thống giữa các lớp walking trong kiểm thử trên thiết bị thực. Nhiều ứng dụng thực tế (theo dõi sức khỏe, phát hiện ngã) chỉ cần phân biệt mức độ hoạt động tổng thể (tĩnh/đi bộ/chạy) thay vì chi tiết hóa kiểu di chuyển, do đó cấu hình 3 lớp phù hợp hơn cho triển khai biên.
 
 \subsection{Các Số liệu Đánh giá}
 Hiệu suất mô hình được đánh giá bằng cách sử dụng:
@@ -796,18 +853,18 @@ Hiệu suất triển khai biên được đo qua:
 \begin{itemize}
     \item \textbf{Thời gian Suy luận}: Thời gian trung bình để phân loại một cửa sổ 150 mẫu (ms), được đo bằng cách sử dụng thời gian Arduino \texttt{micros()} qua 100 dự đoán liên tiếp trên phần cứng đích
     \item \textbf{Sử dụng Bộ nhớ}: Flash (lưu trữ chương trình) và SRAM (biến/bộ đệm thời gian chạy) tiêu thụ (KB), được trích xuất từ các tệp bản đồ trình biên dịch và đầu ra xây dựng Arduino IDE cho thấy kích thước nhị phân đã biên dịch thực tế
-    \item \textbf{Tiêu thụ Điện năng}: Dòng điện trung bình rút trong các giai đoạn hoạt động khác nhau (nhàn rỗi, lấy mẫu cảm biến, trích xuất đặc trưng, dự đoán). \textit{Lưu ý: Các giá trị điện năng được báo cáo trong luận văn này là ước lượng được tính toán từ các đặc tả tiêu thụ dòng điện ARM Cortex-M4F điển hình (8-12 mA hoạt động, 2-3 mA nhàn rỗi ở 64MHz) và phần trăm thời gian thực thi đã đo, không phải đo lường phần cứng trực tiếp với các màn hình điện năng (ví dụ: Joulescope, Nordic PPK2). Tiêu thụ điện năng thực tế có thể thay đổi $\pm$15-20\% dựa trên triển khai phần cứng cụ thể, đặc tính cảm biến và các yếu tố môi trường. Công việc tương lai nên xác thực các ước lượng này với thiết bị tạo hồ sơ điện năng phần cứng.}
+    \item \textbf{Tiêu thụ Điện năng}: Dòng điện trung bình rút trong các giai đoạn hoạt động khác nhau (nhàn rỗi, lấy mẫu cảm biến, trích xuất đặc trưng, dự đoán)\footnote{Các giá trị điện năng được báo cáo là ước lượng tính toán từ đặc tả dòng điện ARM Cortex-M4F điển hình (8--12\,mA hoạt động, 2--3\,mA nhàn rỗi ở 64\,MHz) và phần trăm thời gian thực thi đã đo, không phải đo lường trực tiếp bằng thiết bị chuyên dụng (Joulescope, Nordic PPK2). Giá trị thực tế có thể thay đổi $\pm$15--20\%.}
     \item \textbf{Tần số Dự đoán}: Tốc độ suy luận bền vững tính đến chi phí lấy mẫu cảm biến (dự đoán mỗi giây)
     \item \textbf{Độ phủ Đích Triển khai}: Số lượng họ nền tảng và backend triển khai có thể được sinh mã từ cùng một mô hình đã huấn luyện, được xác minh qua ma trận generator và cấu trúc tệp đầu ra
 \end{itemize}
 Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: suy luận $<$ 100ms mỗi cửa sổ (cho phép cập nhật 10Hz thời gian thực), flash $<$ 500KB (để lại khoảng trống cho mã ứng dụng), SRAM $<$ 128KB (50\% của 256KB có sẵn), điện năng $<$ 50mW trung bình (hỗ trợ hoạt động pin nhiều giờ).
 
 \subsection{Các So sánh Cơ sở}
-Để đặt hiệu suất framework trong ngữ cảnh, kết quả được so sánh với:
+Để đặt hiệu suất trong ngữ cảnh, kết quả được so sánh với:
 \begin{enumerate}
-    \item \textbf{Edge Impulse}: Nền tảng thương mại với quy trình tự động (áp dụng giới hạn gói miễn phí)
-    \item \textbf{Triển khai TensorFlow Lite Thủ công}: Đại diện cho triển khai tùy chỉnh cấp độ chuyên gia
-    \item \textbf{Huấn luyện Không cân bằng}: Cùng framework nhưng không có cân bằng trọng số lớp (nghiên cứu loại bỏ)
+    \item \textbf{Edge Impulse}: Nền tảng thương mại với quy trình tự động (áp dụng giới hạn gói miễn phí), so sánh ở cả khía cạnh độ chính xác mô hình lẫn tài nguyên triển khai
+    \item \textbf{Triển khai TFLite Micro thủ công}: Quy trình chuyển đổi mô hình thủ công qua pipeline PyTorch $\rightarrow$ ONNX $\rightarrow$ TFLite, đại diện cho cách tiếp cận tùy chỉnh cấp chuyên gia
+    \item \textbf{Huấn luyện không cân bằng}: Cùng quy trình nhưng không áp dụng cân bằng trọng số lớp (nghiên cứu loại bỏ---ablation study)
 \end{enumerate}
 
 \section{Chi tiết Triển khai}
@@ -830,4 +887,4 @@ Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: su
 \end{itemize}
 
 \textbf{Tính khả dụng Mã:}
-Mã nguồn framework, các tập dữ liệu mẫu và các ví dụ triển khai có sẵn trong kho dự án.
+Mã nguồn, các tập dữ liệu mẫu và các ví dụ triển khai có sẵn trong kho dự án.
