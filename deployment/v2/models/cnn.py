@@ -122,7 +122,7 @@ class CNNModelBlock(ModelBlock):
     def _normalise_layers(self):
         supported = {"conv1d", "maxpool1d", "dense"}
         unsupported = sorted(
-            {str(layer.get("type", "")) for layer in self.layers
+            {layer.get("type", "") for layer in self.layers
              if layer.get("type") not in supported}
         )
         if unsupported:

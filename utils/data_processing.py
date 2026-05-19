@@ -87,6 +87,8 @@ def fft_lowpass_filter(data, cutoff=10, fs=None, window_size=None):
         data: DataFrame of numeric columns.
         cutoff: Cutoff frequency in Hz (first bin to zero out).
         fs: Sampling frequency in Hz.  Defaults to ``DEFAULT_SAMPLING_RATE``.
+        window_size: Optional chunk size in samples. If ``None``, the full
+            signal is filtered as a single window.
     """
     if fs is None:
         fs = DEFAULT_SAMPLING_RATE
@@ -94,9 +96,12 @@ def fft_lowpass_filter(data, cutoff=10, fs=None, window_size=None):
     numeric_cols = data.select_dtypes(
         include=['float64', 'float32', 'int64', 'int32']).columns
     n = len(data)
-    if not window_size or int(window_size) <= 0:
+    if window_size is None:
         window_size = n
-    window_size = int(window_size)
+    else:
+        window_size = int(window_size)
+        if window_size <= 0:
+            raise ValueError("window_size must be a positive integer when provided")
 
     for col in numeric_cols:
         x = data[col].values.astype(float)
