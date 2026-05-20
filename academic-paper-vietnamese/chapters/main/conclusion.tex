@@ -9,11 +9,11 @@ Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển đ�
 \begin{enumerate}
     \item \textbf{Giao Diện Tiền Xử Lý Tương Tác Mới Lạ}: Cơ chế phân đoạn cửa sổ thời gian kéo thả đại diện cho công cụ chú thích trực quan đầu tiên cho dữ liệu cảm biến chuyển động, loại bỏ sự lựa chọn truyền thống giữa việc coding logic phân đoạn phức tạp và chấp nhận các phương pháp tự động hộp đen. Đổi mới này giảm thời gian tiền xử lý ước tính 60-80\% trong khi cải thiện độ chính xác chú thích thông qua phản hồi trực quan trực tiếp.
 
-    \item \textbf{Hỗ Trợ Đa Thuật Toán Toàn Diện}: Không giống như các nền tảng thương mại giới hạn ở mạng nơ-ron hoặc các thuật toán ML chuyên biệt, framework này tích hợp ba phương pháp bổ sung (Random Forest, SVM, Neural Networks) với các API nhất quán và tối ưu hóa siêu tham số tự động. Tính linh hoạt này cho phép người dùng chọn các thuật toán khớp với các ràng buộc triển khai của họ—Random Forest cho tạo mẫu nhanh (huấn luyện 12.3s), Neural Networks cho độ chính xác tối đa (96.2\%), hoặc SVM cho khả năng diễn giải lý thuyết.
+    \item \textbf{Hỗ Trợ Đa Thuật Toán Toàn Diện}: Không giống như các nền tảng thương mại giới hạn ở mạng nơ-ron hoặc các thuật toán ML chuyên biệt, framework này tích hợp năm thuật toán (Random Forest, SVM, Neural Network, PyTorch MLP, PyTorch 1D-CNN) với các API nhất quán. Tính linh hoạt này cho phép người dùng chọn các thuật toán khớp với các ràng buộc triển khai của họ---Random Forest cho tạo mẫu nhanh (huấn luyện 0,15s), PyTorch MLP/CNN cho độ chính xác tối đa (99,13\%), hoặc SVM cho khả năng diễn giải lý thuyết.
 
-    \item \textbf{Kiến Trúc Triển Khai Đa Thiết bị Nhận Biết Tối Ưu hóa}: Thay vì gắn với một bo mạch duy nhất, tầng generator được tổ chức theo ba trục—loại mô hình, nền tảng đích và backend triển khai—cho phép xuất các gói C/C++/MicroPython cho Arduino-compatible boards, ARM Cortex-M, ESP-IDF, Zephyr và các backend runtime thay thế như TFLite Micro hoặc ONNX Runtime. Mã được tạo trên nền tảng tham chiếu đạt độ trễ suy luận 12-18ms và dấu chân bộ nhớ 95-182KB trên vi điều khiển 64MHz, cho thấy kiến trúc đủ gọn để chuyển sang các thiết bị cùng lớp tài nguyên.
+    \item \textbf{Kiến Trúc Triển Khai Đa Thiết bị Nhận Biết Tối Ưu hóa}: Thay vì gắn với một bo mạch duy nhất, tầng generator được tổ chức theo ba trục---loại mô hình, nền tảng đích và backend triển khai---cho phép xuất các gói C/C++/MicroPython cho Arduino-compatible boards, ARM Cortex-M, ESP-IDF, Zephyr và các backend runtime thay thế như TFLite Micro hoặc ONNX Runtime. Bốn chế độ tối ưu hóa (\texttt{accuracy}, \texttt{balanced}, \texttt{speed}, \texttt{power}) điều chỉnh độ chính xác số học và chiến lược bộ đệm theo ràng buộc tài nguyên của nền tảng đích.
 
-    \item \textbf{Xử Lý Mất Cân Bằng Lớp}: Bằng cách làm cho \texttt{class\_weight='balanced'} là một cấu hình mặc định thay vì tham số tùy chọn, framework hệ thống giải quyết một thách thức quan trọng nhưng thường bị bỏ qua trong theo dõi chuyển động thực tế. Thực nghiệm chứng minh cải thiện +42-47\% trong recall lớp thiểu số, chuyển đổi các mô hình từ các nguyên mẫu nghiên cứu thành các hệ thống sẵn sàng triển khai.
+    \item \textbf{Xử Lý Mất Cân Bằng Lớp}: Bằng cách làm cho \texttt{class\_weight='balanced'} là một cấu hình mặc định thay vì tham số tùy chọn, framework hệ thống giải quyết một thách thức quan trọng nhưng thường bị bỏ qua trong theo dõi chuyển động thực tế. Thực nghiệm chứng minh các lớp thiểu số (Walking Downstairs: 38 mẫu, Walking Upstairs: 35 mẫu) đạt recall 0,971--1,000 và F1 $\geq$ 0,949, xác nhận hiệu quả của chiến lược cân bằng.
 
     \item \textbf{Đảm Bảo Tương Đồng Huấn Luyện-Triển Khai}: Luận văn này xác định và giải quyết một thách thức ít được nghiên cứu trong edge ML: sự không khớp giữa pipeline trích xuất đặc trưng huấn luyện (Python) và suy luận (C++). Quy trình xác minh 12 điểm kiểm tra đảm bảo tính nhất quán bit-exact cho các đặc trưng miền thời gian, bao gồm sửa lỗi zero-padding, thống nhất công thức kurtosis/skewness, và reorder đặc trưng tự động tại thời điểm tạo mã. Phát hiện này nhấn mạnh rằng tính minh bạch không chỉ là triết lý mã nguồn mở mà là yêu cầu kỹ thuật thiết yếu cho triển khai edge ML đáng tin cậy \cite{paleyes2022challenges}.
 
@@ -25,10 +25,10 @@ Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển đ�
 \subsection{Xác Thực Thực Nghiệm}
 Các thử nghiệm toàn diện sử dụng tập dữ liệu Nhận Dạng Hoạt Động Con Người năm lớp xác thực hiệu quả của framework:
 \begin{itemize}
-    \item \textbf{Độ Chính Xác Mô Hình}: 93.8-96.2\% trên ba thuật toán, với Neural Networks đạt 96.2\%—trong vòng 0.3\% của triển khai TensorFlow Lite thủ công chuyên gia trong khi yêu cầu chuyên môn kỹ thuật ít hơn đáng kể
-    \item \textbf{Hiệu Suất Theo Từng Lớp}: F1-scores cân bằng (0.93-0.98) trên tất cả các lớp hoạt động, bao gồm các lớp thiểu số đầy thách thức, chứng minh khả năng áp dụng mạnh mẽ
-    \item \textbf{Tính Khả Thi Thời Gian Thực}: Suy luận 9-18ms trên nền tảng tham chiếu ARM Cortex-M4 @ 64MHz với tiêu thụ điện năng 30mW, cho phép hoạt động pin liên tục 65+ giờ
-    \item \textbf{Định Vị Cạnh Tranh}: Vượt trội các nền tảng thương mại (Edge Impulse, SensiML) 1.4-3.1\% độ chính xác trong khi vẫn hoàn toàn miễn phí và mã nguồn mở
+    \item \textbf{Độ Chính Xác Mô Hình}: 97,38--99,13\% trên năm thuật toán cho bài toán 5 lớp, 100\% cho bài toán 3 lớp cơ bản---xác nhận hiệu quả của 63 đặc trưng bất biến hướng
+    \item \textbf{Hiệu Suất Theo Từng Lớp}: F1-scores 0,949--1,000 trên tất cả các lớp hoạt động, bao gồm các lớp thiểu số (Walking Downstairs, Walking Upstairs), chứng minh khả năng phân loại đáng tin cậy
+    \item \textbf{Tính Khả Thi Thời Gian Thực}: Triển khai thành công trên nền tảng tham chiếu Seeed XIAO nRF52840 (ARM Cortex-M4F @ 64~MHz), với dữ liệu tham khảo cho thấy PyTorch 1D-CNN đạt 99,4\% độ chính xác trên thiết bị
+    \item \textbf{Định Vị Cạnh Tranh}: Cung cấp tính minh bạch hoàn toàn, không phụ thuộc đám mây, và chi phí bằng không so với các nền tảng thương mại (Edge Impulse \$20--100/tháng, SensiML \$99--500/tháng)
     \item \textbf{Đa Thiết bị theo Kiến trúc}: Tầng generator hỗ trợ các đích Arduino-compatible, ARM Cortex-M, generic C/C++, ESP-IDF, MicroPython và Zephyr; Seeed XIAO được dùng như ca benchmark đại diện chứ không phải thiết bị đích duy nhất
     \item \textbf{Tương Đồng Huấn Luyện-Triển Khai}: Xác minh 12 điểm kiểm tra đảm bảo đặc trưng miền thời gian giống hệt giữa Python và C++, loại bỏ nguồn gốc chính của suy giảm hiệu suất triển khai biên
     \item \textbf{Tăng Cường Nhận Biết Lớp}: Chiến lược tăng cường phân biệt tĩnh/động ngăn chặn class confusion được quan sát với tăng cường đồng nhất, bảo toàn đặc tính phân biệt của hoạt động tĩnh
@@ -51,11 +51,11 @@ Các mục tiêu nghiên cứu ban đầu được nêu trong Mục 1.3 đã đ�
 \begin{enumerate}
     \item \textbf{Hệ Thống Tiền Xử Lý Tương Tác} \checkmark: Giao diện cửa sổ thời gian kéo thả được triển khai thành công và tích hợp với kiểm tra tín hiệu trực quan
     
-    \item \textbf{Hỗ Trợ Đa Thuật Toán} \checkmark: Ba thuật toán (RF, SVM, NN) được tích hợp với tối ưu hóa siêu tham số tự động mang lại cải thiện độ chính xác 1.9-2.7\%
+    \item \textbf{Hỗ Trợ Đa Thuật Toán} \checkmark: Năm thuật toán (RF, SVM, NN, PyTorch MLP, PyTorch 1D-CNN) được tích hợp, tất cả đạt 97,38--99,13\% trên bài toán 5 lớp, cho phép lựa chọn theo ràng buộc triển khai
     
     \item \textbf{Tạo Mã Không Phụ Thuộc Nền Tảng} \checkmark: Kiến trúc trình tạo modular được tổ chức theo ma trận model-platform-backend, hỗ trợ nhiều họ đích triển khai; benchmark định lượng hiện được báo cáo trên nền tảng tham chiếu ARM Cortex-M4 với bốn chế độ tối ưu hóa
     
-    \item \textbf{Xác Thực Hiệu Quả Framework} \checkmark: Đánh giá toàn diện chứng minh độ chính xác cạnh tranh (96.2\%), hiệu suất thời gian thực (suy luận 12ms trên nền tảng tham chiếu) và khả năng tái đóng gói cùng một pipeline cho nhiều đích triển khai khác nhau
+    \item \textbf{Xác Thực Hiệu Quả Framework} \checkmark: Đánh giá toàn diện chứng minh độ chính xác cạnh tranh (97,38--99,13\%), triển khai thành công trên thiết bị tham chiếu (99,4\% trên thiết bị cho CNN bài toán 3 lớp), và khả năng tái đóng gói cùng một pipeline cho nhiều đích triển khai khác nhau
     
     \item \textbf{Khả Năng Tiếp Cận} \checkmark: GUI dựa trên web với đường cong học tập thấp làm cho phát triển edge AI tiên tiến có thể tiếp cận với phi chuyên gia trong khi duy trì khả năng cấp chuyên nghiệp
     
@@ -67,16 +67,16 @@ Các mục tiêu nghiên cứu ban đầu được nêu trong Mục 1.3 đã đ�
 Framework đã xác thực cho phép các ứng dụng thực tế đa dạng:
 
 \paragraph{Y Tế và Phục Hồi Chức Năng}
-Các hệ thống đeo để giám sát mức độ hoạt động của bệnh nhân, theo dõi tiến trình phục hồi chức năng (phục hồi di động sau phẫu thuật, trị liệu đột quỵ), phát hiện té ngã trong quần thể người cao tuổi và cung cấp dữ liệu hoạt động khách quan cho các thử nghiệm lâm sàng. Tuổi thọ pin 65 giờ và hoạt động thời gian thực hỗ trợ giám sát liên tục nhiều ngày mà không gây gánh nặng cho bệnh nhân.
+Các hệ thống đeo để giám sát mức độ hoạt động của bệnh nhân, theo dõi tiến trình phục hồi chức năng (phục hồi di động sau phẫu thuật, trị liệu đột quỵ), phát hiện té ngã trong quần thể người cao tuổi và cung cấp dữ liệu hoạt động khách quan cho các thử nghiệm lâm sàng. Kiến trúc tiêu thụ thấp của vi điều khiển ARM Cortex-M4F hỗ trợ giám sát liên tục nhiều ngày mà không gây gánh nặng cho bệnh nhân.
 
 \paragraph{Thể Thao và Thể Dục}
-Phát hiện và phân loại tập luyện tự động (chạy, đạp xe, cử tạ), phân tích hình thức để phòng ngừa chấn thương (phát hiện bất đối xứng dáng đi, kỹ thuật nâng không đúng) và phản hồi đào tạo cá nhân hóa. Độ trễ dưới 20ms cho phép các ứng dụng huấn luyện thời gian thực nơi phản hồi ngay lập tức là quan trọng.
+Phát hiện và phân loại tập luyện tự động (chạy, đạp xe, cử tạ), phân tích hình thức để phòng ngừa chấn thương (phát hiện bất đối xứng dáng đi, kỹ thuật nâng không đúng) và phản hồi đào tạo cá nhân hóa. Cửa sổ trượt 1,5 giây với bước trượt 0,75 giây đảm bảo phản hồi gần thời gian thực cho các ứng dụng huấn luyện.
 
 \paragraph{Nghiên Cứu và Giáo Dục}
 Nền tảng chi phí thấp để giảng dạy các khái niệm edge AI trong các khóa học đại học/sau đại học, cho phép các phòng thí nghiệm thực hành mà không cần giấy phép thương mại đắt đỏ. Các nhà nghiên cứu có thể nhanh chóng tạo mẫu các thuật toán nhận dạng hoạt động mới lạ và triển khai lên phần cứng để xác thực hiện trường. Bản chất mã nguồn mở tạo điều kiện cho nghiên cứu có thể tái tạo và đóng góp cộng đồng.
 
 \paragraph{Nhà Thông Minh và Hỗ Trợ Sống Môi Trường}
-Giám sát hoạt động cho người cao tuổi sống độc lập (phát hiện các mẫu không hoạt động bất thường, theo dõi thói quen hàng ngày), tự động hóa nhà thông minh nhận biết bối cảnh (điều chỉnh ánh sáng/nhiệt độ dựa trên hoạt động được phát hiện) và phân tích xu hướng sức khỏe dài hạn. Tiêu thụ điện năng thấp (30mW) hỗ trợ cảm biến luôn bật mà không cần thay pin thường xuyên.
+Giám sát hoạt động cho người cao tuổi sống độc lập (phát hiện các mẫu không hoạt động bất thường, theo dõi thói quen hàng ngày), tự động hóa nhà thông minh nhận biết bối cảnh (điều chỉnh ánh sáng/nhiệt độ dựa trên hoạt động được phát hiện) và phân tích xu hướng sức khỏe dài hạn. Đặc tính tiêu thụ thấp của lớp vi điều khiển ARM Cortex-M hỗ trợ cảm biến luôn bật phù hợp cho các ứng dụng giám sát dài hạn.
 
 \section{Các Hạn Chế và Công Việc Tương Lai}
 
@@ -92,7 +92,7 @@ Xác thực hiện tại sử dụng dữ liệu đối tượng đơn cho năm 
 
 \subsection{Các Mở Rộng Thuật Toán}
 \begin{itemize}
-    \item \textbf{Học Sâu}: Tích hợp TensorFlow Lite Micro cho triển khai CNN/LSTM/Transformer, hỗ trợ học từ đầu đến cuối từ dữ liệu cảm biến thô
+    \item \textbf{Học Sâu Mở rộng}: Tích hợp LSTM/Transformer và mở rộng đường dẫn TFLite Micro cho các kiến trúc phức tạp hơn, hỗ trợ học từ đầu đến cuối từ dữ liệu cảm biến thô
     \item \textbf{Học Trực Tuyến}: Cho phép các mô hình đã triển khai thích ứng với các mẫu cụ thể của người dùng theo thời gian mà không cần kết nối đám mây
     \item \textbf{Các Phương Pháp Ensemble}: Kết hợp nhiều dự đoán thuật toán (bỏ phiếu RF + NN + SVM) cho độ bền vững được cải thiện
     \item \textbf{Học Không Giám Sát}: Khám phá hoạt động tự động mà không cần gán nhãn thủ công cho các ứng dụng khám phá

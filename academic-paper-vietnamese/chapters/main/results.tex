@@ -1,311 +1,297 @@
-\chapter{Kết Quả}
+\chapter{Kết Quả Thực Nghiệm}
 \label{chap:results}
 
-\section{Tổng Quan}
-Phần này trình bày kết quả thực nghiệm xác thực hiệu quả của framework đề xuất cho việc tạo các mô hình AI cho nhận dạng hoạt động con người dựa trên biên. Đánh giá được thực hiện theo hai lớp: (1) chất lượng pipeline mô hình độc lập nền tảng, và (2) khả năng triển khai đa thiết bị của hệ thống tạo mã. Cụ thể, các phân tích bao gồm: độ chính xác mô hình và hiệu suất theo từng lớp, tác động của các chiến lược cân bằng lớp, ma trận đích triển khai được hỗ trợ, đặc điểm triển khai biên (thời gian suy luận, sử dụng bộ nhớ, tiêu thụ điện năng), và so sánh với các phương pháp cơ sở và nền tảng thương mại. Tất cả các thử nghiệm sử dụng tập dữ liệu HAR được mô tả trong Mục 3.7.1, bao gồm dữ liệu đối tượng đơn được thu thập trên năm lớp hoạt động như một chứng minh khái niệm về khả năng của framework. Các số đo độ trễ, bộ nhớ và điện năng được đo trên Seeed XIAO nRF52840 như một nền tảng tham chiếu thuộc lớp ARM Cortex-M4F; do đó chúng được dùng để minh họa tính khả thi phần cứng chứ không đại diện đồng nhất cho toàn bộ ma trận đích mà framework hỗ trợ. Xác thực đa đối tượng trên các quần thể đa dạng vẫn là công việc tương lai cần thiết cho các tuyên bố tổng quát hóa.
+\section{Thiết lập Thực nghiệm}
+\label{sec:experimental_setup}
 
-\section{Hiệu Suất Huấn Luyện Mô Hình}
-
-\subsection{Độ Chính Xác Tổng Thể}
-Bảng \ref{tab:model_accuracy} tóm tắt độ chính xác phân loại tổng thể cho ba thuật toán đã triển khai trên tập kiểm tra được giữ lại 20\%.
-
-\begin{table}[H]
-    \centering
-    \caption{Độ Chính Xác Mô Hình Tổng Thể trên Tập Kiểm Tra (HAR 5 lớp, Đối tượng Đơn)}
-    \begin{tabular}{@{}lcccc@{}}
-        \toprule
-        Mô Hình & Độ chính xác (\%) & Thời gian Huấn luyện (s) & Suy luận (ms) & Bộ nhớ (KB) \\ 
-        \midrule
-        Random Forest & 94.5 & 12.3 & 15 & 182 \\
-        Neural Network & 96.2 & 45.7 & 12 & 95 \\
-        SVM (RBF) & 93.8 & 67.2 & 18 & 124 \\ 
-        \bottomrule
-    \end{tabular}
-    \label{tab:model_accuracy}
-\end{table}
-
-Neural Networks đạt độ chính xác cao nhất (96.2\%), tiếp theo là Random Forest (94.5\%) và SVM (93.8\%). Hiệu suất vượt trội của Neural Network đi kèm với chi phí thời gian huấn luyện dài hơn (45.7s so với 12.3s cho RF), mặc dù suy luận vẫn nhanh (12ms) và dấu chân bộ nhớ là nhỏ nhất (95KB flash). Random Forest cung cấp tốc độ huấn luyện tốt nhất trong khi vẫn duy trì độ chính xác cạnh tranh, làm cho nó phù hợp cho các kịch bản tạo mẫu nhanh.
-
-\subsection{Hiệu Suất Theo Từng Lớp}
-Bảng \ref{tab:perclass_metrics} trình bày các số liệu precision, recall và F1-score chi tiết cho mỗi lớp hoạt động sử dụng mô hình Neural Network có hiệu suất tốt nhất.
-
-\begin{table}[H]
-    \centering
-    \caption{Các Số Liệu Hiệu Suất Theo Từng Lớp (Mô Hình Neural Network, 5 Hoạt động)}
-    \begin{tabular}{@{}lcccc@{}}
-        \toprule
-        Hoạt Động & Precision & Recall & F1-Score & Support \\ 
-        \midrule
-        Still & 0.96 & 0.95 & 0.95 & 6 \\
-        Walking & 0.95 & 0.96 & 0.96 & 6 \\
-        Walking Upstairs & 0.94 & 0.93 & 0.94 & 6 \\
-        Walking Downstairs & 0.97 & 0.98 & 0.97 & 7 \\
-        Running & 0.98 & 0.99 & 0.98 & 5 \\
-        \midrule
-        \textbf{Macro Average} & \textbf{0.96} & \textbf{0.96} & \textbf{0.96} & \textbf{30} \\
-        \textbf{Weighted Average} & \textbf{0.96} & \textbf{0.96} & \textbf{0.96} & \textbf{30} \\
-        \bottomrule
-    \end{tabular}
-    \label{tab:perclass_metrics}
-\end{table}
-
-Tất cả các hoạt động đạt F1-scores trên 0.93, cho thấy hiệu suất precision-recall cân bằng trên năm lớp hoạt động. Đáng chú ý, \textit{Walking Downstairs} đạt F1-score 0.97, chứng minh cân bằng lớp hiệu quả. \textit{Running} được phát hiện chính xác nhất (F1 = 0.98), có thể do các mẫu gia tốc cường độ cao đặc biệt phân biệt rõ ràng nó với các hoạt động khác. \textit{Walking Upstairs} cho thấy recall thấp hơn một chút (0.93), với sự nhầm lẫn thỉnh thoảng với \textit{Walking} thông thường (xem phân tích ma trận nhầm lẫn bên dưới).
-
-\subsection{Phân Tích Ma Trận Nhầm Lẫn}
-Hình \ref{fig:confusion_matrix} trình bày ma trận nhầm lẫn cho mô hình Neural Network, tiết lộ các mẫu phân loại sai. Hình \ref{fig:ui_results} cho thấy bảng điều khiển kết quả tương tác nơi người dùng có thể khám phá ma trận nhầm lẫn, số liệu theo từng lớp và trực quan hóa hiệu suất mô hình.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{figures/confusion_matrix_nn.png}
-    \caption{Ma Trận Nhầm Lẫn cho Mô Hình Neural Network (HAR 5 lớp, độ chính xác 96.2\%, xác thực đối tượng đơn)}
-    \label{fig:confusion_matrix}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_results_display.png}
-    \caption{Bảng điều khiển kết quả hiển thị ma trận nhầm lẫn và số liệu hiệu suất. Giao diện cung cấp trực quan hóa tương tác bao gồm ma trận nhầm lẫn với heatmaps, precision/recall/F1-scores theo từng lớp, số liệu độ chính xác tổng thể, đường cong ROC và báo cáo hiệu suất có thể tải xuống. Người dùng có thể so sánh nhiều mô hình cạnh nhau.}
-    \label{fig:ui_results}
-\end{figure}
-
-Ma trận nhầm lẫn tiết lộ:
+Toàn bộ thực nghiệm sử dụng dữ liệu IMU 6 trục (gia tốc kế + con quay hồi chuyển) được thu thập từ một đối tượng trên thiết bị Seeed XIAO nRF52840 Sense (IMU LSM6DS3 tích hợp) ở tần số lấy mẫu 100~Hz. Dữ liệu gồm các bản ghi 30--60 giây cho mỗi hoạt động. Hai cấu hình bài toán được đánh giá:
 \begin{itemize}
-    \item \textbf{Đường Chéo Chiếm Ưu Thế}: 96.2\% mẫu được phân loại chính xác
-    \item \textbf{Walking vs Walking Upstairs}: 3.2\% của walking upstairs bị phân loại sai thành walking thông thường, có thể do các mẫu chuyển động phần dưới cơ thể tương tự ở tốc độ vừa phải khi cầu thang được leo chậm
-    \item \textbf{Hoạt Động Still}: Phân loại sai thỉnh thoảng thành walking (1.8\%) khi cử động nhỏ hoặc điều chỉnh tư thế tạo ra các biến đổi gia tốc nhỏ
-    \item \textbf{Running}: Không có nhầm lẫn với các lớp khác, cho thấy dấu hiệu chuyển động cường độ cao đặc biệt với các đặc tính tần số độc nhất
+    \item \textbf{Bài toán 3 lớp}: running, still, walking --- ba hoạt động có đặc điểm sinh cơ học khác biệt rõ rệt
+    \item \textbf{Bài toán 5 lớp}: running, still, walking, walking\_downstairs, walking\_upstairs --- bổ sung hai hoạt động có dấu hiệu chuyển động tương tự nhau (leo và xuống cầu thang so với đi bộ thường)
 \end{itemize}
 
-\section{Tác Động của Cân Bằng Lớp}
+Các tham số chung: kích thước cửa sổ $W = 150$ mẫu (1,5 giây), bước trượt $S = 75$ mẫu (50\% chồng lấp), đệm cửa sổ bằng lặp giá trị biên (edge-value replication). Chia dữ liệu: 60\% huấn luyện, 20\% xác thực, 20\% kiểm tra, sử dụng phân chia phân tầng (stratified split). Loại đặc trưng sử dụng: \texttt{orientation\_invariant} (63 đặc trưng: thống kê thời gian trên acc\_mag, gyro\_mag, acc\_jerk\_mag cộng với đặc trưng phổ DFT trên acc\_mag và gyro\_mag); riêng CNN sử dụng đầu vào thô 6 trục ($150 \times 6$).
 
-\subsection{Nghiên Cứu Loại Bỏ}
-Để định lượng hiệu quả của cân bằng trọng số lớp, một nghiên cứu loại bỏ được tiến hành để so sánh các mô hình được huấn luyện có và không có tham số \texttt{class\_weight='balanced'}. Bảng \ref{tab:class_balance_ablation} cho thấy kết quả cho Random Forest và SVM.
+Năm thuật toán được đánh giá: Neural Network (sklearn MLP), Random Forest, SVM (RBF kernel), PyTorch MLP và PyTorch 1D-CNN. Tất cả các mô hình sử dụng cân bằng trọng số lớp (\texttt{class\_weight='balanced'}) khi áp dụng được.
+
+\section{Kết quả Huấn luyện}
+\label{sec:training_results}
+
+\subsection{Bài toán 3 lớp (running / still / walking)}
+\label{sec:three_class}
+
+Bảng~\ref{tab:3class_accuracy} tóm tắt kết quả huấn luyện cho bài toán 3 lớp. Ba hoạt động này có đặc trưng sinh cơ học phân biệt rõ rệt: running có biên độ gia tốc cao và tần số bước nhanh; still gần như bất động với magnitude gia tốc ổn định quanh $g$; walking có biên độ trung gian với tần số bước đặc trưng.
 
 \begin{table}[H]
     \centering
-    \caption{Nghiên Cứu Loại Bỏ: Tác Động của Cân Bằng Lớp đến Các Lớp Thiểu Số}
+    \caption{Kết quả huấn luyện --- bài toán 3 lớp (63 đặc trưng orientation-invariant, tập kiểm tra 156 mẫu)}
+    \label{tab:3class_accuracy}
     \begin{tabular}{@{}lccccc@{}}
         \toprule
-        \multirow{2}{*}{Mô Hình} & \multirow{2}{*}{Cân bằng} & \multicolumn{2}{c}{Walking Downstairs (Thiểu số)} & \multicolumn{2}{c}{Tổng Thể} \\
-        \cmidrule(lr){3-4} \cmidrule(lr){5-6}
-        & & Recall & F1 & Độ chính xác (\%) & Macro F1 \\ 
+        Thuật toán & Kiến trúc / Cấu hình & \makecell{Thời gian\\huấn luyện (s)} & \makecell{Độ chính xác\\huấn luyện (\%)} & \makecell{Độ chính xác\\xác thực (\%)} & \makecell{Độ chính xác\\kiểm tra (\%)} \\
         \midrule
-        Random Forest & Không & 0.67 & 0.71 & 91.2 & 0.87 \\
-        Random Forest & Có & 0.95 & 0.96 & 94.5 & 0.94 \\
-        \midrule
-        SVM (RBF) & Không & 0.63 & 0.68 & 89.7 & 0.85 \\
-        SVM (RBF) & Có & 0.93 & 0.94 & 93.8 & 0.93 \\
+        Neural Network & 63--100--50--3 & 0,22 & 99,17 & 100,00 & 100,00 \\
+        Random Forest & 50 cây, sâu tối đa 10 & 0,12 & 100,00 & --- & 100,00 \\
+        SVM (RBF) & $C\!=\!1$, $\gamma\!=\!\text{scale}$ & 0,09 & 100,00 & --- & 100,00 \\
+        PyTorch MLP & 63--ẩn--3 & 2,54 & 99,86 & 100,00 & 100,00 \\
+        PyTorch 1D-CNN & $150 \times 6$ thô & 10,29 & 100,00 & 100,00 & 100,00 \\
         \bottomrule
     \end{tabular}
-    \label{tab:class_balance_ablation}
 \end{table}
 
-Cân bằng lớp tạo ra các cải thiện đáng kể:
-\begin{itemize}
-    \item \textbf{Recall Lớp Thiểu Số}: Tăng từ 0.63-0.67 lên 0.93-0.95 (+42-47\%), loại bỏ vấn đề phát hiện thiếu nghiêm trọng quan sát được trong huấn luyện không cân bằng
-    \item \textbf{Độ Chính Xác Tổng Thể}: Cải thiện 3.3-4.1 điểm phần trăm
-    \item \textbf{Macro F1-Score}: Tăng 7-8 điểm (0.85-0.87 $\rightarrow$ 0.93-0.94), cho thấy hiệu suất cân bằng hơn giữa các lớp
-\end{itemize}
+Tất cả năm thuật toán đạt 100\% độ chính xác trên tập kiểm tra cho bài toán 3 lớp, với F1-score = 1,0 trên mọi lớp. Kết quả này xác nhận rằng ba hoạt động cơ bản (chạy, đứng yên, đi bộ) có thể được phân biệt hoàn toàn bằng 63 đặc trưng bất biến hướng. Đáng chú ý, thời gian huấn luyện của các mô hình cổ điển (0,09--0,22 giây) nhanh hơn đáng kể so với PyTorch (2,54--10,29 giây), cho thấy lợi thế của ML cổ điển khi bài toán không quá phức tạp.
 
-Không có cân bằng, các mô hình thể hiện thiên vị đối với các lớp đa số (\textit{Standing}, \textit{Running}), thường xuyên phân loại sai các hoạt động thiểu số. Điều này xác thực tầm quan trọng quan trọng của cân bằng lớp cho triển khai thực tế nơi tất cả các loại hoạt động phải được phát hiện một cách đáng tin cậy.
+\subsection{Bài toán 5 lớp --- Đánh giá chính}
+\label{sec:five_class}
 
-\section{Khả Năng Triển Khai Đa Thiết Bị}
-
-\subsection{Ma trận đích triển khai được hỗ trợ}
-Kết quả quan trọng của luận văn không chỉ nằm ở độ chính xác trên một board cụ thể, mà ở khả năng dùng cùng một mô hình đã huấn luyện để sinh ra nhiều gói triển khai cho các họ thiết bị khác nhau. Bảng~\ref{tab:multi_device_support} tóm tắt ma trận đích hiện được hiện thực trong subsystem tạo mã.
+Bài toán 5 lớp bổ sung walking\_downstairs và walking\_upstairs --- hai hoạt động có cấu trúc bước tương tự đi bộ thường nhưng khác nhau về thành phần xoay và biên độ gia tốc thẳng đứng. Đây là bài toán thách thức hơn đáng kể, thể hiện đúng hơn các yêu cầu thực tế. Bảng~\ref{tab:5class_accuracy} trình bày kết quả.
 
 \begin{table}[H]
     \centering
-    \caption{Ma trận hỗ trợ triển khai đa thiết bị của framework}
-    \small
-    \begin{tabular}{@{}p{2.5cm}p{2.8cm}p{2.5cm}p{4.8cm}@{}}
-        \toprule
-        Nhóm đích & Khóa nền tảng/backend & Gói sinh ra & Phạm vi xác thực trong luận văn \\
-        \midrule
-        Arduino-compatible & arduino, seeed\_xiao, esp32, m5stack, teensy & .h + .cpp + .ino & Benchmark chi tiết trên Seeed XIAO; các đích còn lại được hỗ trợ ở mức generator \\
-        ARM Cortex-M thuần & arm\_cortex\_m & .c & Xác minh ở mức kiến trúc generator và cấu trúc tệp đầu ra \\
-        SDK/RTOS native & generic\_c, generic\_cpp, esp\_idf, zephyr & .h + .c/.cpp + ví dụ & Xác minh ở mức generator đa đích \\
-        MicroPython & micropython & module .py + script ví dụ & Xác minh ở mức generator và tương đồng công thức \\
-        Backend runtime thay thế & tflite\_micro, onnx\_runtime & mã glue + model nhị phân & Xác minh ở mức khả năng xuất backend thay thế \\
-        \bottomrule
-    \end{tabular}
-    \label{tab:multi_device_support}
-\end{table}
-
-Ma trận này cho thấy đóng góp cốt lõi của framework là phân tách pipeline thành ba lớp: mô hình học máy, nền tảng đích và backend triển khai. Nhờ đó, cùng một model artifact có thể được tái sử dụng cho nhiều thiết bị mà không cần huấn luyện lại, ngoại trừ các tinh chỉnh phụ thuộc tài nguyên như chế độ tối ưu hóa hoặc backend suy luận.
-
-\section{Benchmark Triển Khai trên Nền tảng Tham chiếu}
-
-\subsection{Thời Gian Suy Luận và Độ Trễ}
-Bảng \ref{tab:inference_timing} báo cáo thời gian suy luận được đo trên nền tảng tham chiếu Seeed XIAO nRF52840 (ARM Cortex-M4F @ 64MHz) cho các chế độ tối ưu hóa khác nhau.
-
-\begin{table}[H]
-    \centering
-    \caption{Thời Gian Suy Luận trên nền tảng tham chiếu Seeed XIAO nRF52840 (cửa sổ 150 mẫu, bước trượt 75 mẫu)}
-    \small
-    \begin{tabular}{@{}lcccc@{}}
-        \toprule
-        Mô Hình & Chế độ & Trích xuất (ms) & Dự đoán (ms) & Tổng (ms) \\ 
-        \midrule
-        Random Forest & Accuracy & 8.2 & 6.8 & 15.0 \\
-        Random Forest & Speed & 6.1 & 4.3 & 10.4 \\
-        \midrule
-        Neural Network & Accuracy & 7.5 & 4.5 & 12.0 \\
-        Neural Network & Speed & 5.8 & 3.2 & 9.0 \\
-        \midrule
-        SVM (RBF) & Accuracy & 8.0 & 10.2 & 18.2 \\
-        SVM (RBF) & Speed & 6.3 & 7.5 & 13.8 \\
-        \bottomrule
-    \end{tabular}
-    \label{tab:inference_timing}
-\end{table}
-
-Các phát hiện chính:
-\begin{itemize}
-    \item Tất cả các mô hình đạt hiệu suất thời gian thực (suy luận nhanh hơn tốc độ thu thập dữ liệu 750ms mỗi cửa sổ ở lấy mẫu 100Hz), với tốc độ suy luận 55-111Hz
-    \item Neural Network là nhanh nhất (12ms chế độ accuracy, 9ms chế độ speed), hỗ trợ tốc độ suy luận lên đến 111Hz
-    \item Trích xuất đặc trưng chiếm ưu thế về thời gian (50-65\% của tổng), gợi ý các cơ hội tối ưu hóa trong mã xử lý tín hiệu
-    \item Tối ưu hóa chế độ Speed giảm độ trễ 30-38\% trên tất cả các mô hình với mất độ chính xác không đáng kể (<0.5\%)
-\end{itemize}
-Các số liệu trên đại diện cho lớp phần cứng ARM Cortex-M4F. Với các đích như MicroPython, ESP-IDF hoặc Zephyr, độ trễ tuyệt đối còn phụ thuộc interpreter, toolchain biên dịch và lớp tích hợp cảm biến tương ứng.
-
-\subsection{Đánh Đổi Chế Độ Tối Ưu Hóa}
-Hình~\ref{fig:optimization_comparison} trực quan hóa các đánh đổi độ chính xác-độ trễ-điện năng trên các chế độ tối ưu hóa cho cả ba thuật toán.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/optimization_modes_comparison.png}
-    \caption{Phân tích so sánh độ chính xác, độ trễ suy luận và tiêu thụ điện năng trên bốn chế độ tối ưu hóa}
-    \label{fig:optimization_comparison}
-\end{figure}
-
-Trực quan hóa chứng minh rõ ràng rằng Neural Networks đạt được đánh đổi tổng thể tốt nhất, duy trì độ chính xác 95.8\% trong chế độ Speed với chỉ 9ms độ trễ và tiêu thụ điện năng 22.8mW. Chế độ Power hy sinh 2-3\% độ chính xác nhưng giảm tiêu thụ điện năng 25-35\%, làm cho nó lý tưởng cho các ứng dụng đeo bị giới hạn pin. Chế độ Balanced nhất quán định vị giữa các chế độ Accuracy và Speed, cung cấp mặc định thực tế cho người dùng không chắc chắn về các ràng buộc triển khai của họ.
-
-\subsection{Dấu Chân Bộ Nhớ}
-Bảng \ref{tab:memory_usage} phân tích flash (lưu trữ chương trình) và RAM (thời gian chạy) tiêu thụ cho mã được tạo.
-
-\begin{table}[H]
-    \centering
-    \caption{Sử Dụng Bộ Nhớ trên nền tảng tham chiếu Seeed XIAO nRF52840 (1MB Flash, 256KB RAM)}
-    \small
+    \caption{Kết quả huấn luyện --- bài toán 5 lớp (63 đặc trưng orientation-invariant, tập kiểm tra 229 mẫu)}
+    \label{tab:5class_accuracy}
     \begin{tabular}{@{}lccccc@{}}
         \toprule
-        Mô Hình & Cấu hình & Flash (KB) & Flash \% & RAM (KB) & RAM \% \\ 
+        Thuật toán & Kiến trúc / Cấu hình & \makecell{Thời gian\\huấn luyện (s)} & \makecell{Độ chính xác\\huấn luyện (\%)} & \makecell{Độ chính xác\\xác thực (\%)} & \makecell{Độ chính xác\\kiểm tra (\%)} \\
         \midrule
-        RF (50 cây) & 50 trees & 142 & 14 & 4.2 & 1.6 \\
-        RF (100 cây) & 100 trees & 182 & 18 & 4.8 & 1.9 \\
-        \midrule
-        NN (100 ẩn) & 90-100-5 & 95 & 9 & 3.6 & 1.4 \\
-        NN (200 ẩn) & 90-200-5 & 168 & 16 & 5.2 & 2.0 \\
-        \midrule
-        SVM (RBF) & 387 SVs & 124 & 12 & 6.1 & 2.4 \\
+        Neural Network & 63--100--50--5 & 0,42 & 99,72 & 98,25 & 98,69 \\
+        Random Forest & 50 cây, sâu tối đa 10 & 0,15 & 99,81 & --- & 98,25 \\
+        SVM (RBF) & $C\!=\!1$, $\gamma\!=\!\text{scale}$ & 0,15 & 97,55 & --- & 97,38 \\
+        PyTorch MLP & 63--ẩn--5 & 1,94 & 99,81 & 98,69 & 99,13 \\
+        PyTorch 1D-CNN & $150 \times 6$ thô & 10,09 & 99,25 & 99,56 & 99,13 \\
         \bottomrule
     \end{tabular}
-    \label{tab:memory_usage}
 \end{table}
 
-Phân tích:
+Khi mở rộng từ 3 lên 5 lớp, độ chính xác kiểm tra giảm từ 100\% xuống 97,38--99,13\%, phản ánh độ khó phân biệt giữa các hoạt động liên quan (walking vs walking\_upstairs/downstairs). Các quan sát chính:
 \begin{itemize}
-    \item Tất cả các cấu hình vừa vặn thoải mái trong bộ nhớ khả dụng (tối đa 18\% flash, 2.4\% RAM) và có thể triển khai đầy đủ
-    \item Neural Network có dấu chân nhỏ nhất (95KB flash, 3.6KB RAM) mặc dù độ chính xác cạnh tranh
-    \item Random Forest tỷ lệ tuyến tính với số lượng cây; 50 cây cung cấp độ chính xác 93.2\% ở 142KB
-    \item Số lượng vector hỗ trợ SVM xác định bộ nhớ; các tập SV giảm qua cắt tỉa ngưỡng có thể giảm một nửa việc sử dụng flash với mất độ chính xác <1\%
-    \item Khoảng trống bộ nhớ còn lại cho phép triển khai đồng thời nhiều mô hình hoặc tích hợp với các mô-đun firmware khác
+    \item \textbf{PyTorch MLP và 1D-CNN} đạt độ chính xác cao nhất (99,13\%), cho thấy lợi thế của các kiến trúc học sâu khi bài toán phức tạp hơn.
+    \item \textbf{Neural Network (sklearn)} đạt 98,69\% với thời gian huấn luyện chỉ 0,42 giây --- cân bằng tốt giữa hiệu suất và tốc độ phát triển.
+    \item \textbf{SVM} có độ chính xác thấp nhất (97,38\%), với độ chính xác huấn luyện cũng chỉ 97,55\% --- gợi ý rằng kernel RBF với cấu hình mặc định chưa nắm bắt đủ cấu trúc phi tuyến của bài toán 5 lớp; tối ưu hóa siêu tham số có thể cải thiện đáng kể.
+    \item \textbf{1D-CNN} hoạt động trên dữ liệu thô mà không cần trích xuất đặc trưng thủ công, đạt hiệu suất ngang PyTorch MLP nhưng tốn thời gian huấn luyện nhiều hơn (10,09 giây).
 \end{itemize}
 
-\subsection{Tiêu Thụ Điện Năng}
-Hình \ref{fig:power_consumption} cho thấy các phép đo dòng điện trên nền tảng tham chiếu trong các giai đoạn hoạt động khác nhau.
+\subsection{Hiệu suất theo từng lớp}
+\label{sec:per_class_results}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/power_consumption_profile.png}
-    \caption{Hồ Sơ Tiêu Thụ Điện Năng Trong Suy Luận trên nền tảng tham chiếu (Neural Network, Chế Độ Accuracy)}
-    \label{fig:power_consumption}
-\end{figure}
-
-Phân tích điện năng (nguồn 3.3V). \textit{Lưu ý}: Các giá trị dưới đây là ước tính được tính toán dựa trên thông số kỹ thuật phần cứng và mô hình tiêu thụ điện năng, không phải đo trực tiếp bằng thiết bị đo dòng:
-\begin{itemize}
-    \item \textbf{Idle}: 2.1 mA (6.9 mW) - chỉ polling cảm biến
-    \item \textbf{Suy Luận Hoạt Động}: 8.2 mA (27.1 mW) - đọc cảm biến + tính toán
-    \item \textbf{Trung Bình (tốc độ suy luận 10Hz)}: 9.2 mA (30.4 mW)
-    \item \textbf{Tuổi Thọ Pin (LiPo 600mAh)}: 65 giờ hoạt động liên tục
-\end{itemize}
-
-Tối ưu hóa chế độ Power (số học điểm cố định, lấy mẫu giảm) đạt trung bình 6.5 mA (21.5 mW) với độ chính xác 94.1\%, kéo dài tuổi thọ pin đến 92 giờ.
-
-\section{Phân Tích So Sánh}
-
-\subsection{So Sánh với Các Nền Tảng Thương Mại}
-Bảng \ref{tab:commercial_comparison} so sánh framework đề xuất với Edge Impulse và triển khai TensorFlow Lite thủ công.
-
-\textbf{Lưu ý về Phương pháp}: Các số liệu độ chính xác và thời gian suy luận so sánh cho Edge Impulse (94.8\%, 15ms), TensorFlow Lite (96.5\%, 11ms) và SensiML (93.1\%, 18ms) là các ước tính dựa trên các kết quả benchmark đã công bố từ các nhiệm vụ HAR tương tự được báo cáo trong tài liệu và tài liệu nhà cung cấp \cite{web:Edge_Impulse, warden2019tinyml}. Kiểm tra trực tiếp trên tập dữ liệu đối tượng đơn cụ thể được thu thập không được thực hiện do giới hạn thời gian và tài nguyên. Các số liệu của framework này (96.2\%, 12ms) được đo trực tiếp trên tập dữ liệu xác thực được mô tả trong Mục 3.7.
+Bảng~\ref{tab:perclass_5class} trình bày chi tiết precision, recall và F1-score cho từng lớp hoạt động trên bài toán 5 lớp. Ba thuật toán đại diện cho ba nhóm tiếp cận (ML cổ điển: RF; neural truyền thống: NN; học sâu: PyTorch MLP) được so sánh.
 
 \begin{table}[H]
     \centering
-    \caption{So Sánh Framework: Đề Xuất vs Giải Pháp Thương Mại (Ước tính)}
+    \caption{Hiệu suất theo từng lớp --- bài toán 5 lớp, tập kiểm tra (229 mẫu)}
+    \label{tab:perclass_5class}
     \small
-    \begin{tabular}{@{}lcccc@{}}
+    \begin{tabular}{@{}l ccc ccc ccc@{}}
         \toprule
-        Tiêu Chí & Framework Này & Edge Impulse & TFLite & SensiML \\ 
+        & \multicolumn{3}{c}{Neural Network (98,69\%)} & \multicolumn{3}{c}{Random Forest (98,25\%)} & \multicolumn{3}{c}{PyTorch MLP (99,13\%)} \\
+        \cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-10}
+        Hoạt động & P & R & F1 & P & R & F1 & P & R & F1 \\
         \midrule
-        Chi phí & Miễn phí & \$20-100/tháng & Miễn phí & \$99-500/tháng \\
-        Tiền xử lý & Tương tác & Tự động (hạn chế) & Code & Tự động \\
-        Thuật toán & RF/SVM/NN & Chỉ Neural & Tùy chỉnh & Cổ điển \\
-        Chất lượng Code & Tối ưu & Tốt & Xuất sắc & Tốt \\
-        Nền tảng & Arduino/ARM/ESP-IDF/MPy/Zephyr & Nhiều & Nhiều & Hạn chế \\
-        Học tập & Thấp & Thấp & Cao & Trung bình \\
-        Độ chính xác & 96.2\% & 94.8\%$^*$ & 96.5\%$^*$ & 93.1\%$^*$ \\
-        Suy luận & 12 ms & 15 ms$^*$ & 11 ms$^*$ & 18 ms$^*$ \\
+        Running (56) & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 \\
+        Still (51) & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 & 1,000 \\
+        Walking (49) & 1,000 & 0,980 & 0,990 & 0,979 & 0,959 & 0,969 & 1,000 & 0,980 & 0,990 \\
+        W.\ Downstairs (38) & 0,949 & 0,974 & 0,961 & 0,925 & 0,974 & 0,949 & 0,950 & 1,000 & 0,974 \\
+        W.\ Upstairs (35) & 0,971 & 0,971 & 0,971 & 1,000 & 0,971 & 0,986 & 1,000 & 0,971 & 0,986 \\
+        \midrule
+        \textbf{Macro Avg} & \textbf{0,984} & \textbf{0,985} & \textbf{0,984} & \textbf{0,981} & \textbf{0,981} & \textbf{0,981} & \textbf{0,990} & \textbf{0,990} & \textbf{0,990} \\
         \bottomrule
     \end{tabular}
-    \small{$^*$Ước tính từ tài liệu; không kiểm tra trên tập dữ liệu thu thập được}
-    \label{tab:commercial_comparison}
+    \begin{minipage}{\linewidth}
+    \vspace{4pt}
+    \footnotesize
+    P = Precision, R = Recall. Số trong ngoặc = số mẫu kiểm tra (support). W.\ = Walking.
+    \end{minipage}
 \end{table}
 
-Các yếu tố phân biệt chính:
+Phân tích theo từng lớp cho thấy các mẫu phân loại sai tập trung ở nhóm hoạt động đi bộ:
 \begin{itemize}
-    \item \textbf{Chi Phí}: Chỉ framework đề xuất và TFLite miễn phí; các nền tảng thương mại tính phí \$20-500/tháng
-    \item \textbf{Tiền Xử Lý}: Giao diện cửa sổ kéo thả mới lạ độc nhất với framework này; những cái khác yêu cầu coding hoặc chấp nhận tự động hóa hộp đen
-    \item \textbf{Độ Chính Xác}: So sánh với triển khai thủ công chuyên gia (96.2\% vs 96.5\%), vượt trội các nền tảng thương mại 1.4-3.1\%
-    \item \textbf{Khả Năng Tiếp Cận}: Khớp với dễ sử dụng của Edge Impulse trong khi cung cấp tính minh bạch và kiểm soát đầy đủ
-    \item \textbf{Tính Linh Hoạt}: Hỗ trợ ML cổ điển (RF, SVM) bị tránh bởi các nền tảng tập trung neural, cho phép triển khai trên các thiết bị bị giới hạn cực kỳ
+    \item \textbf{Running và Still} đạt F1 = 1,000 trên tất cả các thuật toán --- dấu hiệu sinh cơ học đặc trưng (biên độ gia tốc cao cho running, magnitude ổn định quanh $g$ cho still) tạo ranh giới phân loại rõ ràng.
+    \item \textbf{Walking Downstairs} có precision thấp nhất (0,925--0,950), nghĩa là một số mẫu từ lớp khác (chủ yếu walking) bị phân loại nhầm thành walking\_downstairs --- phù hợp với đặc điểm rằng đi bộ thường và xuống cầu thang chia sẻ biên độ gia tốc tương tự.
+    \item \textbf{Walking Upstairs} đạt recall 0,971 nhất quán trên mọi thuật toán --- một vài mẫu bị nhầm lẫn với walking thường, nhưng precision cao (0,971--1,000) cho thấy khi mô hình dự đoán walking\_upstairs thì hầu như luôn đúng.
 \end{itemize}
 
-\subsection{Tác Động Tối Ưu Hóa Siêu Tham Số}
-Bảng \ref{tab:hyperopt_impact} định lượng các cải thiện độ chính xác từ điều chỉnh siêu tham số tự động qua GridSearchCV.
+Kết quả tổng thể xác nhận rằng loại đặc trưng \texttt{orientation\_invariant} có khả năng phân biệt tốt giữa 5 hoạt động, với sai sót chủ yếu ở ranh giới giữa các dạng đi bộ --- nơi sự khác biệt chủ yếu nằm ở thành phần xoay (vận tốc góc gập cổ chân) mà đặc trưng tổng hợp magnitude bắt giữ nhưng không hoàn toàn tách biệt.
+
+\section{So sánh Hiệu suất giữa các Thuật toán}
+\label{sec:algorithm_comparison}
+
+Bảng~\ref{tab:algorithm_comparison} tổng hợp so sánh trên nhiều tiêu chí cho bài toán 5 lớp.
 
 \begin{table}[H]
     \centering
-    \caption{Tác Động của Tối Ưu Hóa Siêu Tham Số (CV 5 fold)}
+    \caption{So sánh tổng hợp các thuật toán --- bài toán 5 lớp}
+    \label{tab:algorithm_comparison}
+    \small
+    \begin{tabular}{@{}lccccl@{}}
+        \toprule
+        Thuật toán & \makecell{Độ chính xác\\kiểm tra (\%)} & \makecell{Macro\\F1} & \makecell{Thời gian\\huấn luyện (s)} & \makecell{Đầu vào\\(số chiều)} & Nhận xét \\
+        \midrule
+        PyTorch MLP & 99,13 & 0,990 & 1,94 & 63 & Tốt nhất trên đặc trưng thủ công \\
+        PyTorch 1D-CNN & 99,13 & 0,992 & 10,09 & $150\!\times\!6$ & End-to-end, không cần FE \\
+        Neural Network & 98,69 & 0,984 & 0,42 & 63 & Nhanh, đủ tốt cho prototyping \\
+        Random Forest & 98,25 & 0,981 & 0,15 & 63 & Nhanh nhất, không cần chuẩn hóa \\
+        SVM (RBF) & 97,38 & 0,972 & 0,15 & 63 & Cần tối ưu hóa siêu tham số \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Biên độ chênh lệch giữa thuật toán tốt nhất (PyTorch MLP/CNN: 99,13\%) và thấp nhất (SVM: 97,38\%) chỉ 1,75 điểm phần trăm --- cho thấy chất lượng pipeline trích xuất đặc trưng quan trọng hơn lựa chọn thuật toán khi đặc trưng đã được thiết kế tốt. Đây là một kết quả có ý nghĩa thực tế: người dùng có thể ưu tiên các tiêu chí khác (tốc độ huấn luyện, kích thước mô hình, khả năng giải thích) mà không hy sinh đáng kể độ chính xác.
+
+Ảnh hưởng của số lượng lớp đến hiệu suất được tóm tắt trong Bảng~\ref{tab:class_scaling}.
+
+\begin{table}[H]
+    \centering
+    \caption{Ảnh hưởng của số lượng lớp đến độ chính xác kiểm tra}
+    \label{tab:class_scaling}
     \begin{tabular}{@{}lccc@{}}
         \toprule
-        Mô Hình & Độ chính xác Cơ sở & Độ chính xác Tối ưu & Cải thiện \\
+        Thuật toán & 3 lớp (\%) & 5 lớp (\%) & Giảm (điểm \%) \\
         \midrule
-        Random Forest & 91.8\% & 94.5\% & +2.7\% \\
-        Neural Network & 94.3\% & 96.2\% & +1.9\% \\
-        SVM (RBF) & 91.2\% & 93.8\% & +2.6\% \\
+        Neural Network & 100,00 & 98,69 & $-1{,}31$ \\
+        Random Forest & 100,00 & 98,25 & $-1{,}75$ \\
+        SVM (RBF) & 100,00 & 97,38 & $-2{,}62$ \\
+        PyTorch MLP & 100,00 & 99,13 & $-0{,}87$ \\
+        PyTorch 1D-CNN & 100,00 & 99,13 & $-0{,}87$ \\
         \bottomrule
     \end{tabular}
-    \label{tab:hyperopt_impact}
 \end{table}
 
-Điều chỉnh tự động cung cấp các cải thiện độ chính xác nhất quán 1.9-2.7\%, chứng minh giá trị thực tế cho người dùng không có chuyên môn ML. Các siêu tham số tốt nhất được phát hiện:
-\begin{itemize}
-    \item \textbf{Random Forest}: 100 cây, độ sâu tối đa 20, min\_samples\_split=2, class\_weight='balanced'
-    \item \textbf{Neural Network}: (100,) đơn vị ẩn, alpha=0.001, learning\_rate=0.001
-    \item \textbf{SVM}: C=10, gamma=0.01, class\_weight='balanced'
-\end{itemize}
+Các mô hình PyTorch giảm ít nhất ($-0{,}87$ điểm), trong khi SVM giảm nhiều nhất ($-2{,}62$ điểm). Điều này gợi ý rằng: (1) các kiến trúc học sâu có khả năng nắm bắt ranh giới quyết định phức tạp hơn giữa các lớp tương tự; (2) SVM với kernel RBF cần điều chỉnh siêu tham số cẩn thận hơn khi số lớp tăng.
 
-\section{Tóm Tắt Kết Quả}
-Xác thực thực nghiệm chứng minh:
+\section{Khả năng Triển khai Đa Thiết bị}
+\label{sec:multi_device}
+
+Đóng góp cốt lõi của framework không chỉ nằm ở độ chính xác mô hình, mà ở khả năng sử dụng cùng một mô hình đã huấn luyện để sinh mã triển khai cho nhiều họ thiết bị khác nhau mà không cần huấn luyện lại. Bảng~\ref{tab:deployment_matrix} tóm tắt ma trận đích triển khai được hỗ trợ.
+
+\begin{table}[H]
+    \centering
+    \caption{Ma trận đích triển khai --- phạm vi hỗ trợ của hệ thống tạo mã}
+    \label{tab:deployment_matrix}
+    \small
+    \begin{tabular}{@{}p{2.8cm}p{3.5cm}p{2.0cm}p{4.0cm}@{}}
+        \toprule
+        Nhóm đích & Nền tảng cụ thể & Ngôn ngữ & Phạm vi xác thực \\
+        \midrule
+        Arduino-compatible & Seeed XIAO, ESP32, M5Stack, Teensy & C++ & Benchmark chi tiết trên XIAO \\
+        ARM Cortex-M & Generic ARM Cortex-M & C & Xác minh biên dịch + cấu trúc \\
+        SDK/RTOS & ESP-IDF, Zephyr, Generic C/C++ & C/C++ & Xác minh tạo mã \\
+        MicroPython & Vi điều khiển hỗ trợ MPy & Python & Xác minh tương đồng công thức \\
+        Runtime thay thế & TFLite Micro, ONNX Runtime & C++ + nhị phân & Chỉ NN/CNN \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Kiến trúc tạo mã phân tách ba lớp --- mô hình ML, nền tảng đích, backend triển khai --- cho phép tổ hợp linh hoạt: một Random Forest đã huấn luyện có thể được xuất đồng thời sang C++ cho Arduino, C cho ARM Cortex-M, và Python cho MicroPython, từ cùng một tệp \texttt{.joblib}. Bốn chế độ tối ưu hóa (\texttt{accuracy}, \texttt{balanced}, \texttt{speed}, \texttt{power}) điều chỉnh độ chính xác số học (số chữ số thập phân cho trọng số và tham số chuẩn hóa) và chiến lược bộ đệm theo ràng buộc tài nguyên của nền tảng đích.
+
+\textbf{Giới hạn backend runtime thay thế}: TFLite Micro và ONNX Runtime chỉ hỗ trợ trực tiếp Neural Network và CNN. Random Forest và SVM không thể chuyển đổi qua đường dẫn ONNX $\to$ TFLite vì các toán tử ONNX-ML (\texttt{TreeEnsembleClassifier}, \texttt{SVMClassifier}) không được \texttt{onnx2tf} hỗ trợ. Giải pháp thay thế (xấp xỉ qua mạng Keras surrogate) được cung cấp nhưng không đảm bảo tương đương chính xác với mô hình gốc.
+
+\section{Benchmark Triển khai trên Nền tảng Tham chiếu}
+\label{sec:device_benchmark}
+
+Các phép đo dưới đây được thực hiện trên Seeed XIAO nRF52840 (ARM Cortex-M4F @ 64~MHz, 1~MB flash, 256~KB RAM) như nền tảng tham chiếu đại diện cho lớp vi điều khiển wearable. Kết quả minh họa tính khả thi triển khai trên lớp phần cứng này, không đại diện cho toàn bộ ma trận đích.
+
+% =====================================================================
+% TODO: Thay thế bảng placeholder bên dưới bằng dữ liệu đo thực tế
+% từ Arduino IDE compilation và kiểm tra trên thiết bị.
+% Xem THESIS_DATA_INPUT.md Mục 2 và Mục 4 để biết định dạng cần điền.
+% =====================================================================
+
+\subsection{Sử dụng Bộ nhớ}
+\label{sec:memory_usage}
+
+Bảng~\ref{tab:memory_usage} báo cáo kích thước mã biên dịch từ Arduino IDE cho các mô hình đã huấn luyện trên bài toán 5 lớp.
+
+\begin{table}[H]
+    \centering
+    \caption{Sử dụng bộ nhớ trên Seeed XIAO nRF52840 (1~MB Flash, 256~KB RAM) --- bài toán 5 lớp}
+    \label{tab:memory_usage}
+    \small
+    \begin{tabular}{@{}lcccc@{}}
+        \toprule
+        Mô hình & Flash (bytes) & Flash (\%) & SRAM (bytes) & SRAM (\%) \\
+        \midrule
+        Neural Network & \textit{cần đo} & --- & \textit{cần đo} & --- \\
+        Random Forest & \textit{cần đo} & --- & \textit{cần đo} & --- \\
+        SVM (RBF) & \textit{cần đo} & --- & \textit{cần đo} & --- \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Độ chính xác và Thời gian Suy luận Trên Thiết bị}
+\label{sec:ondevice_accuracy}
+
+Để đánh giá hiệu suất triển khai thực tế, các mô hình được nạp lên thiết bị và kiểm tra với từng hoạt động. Ngưỡng tin cậy $\tau = 0{,}6$ được sử dụng để từ chối các dự đoán không chắc chắn (trả về ``unknown'' thay vì ép nhãn).
+
+\begin{table}[H]
+    \centering
+    \caption{Độ chính xác trên thiết bị --- bài toán 5 lớp, ngưỡng tin cậy $\tau = 0{,}6$}
+    \label{tab:ondevice_accuracy}
+    \small
+    \begin{tabular}{@{}lcccc@{}}
+        \toprule
+        Mô hình & \makecell{Độ chính xác\\trên thiết bị (\%)} & \makecell{Tỷ lệ từ\\chối (\%)} & \makecell{Thời gian suy\\luận trung bình (ms)} & Ghi chú \\
+        \midrule
+        Neural Network & \textit{cần đo} & \textit{cần đo} & \textit{cần đo} & --- \\
+        Random Forest & \textit{cần đo} & \textit{cần đo} & \textit{cần đo} & --- \\
+        SVM (RBF) & \textit{cần đo} & \textit{cần đo} & \textit{cần đo} & --- \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{Dữ liệu tham khảo (bài toán 3 lớp)}: Mô hình PyTorch 1D-CNN đạt độ chính xác triển khai 99,4\% với tỷ lệ từ chối 0,6\% và độ tin cậy trung bình 98,8\% --- cho thấy ngưỡng tin cậy $\tau = 0{,}6$ hoạt động hiệu quả mà không từ chối quá nhiều dự đoán hợp lệ.
+
+\section{Phân tích và Thảo luận Kết quả}
+\label{sec:results_analysis}
+
+\subsection{Vai trò của Đặc trưng Bất biến Hướng}
+
+Toàn bộ thực nghiệm sử dụng loại đặc trưng \texttt{orientation\_invariant} (63 đặc trưng tính trên biên độ tổng hợp), thay vì \texttt{time\_domain} (90 đặc trưng trên từng trục riêng lẻ). Mặc dù số chiều ít hơn, kết quả cho thấy 63 đặc trưng bất biến hướng đủ để đạt 97--99\% trên bài toán 5 lớp.
+
+Lợi thế chính: tính toán trên biên độ tổng hợp ($\text{acc\_mag} = \sqrt{a_X^2 + a_Y^2 + a_Z^2}$) loại bỏ phụ thuộc vào hướng gắn thiết bị --- mô hình vẫn hoạt động khi thiết bị đặt trong túi quần, đeo trên cổ tay, hay gắn ở thắt lưng. Đây là yêu cầu quan trọng cho ứng dụng thực tế nơi hướng gắn không thể kiểm soát.
+
+\subsection{Tốc độ Huấn luyện và Quy trình Phát triển}
+
+Thời gian huấn luyện cực ngắn (0,09--0,42 giây cho ML cổ điển, 1,94--10,09 giây cho PyTorch) cho phép quy trình phát triển lặp lại nhanh: người dùng có thể thu thập thêm dữ liệu, điều chỉnh tham số và huấn luyện lại trong vài giây. Đây là ưu thế đáng kể so với các pipeline huấn luyện nặng, đặc biệt trong bối cảnh giáo dục và nghiên cứu nơi tài nguyên tính toán hạn chế.
+
+\subsection{Mô hình End-to-end so với Đặc trưng Thủ công}
+
+PyTorch 1D-CNN đạt hiệu suất ngang PyTorch MLP (99,13\%) mặc dù hoạt động trên dữ liệu thô $150 \times 6$ mà không cần trích xuất đặc trưng thủ công. Tuy nhiên, các mô hình dựa trên đặc trưng thủ công có hai ưu thế cho triển khai nhúng: (1) vector đặc trưng 63 chiều nhỏ hơn đáng kể so với cửa sổ thô $150 \times 6 = 900$ giá trị, giảm yêu cầu bộ nhớ đầu vào; (2) mã suy luận cho mô hình cổ điển (phép nhân ma trận, so sánh cây quyết định) đơn giản và dễ xác minh hơn mã tích chập 1D.
+
+\section{So sánh Định tính với Nền tảng Thương mại}
+\label{sec:qualitative_comparison}
+
+Bảng~\ref{tab:qualitative_comparison} so sánh các đặc điểm kiến trúc và chức năng giữa framework đề xuất và hai nền tảng thương mại phổ biến. So sánh tập trung vào các thuộc tính có thể xác minh khách quan, không so sánh số liệu hiệu suất do sự khác biệt về tập dữ liệu và cấu hình.
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh định tính với các nền tảng thương mại}
+    \label{tab:qualitative_comparison}
+    \small
+    \begin{tabular}{@{}p{3.5cm}p{3.5cm}p{3.5cm}p{3.5cm}@{}}
+        \toprule
+        Tiêu chí & Framework đề xuất & Edge Impulse & SensiML \\
+        \midrule
+        Chi phí & Mã nguồn mở, miễn phí & \$20--100/tháng & \$99--500/tháng \\
+        Thuật toán ML cổ điển & RF, SVM, NN & Không (chỉ neural) & Có \\
+        Tiền xử lý tương tác & Kéo thả trên tín hiệu & Tự động (hạn chế) & Tự động \\
+        Minh bạch mã sinh ra & Toàn bộ mã nguồn & Hộp đen (EON) & Hộp đen \\
+        Xác minh tương đồng & Có (Python $\leftrightarrow$ C++) & Không công khai & Không công khai \\
+        Ngưỡng tin cậy tích hợp & Có (trong mã suy luận) & Anomaly block riêng & Không tích hợp \\
+        Tăng cường nhận biết lớp & Có & Không & Không \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Điểm phân biệt quan trọng nhất là \textbf{tính minh bạch}: mã C++ được sinh ra có thể đọc, kiểm tra và sửa đổi trực tiếp. Trong quá trình phát triển, chính tính minh bạch này đã cho phép phát hiện và sửa các lỗi tương đồng huấn luyện-triển khai (lỗi zero-padding, sai lệch công thức kurtosis/skewness, sai thứ tự đặc trưng --- xem Mục~\ref{sec:training_deployment_parity}) mà các nền tảng hộp đen không thể phát hiện. Phân tích chi tiết hơn về ý nghĩa kiến trúc được trình bày trong Chương~\ref{chap:discussion}.
+
+\section{Tóm tắt}
+\label{sec:results_summary}
+
+Kết quả thực nghiệm xác nhận:
 \begin{enumerate}
-    \item Độ chính xác cao (94-96\%) trên ba thuật toán ML trên nhiệm vụ HAR 5 lớp đầy thách thức
-    \item Tầm quan trọng quan trọng của cân bằng lớp cho phát hiện lớp thiểu số (+42-47\% recall thiểu số)
-    \item Kiến trúc generator hỗ trợ nhiều họ đích triển khai từ cùng một pipeline huấn luyện duy nhất
-    \item Tính khả thi suy luận thời gian thực trên nền tảng tham chiếu phần cứng bị giới hạn tài nguyên (9-18ms mỗi cửa sổ)
-    \item Dấu chân bộ nhớ thấp (95-182KB flash) cho thấy dư địa tích hợp tốt trên các board cùng lớp tài nguyên
-    \item Hiệu suất cạnh tranh so với các nền tảng thương mại trong khi vẫn miễn phí và hoàn toàn minh bạch
-    \item Tối ưu hóa siêu tham số hiệu quả có thể tiếp cận với phi chuyên gia
+    \item \textbf{Hiệu suất phân loại cao}: 97--99\% trên bài toán 5 lớp HAR với 63 đặc trưng bất biến hướng, đạt 100\% trên bài toán 3 lớp cơ bản.
+    \item \textbf{Đa thuật toán}: Năm thuật toán (RF, SVM, NN, PyTorch MLP, PyTorch 1D-CNN) đều đạt hiệu suất cạnh tranh, với biên độ chênh lệch chỉ 1,75 điểm phần trăm --- cho phép lựa chọn theo ràng buộc triển khai thay vì chỉ theo độ chính xác.
+    \item \textbf{Triển khai đa thiết bị}: Kiến trúc tạo mã hỗ trợ 5 nhóm nền tảng đích từ cùng một mô hình đã huấn luyện.
+    \item \textbf{Huấn luyện nhanh}: Dưới 1 giây cho ML cổ điển, dưới 11 giây cho học sâu, phù hợp cho phát triển lặp lại.
+    \item \textbf{Đặc trưng bất biến hướng hiệu quả}: 63 đặc trưng tính trên biên độ tổng hợp đạt hiệu suất cao mà không phụ thuộc hướng gắn thiết bị.
 \end{enumerate}
-
-Những kết quả này xác thực các mục tiêu cốt lõi của framework: dân chủ hóa phát triển edge AI trong khi duy trì các đặc điểm hiệu suất cấp chuyên nghiệp.

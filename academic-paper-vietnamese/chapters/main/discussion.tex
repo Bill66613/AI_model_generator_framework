@@ -4,31 +4,28 @@
 \section{Diễn Giải Các Phát Hiện Chính}
 
 \subsection{Hiệu Suất Mô Hình và Lựa Chọn Thuật Toán}
-Các kết quả thực nghiệm chứng minh rằng cả ba thuật toán đã triển khai đạt độ chính xác cao (93.8-96.2\%) trên nhiệm vụ HAR năm lớp, với Neural Networks vượt trội một chút so với Random Forest và SVM. Phát hiện này phù hợp với tài liệu gần đây cho thấy rằng các mô hình ML cổ điển được điều chỉnh đúng cách vẫn cạnh tranh với học sâu cho các nhiệm vụ phân loại chuỗi thời gian trên các tập dữ liệu có kích thước vừa phải (hàng nghìn đến hàng chục nghìn mẫu) \cite{anguita2013har, banos2014wisdm}.
+Các kết quả thực nghiệm chứng minh rằng tất cả năm thuật toán đã triển khai đạt độ chính xác cao (97,38--99,13\%) trên nhiệm vụ HAR năm lớp, và đạt 100\% trên bài toán 3 lớp cơ bản. Phát hiện này phù hợp với tài liệu gần đây cho thấy rằng các mô hình ML cổ điển được điều chỉnh đúng cách vẫn cạnh tranh với học sâu cho các nhiệm vụ phân loại chuỗi thời gian trên các tập dữ liệu có kích thước vừa phải \cite{anguita2013har, banos2014wisdm}.
 
-Sự vượt trội của Neural Network (96.2\% vs 94.5\% RF) có thể được quy cho khả năng học các kết hợp phi tuyến của không gian đặc trưng 90 chiều thông qua các biến đổi lớp ẩn. Tuy nhiên, biên độ là khiêm tốn (+1.7\%), và huấn luyện nhanh hơn của Random Forest (12.3s vs 45.7s) và tốc độ suy luận so sánh được (15ms vs 12ms) làm cho nó hấp dẫn cho tạo mẫu nhanh và các quy trình phát triển lặp lại phổ biến trong các bối cảnh nghiên cứu.
+Biên độ chênh lệch giữa thuật toán tốt nhất (PyTorch MLP/CNN: 99,13\%) và thấp nhất (SVM: 97,38\%) chỉ 1,75 điểm phần trăm --- cho thấy chất lượng pipeline trích xuất đặc trưng quan trọng hơn lựa chọn thuật toán khi 63 đặc trưng bất biến hướng đã được thiết kế tốt. Huấn luyện nhanh của Random Forest (0,15s) và Neural Network sklearn (0,42s) làm cho chúng hấp dẫn cho tạo mẫu nhanh và các quy trình phát triển lặp lại.
 
-Thật thú vị, SVM—vốn chiếm ưu thế trong nghiên cứu HAR đầu tiên \cite{cortes1995svm}—đạt độ chính xác thấp hơn một chút (93.8\%). Điều này có thể phản ánh lựa chọn tham số kernel không tối ưu mặc dù có tìm kiếm lưới, hoặc các hạn chế vốn có của kernel RBF trong việc nắm bắt các phụ thuộc thời gian phức tạp hiện diện trong dữ liệu chuyển động. Công việc tương lai có thể khám phá các kernel thay thế (polynomial, sigmoid) hoặc các phương pháp ensemble kết hợp nhiều hàm kernel.
+SVM với kernel RBF đạt độ chính xác thấp nhất (97,38\%), với khoảng cách huấn luyện-kiểm tra rất nhỏ (97,55\% vs 97,38\%) gợi ý underfitting thay vì overfitting---kernel RBF với cấu hình mặc định chưa nắm bắt đủ cấu trúc phi tuyến của bài toán 5 lớp. Tối ưu hóa siêu tham số ($C$, $\gamma$) có thể cải thiện đáng kể.
 
-\subsection{Mất Cân Bằng Lớp: Một Thách Thức Quan Trọng nhưng Bị Bỏ Qua}
-Có lẽ phát hiện quan trọng nhất là tác động đáng kể của cân bằng lớp đến phát hiện lớp thiểu số. Không có \texttt{class\_weight='balanced'}, các lớp thiểu số (\textit{Walking Downstairs}, \textit{Walking Upstairs}) chịu tỷ lệ recall 0.63-0.67—có nghĩa là một phần ba các hoạt động này không được phát hiện. Điều này là thảm khốc cho các ứng dụng thực tế (ví dụ: các hệ thống phát hiện té ngã không được bỏ lỡ các sự kiện xuống cầu thang).
+\subsection{Cân Bằng Lớp trong Thực hành}
+Cân bằng trọng số lớp (\texttt{class\_weight='balanced'}) được bật mặc định cho RF và SVM trong framework, và \texttt{CrossEntropyLoss} của PyTorch tự xử lý trọng số mẫu. Kết quả thực nghiệm cho thấy các lớp thiểu số (Walking Downstairs: 38 mẫu, Walking Upstairs: 35 mẫu so với Running: 56 mẫu) vẫn đạt recall 0,971--1,000 và F1 $\geq$ 0,949 --- xác nhận hiệu quả của chiến lược cân bằng.
 
-Cân bằng lớp đã cải thiện recall thiểu số lên 0.93-0.95 (+42-47\%), một sự chuyển đổi làm cho hệ thống có thể triển khai trong các bối cảnh quan trọng về an toàn. Điều này xác thực nghiên cứu trong học tập mất cân bằng \cite{he2009learning, chawla2002smote} và nhấn mạnh một bài học quan trọng: \textbf{độ chính xác tổng thể có thể gây hiểu lầm}. Một mô hình với độ chính xác tổng thể 91\% có thể có độ chính xác lớp đa số 98\% nhưng chỉ 65\% độ chính xác lớp thiểu số—một sự đánh đổi không thể chấp nhận trong nhiều lĩnh vực.
-
-Framework này giải quyết điều này bằng cách làm cho cân bằng lớp là một cài đặt mặc định, không phải tùy chọn. Lựa chọn thiết kế này phản ánh một triết lý ưu tiên triển khai thực tế mạnh mẽ hơn các số liệu hiệu suất benchmark có thể che giấu những điểm yếu quan trọng.
+Lựa chọn thiết kế bật cân bằng lớp mặc định phản ánh nguyên tắc ưu tiên triển khai thực tế: trong ứng dụng HAR, tất cả hoạt động phải được phát hiện đáng tin cậy, không chỉ các lớp thường xuyên nhất. Điều này đặc biệt quan trọng trong các bối cảnh an toàn (phát hiện té ngã, giám sát bệnh nhân) nơi bỏ sót lớp thiểu số có thể gây hậu quả nghiêm trọng \cite{he2009learning}.
 
 \subsection{Tính Khả Thi Triển Khai Biên}
-Các kết quả thời gian suy luận (9-18ms mỗi cửa sổ trên vi điều khiển 64MHz) trên nền tảng tham chiếu Seeed XIAO nRF52840 xác thực rằng pipeline do framework sinh ra có thể vận hành thời gian thực trên ít nhất một lớp phần cứng đại diện (ARM Cortex-M4F). Điều quan trọng là nên diễn giải các số đo này như bằng chứng khả thi cho kiến trúc đa đích, thay vì như benchmark duy nhất cho mọi thiết bị mà framework hỗ trợ. Với cửa sổ 1,5 giây và bước trượt 0,75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms—các mô hình đề xuất đạt được điều này với biên độ 40-80×, để lại khoảng trống cho:
+Dữ liệu triển khai tham khảo trên bài toán 3 lớp cho thấy mô hình PyTorch 1D-CNN đạt 99,4\% độ chính xác trên thiết bị với tỷ lệ từ chối chỉ 0,6\% (ngưỡng tin cậy $\tau = 0{,}6$) và độ tin cậy trung bình 98,8\%. Kết quả này xác nhận rằng pipeline do framework sinh ra có thể vận hành chính xác trên nền tảng tham chiếu Seeed XIAO nRF52840 (ARM Cortex-M4F @ 64~MHz).
+
+Với cửa sổ 1,5 giây và bước trượt 0,75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms---biên độ dư thừa đáng kể cho vi điều khiển lớp Cortex-M4F, để lại khoảng trống cho:
 \begin{itemize}
-    \item Ensemble đa mô hình (kết hợp dự đoán RF + NN)
-    \item Các phương thức cảm biến bổ sung (nhịp tim, GPS)
     \item Giao tiếp không dây (truyền BLE kết quả)
     \item Quản lý điện năng (ngủ sâu giữa các chu kỳ suy luận)
+    \item Các phương thức cảm biến bổ sung
 \end{itemize}
 
-Trên nền tảng tham chiếu, sử dụng bộ nhớ (95-182KB flash) tương tự bảo thủ, chiếm 9-18\% của 1MB khả dụng trên Seeed XIAO nRF52840. Điều này cho thấy kiến trúc sinh mã còn nhiều dư địa khi chuyển sang các nền tảng bị giới hạn hơn như Arduino Nano 33 BLE (256KB flash) hoặc ESP32-C3 (384KB flash), mặc dù các số đo định lượng cuối cùng vẫn cần được benchmark trực tiếp trên từng thiết bị.
-
-Tiêu thụ điện năng trung bình 30mW chuyển thành 65+ giờ hoạt động liên tục trên pin 600mAh—đủ cho các nghiên cứu đeo nhiều ngày mà không cần sạc lại. Tối ưu hóa chế độ Power kéo dài điều này đến 92 giờ, tiếp cận thời lượng triển khai cả tuần thường được yêu cầu cho phân tích dáng đi lâm sàng hoặc giám sát đào tạo thể thao.
+Các phép đo chi tiết về thời gian suy luận, bộ nhớ và tiêu thụ điện năng trên nền tảng tham chiếu cần được bổ sung cho phiên bản cuối cùng.
 
 \subsection{Tiền Xử Lý Tương Tác: Một Thay Đổi Mô Hình}
 Giao diện cửa sổ thời gian kéo thả mới lạ đại diện cho một thay đổi mô hình từ các quy trình tiền xử lý truyền thống. Các phương pháp thông thường yêu cầu người dùng hoặc:
@@ -49,16 +46,14 @@ So sánh với Edge Impulse và SensiML tiết lộ các đánh đổi giữa ch
 
 \textbf{Edge Impulse} ưu tiên dễ sử dụng với kỹ thuật đặc trưng tự động và các quy trình triển khai, nhưng với chi phí đăng ký \$20-100/tháng và tính minh bạch tiền xử lý hạn chế. Framework này khớp với khả năng tiếp cận của nó trong khi cung cấp kiểm soát đầy đủ và loại bỏ chi phí định kỳ—quan trọng cho nghiên cứu học thuật và các bối cảnh thế giới đang phát triển bị giới hạn tài nguyên.
 
-\textbf{SensiML} nhắm mục tiêu triển khai IoT thương mại với khả năng AutoML tinh vi nhưng chi phí \$99-500/tháng và hỗ trợ ít nền tảng hơn. Độ chính xác của nó trên kiểm tra HAR được thực hiện (93.1\%) tụt hậu cả framework này (96.2\%) và Edge Impulse (94.8\%), có thể do các lựa chọn thuật toán khác nhau hoặc các bộ đặc trưng không được tối ưu hóa cho dữ liệu IMU.
+\textbf{SensiML} nhắm mục tiêu triển khai IoT thương mại với khả năng AutoML tinh vi nhưng chi phí \$99--500/tháng và hỗ trợ ít nền tảng hơn.
 
-\textbf{Triển khai TensorFlow Lite thủ công} đạt độ chính xác 96.5\% (tốt hơn một chút so với 96.2\% của framework này), nhưng yêu cầu kiến thức cấp chuyên gia về lượng tử hóa mô hình, tích hợp runtime TFLM và tối ưu hóa đặc thù nền tảng—kỹ năng vượt quá hầu hết các nhà nghiên cứu và người đam mê. Framework này thu hẹp khoảng cách này đến 0.3\% trong khi không yêu cầu chuyên môn hệ thống nhúng.
-
-Kết luận: framework này chiếm một vị thế độc đáo kết hợp hiệu suất cấp chuyên nghiệp, tính minh bạch đầy đủ, chi phí bằng không và khả năng triển khai đa đích từ cùng một pipeline huấn luyện—một kết hợp không có sẵn trong các giải pháp hiện có.
+So sánh số liệu hiệu suất trực tiếp giữa các nền tảng không có ý nghĩa phương pháp luận vì mỗi nền tảng sử dụng tập dữ liệu, pipeline trích xuất đặc trưng và cấu hình thuật toán khác nhau. Thay vào đó, các điểm phân biệt quan trọng nằm ở tính minh bạch, chi phí, và khả năng kiểm soát pipeline (xem Bảng~\ref{tab:qualitative_comparison} trong Chương~\ref{chap:results}).
 
 \subsection{Các Hệ Thống HAR Học Thuật}
-So với nghiên cứu HAR học thuật sử dụng các phương pháp dựa trên IMU tương tự \cite{anguita2013har}, độ chính xác đạt được (96.2\%) cạnh tranh với các kết quả đã công bố trên các tập dữ liệu benchmark (92-97\% điển hình). Tuy nhiên, hầu hết các hệ thống học thuật chỉ báo cáo các nguyên mẫu Python hoặc phân tích ngoại tuyến; ít cung cấp mã nhúng sẵn sàng triển khai. Đóng góp của luận văn nằm ở việc bắc cầu "khoảng cách triển khai" này bằng cách tự động hóa việc dịch từ các mô hình scikit-learn đã huấn luyện sang firmware vi điều khiển sản xuất.
+So với nghiên cứu HAR học thuật sử dụng các phương pháp dựa trên IMU tương tự \cite{anguita2013har}, độ chính xác đạt được (97--99\% trên 5 lớp) cạnh tranh với các kết quả đã công bố trên các tập dữ liệu benchmark (92--97\% điển hình). Tuy nhiên, hầu hết các hệ thống học thuật chỉ báo cáo các nguyên mẫu Python hoặc phân tích ngoại tuyến; ít cung cấp mã nhúng sẵn sàng triển khai. Đóng góp của luận văn nằm ở việc bắc cầu ``khoảng cách triển khai'' này bằng cách tự động hóa việc dịch từ các mô hình scikit-learn/PyTorch đã huấn luyện sang mã suy luận vi điều khiển.
 
-Ngoài ra, xử lý hệ thống được đề xuất về mất cân bằng lớp giải quyết một điểm yếu trong nhiều tài liệu HAR, nơi các tập kiểm tra cân bằng hoặc các số liệu bị chi phối bởi lớp đa số che giấu các vấn đề hiệu suất thực tế \cite{he2009learning}.
+Cần lưu ý rằng kết quả 97--99\% được đo trên dữ liệu đối tượng đơn; hiệu suất trên tập dữ liệu đa đối tượng (như UCI-HAR) có thể thấp hơn do biến thiên giữa các cá nhân.
 
 \section{Các Hạn Chế và Mối Đe Dọa đối với Tính Hợp Lệ}
 
@@ -97,15 +92,15 @@ Kết quả cụ thể cho nhận dạng hoạt động con người sử dụng
 \subsection{ML Cổ Điển vs Học Sâu}
 Luận văn này cố ý chọn học máy cổ điển (Random Forest, SVM, Neural Networks) thay vì học sâu hiện đại (CNN, LSTM, Transformer) do:
 \begin{itemize}
-    \item \textbf{Ràng Buộc Triển Khai}: Các mô hình cổ điển biên dịch thành mã C++ nhỏ (95-182KB), trong khi các mạng sâu yêu cầu các runtime suy luận chuyên biệt (TensorFlow Lite Micro) thêm 100-300KB overhead
-    \item \textbf{Hiệu Quả Huấn Luyện}: Các mô hình cổ điển huấn luyện trong giây đến phút trên CPU; các mạng sâu yêu cầu GPU và giờ huấn luyện
+    \item \textbf{Ràng Buộc Triển Khai}: Các mô hình cổ điển biên dịch thành mã C++ nhỏ, trong khi các mạng sâu yêu cầu các runtime suy luận chuyên biệt (TFLite Micro) thêm 150--250KB overhead
+    \item \textbf{Hiệu Quả Huấn Luyện}: Các mô hình cổ điển huấn luyện trong dưới 1 giây trên CPU; PyTorch huấn luyện trong 2--10 giây
     \item \textbf{Khả Năng Diễn Giải}: Tầm quan trọng đặc trưng Random Forest và ranh giới quyết định SVM có thể kiểm toán; các mạng sâu mờ đục
 \end{itemize}
 
-Tuy nhiên, học sâu xuất sắc trên các tập dữ liệu lớn (>100K mẫu) và đầu vào tín hiệu thô (bỏ qua kỹ thuật đặc trưng thủ công). Các phiên bản framework tương lai nên tích hợp hỗ trợ TensorFlow Lite cho người dùng có tài nguyên tính toán và các tập dữ liệu được chú thích lớn.
+Tuy nhiên, kết quả thực nghiệm cho thấy PyTorch MLP và 1D-CNN đạt hiệu suất cao nhất (99,13\% trên 5 lớp), xác nhận giá trị của cả hai hướng tiếp cận. Framework hỗ trợ đồng thời cả hai: ML cổ điển cho prototyping nhanh và vi điều khiển hạn chế, học sâu cho bài toán phức tạp hơn.
 
 \subsection{Đặc Trưng Thủ Công vs Đặc Trưng Học}
-Bộ 90 đặc trưng miền thời gian được sử dụng bao gồm các thống kê thủ công (15 thống kê × 6 trục). Điều này yêu cầu kiến thức miền (biết đặc trưng nào phân biệt các hoạt động) nhưng đảm bảo khả năng diễn giải, biểu diễn gọn nhẹ, và tương đồng bit-exact giữa Python và C++. Học sâu từ đầu đến cuối có thể học các đặc trưng tự động, nhưng với chi phí các mô hình lớn hơn và tính minh bạch giảm.
+Bộ 63 đặc trưng bất biến hướng (orientation-invariant) được sử dụng bao gồm thống kê thời gian trên biên độ tổng hợp (acc\_mag, gyro\_mag, acc\_jerk\_mag) cộng với đặc trưng phổ DFT. Thiết kế này yêu cầu kiến thức miền nhưng đảm bảo khả năng diễn giải, biểu diễn gọn nhẹ, bất biến hướng gắn thiết bị, và tương đồng bit-exact giữa Python và C++. Kết quả thực nghiệm (97--99\% trên 5 lớp) xác nhận hiệu quả của bộ đặc trưng này. Học sâu từ đầu đến cuối (1D-CNN) đạt hiệu suất tương đương (99,13\%) nhưng với chi phí mô hình lớn hơn và tính minh bạch giảm.
 
 Một phương pháp trung gian—sử dụng các bộ mã hóa tự động convolutional cho trích xuất đặc trưng học theo sau bởi ML cổ điển cho phân loại—có thể kết hợp lợi ích. Điều này vẫn là công việc tương lai.
 
