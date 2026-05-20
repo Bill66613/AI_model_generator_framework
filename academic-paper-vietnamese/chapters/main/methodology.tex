@@ -54,8 +54,8 @@ Framework được đề xuất triển khai một quy trình từ đầu đến
 
     % --- Phase labels above groups ---
     \node[phaselbl, above=0.5cm of ph1] {Thu thập \& Xử lý};
-    \node[phaselbl, above=0.5cm of ph2] {Xây dựng Mô hình};
-    \node[phaselbl, above=0.5cm of ph3] {Tạo Mã \& Triển khai};
+    \node[phaselbl, above=0.5cm of ph2] {Xây dựng mô hình};
+    \node[phaselbl, above=0.5cm of ph3] {Tạo mã \& Triển khai};
 
     % --- Arrows between steps ---
     \foreach \a/\b in {s1/s2, s2/s3, s3/s4, s4/s5, s5/s6}
@@ -104,7 +104,14 @@ Về đánh đổi thực tế: tần số lấy mẫu cao hơn cung cấp thêm
 \section{Quy trình tiền xử lý tương tác}
 
 \subsection{Tải lên và trực quan hóa dữ liệu}
-Người dùng tải lên các tập dữ liệu CSV chứa các phép đo IMU, tổ chức theo hoạt động (mỗi tệp tương ứng với một lớp). Framework tự động phát hiện tên cột cảm biến, tần số lấy mẫu và hiển thị biểu đồ đồng bộ của tín hiệu thô trên tất cả các trục, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý.
+Người dùng tải lên các tập dữ liệu CSV chứa các phép đo IMU, tổ chức theo hoạt động (mỗi tệp tương ứng với một lớp). Framework tự động phát hiện tên cột cảm biến, tần số lấy mẫu và hiển thị biểu đồ đồng bộ của tín hiệu thô trên tất cả các trục, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý. Hình~\ref{fig:ui_data_upload} minh họa giao diện tải lên dữ liệu.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_data_upload.png}
+    \caption{Giao diện tải lên và trực quan hóa dữ liệu cảm biến. Framework tự động phát hiện cấu trúc cột IMU và hiển thị biểu đồ tín hiệu đồng bộ trên tất cả các trục gia tốc kế và con quay hồi chuyển, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý.}
+    \label{fig:ui_data_upload}
+\end{figure}
 
 \subsection{Các phương pháp lọc và làm sạch tín hiệu}
 \label{sec:signal_filtering}
@@ -205,7 +212,14 @@ Cơ sở lý thuyết cho lựa chọn $o = 50\%$: độ chồng lắp làm tăn
 
 Không phải toàn bộ bản ghi đều có chất lượng đồng đều: giai đoạn bắt đầu và kết thúc thường chứa các chuyển tiếp hoạt động, nhiễu điện, hoặc đoạn nghỉ ngắn không đại diện cho hoạt động mục tiêu. Giao diện lựa chọn đoạn tương tác cho phép người dùng kéo thả trực tiếp trên biểu đồ tín hiệu để đánh dấu các vùng sạch, bỏ qua các đoạn chuyển tiếp hoặc nhiễu. Nhiều đoạn không chồng lắp trên cùng một tệp được hỗ trợ---cho phép trích xuất nhiều chu kỳ hoạt động riêng biệt từ một bản ghi dài mà không cần cắt tệp thủ công. Sau khi xác nhận, cửa sổ trượt chạy tự động trên từng đoạn theo Phương trình~\ref{eq:sliding_window}, sinh toàn bộ tập huấn luyện trong một thao tác.
 
-Thiết kế này tách bạch rõ hai quyết định: \textit{đâu là dữ liệu đáng tin cậy} (người dùng kiểm soát) và \textit{cách biến dữ liệu đó thành mẫu huấn luyện} (hệ thống tự động hóa hoàn toàn). Nhãn hoạt động được kế thừa từ tệp nguồn nhưng có thể gán lại thủ công---ví dụ, trích xuất các đoạn \textit{standing} từ tệp \textit{walking} trong các giai đoạn chuyển tiếp. So với chú thích dấu thời gian thủ công từng khung, cách tiếp cận này giảm đáng kể công sức thu thập trong khi vẫn bảo tồn kiểm soát chất lượng dữ liệu.
+Thiết kế này tách bạch rõ hai quyết định: \textit{đâu là dữ liệu đáng tin cậy} (người dùng kiểm soát) và \textit{cách biến dữ liệu đó thành mẫu huấn luyện} (hệ thống tự động hóa hoàn toàn). Nhãn hoạt động được kế thừa từ tệp nguồn nhưng có thể gán lại thủ công---ví dụ, trích xuất các đoạn \textit{standing} từ tệp \textit{walking} trong các giai đoạn chuyển tiếp. So với chú thích dấu thời gian thủ công từng khung, cách tiếp cận này giảm đáng kể công sức thu thập trong khi vẫn bảo tồn kiểm soát chất lượng dữ liệu. Hình~\ref{fig:ui_preprocessing} minh họa giao diện kéo thả cửa sổ trên biểu đồ tín hiệu.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_preprocessing_draggable.png}
+    \caption{Giao diện cửa sổ kéo thả tương tác. Người dùng kéo thả trực tiếp trên biểu đồ tín hiệu để xác định các đoạn hoạt động đại diện. Cửa sổ trượt tự động sinh các mẫu huấn luyện từ các đoạn đã chọn, kết hợp giữa kiểm soát thủ công và tự động hóa.}
+    \label{fig:ui_preprocessing}
+\end{figure}
 
 \section{Trích xuất đặc trưng}
 \label{sec:feature_extraction}
@@ -393,12 +407,12 @@ Bộ phân loại phân biệt tìm siêu phẳng tối đa hóa biên phân tá
     \item Cân bằng lớp: \texttt{class\_weight='balanced'}
     \item Chính quy hóa: Tham số $C$ kiểm soát đánh đổi biên rộng---vi phạm biên ($C \in \{0{,}1;\ 1;\ 10\}$)
 \end{itemize}
-SVM phù hợp khi số chiều đặc trưng cao so với số mẫu---điển hình trong HAR với 90 đặc trưng và vài trăm mẫu. Yêu cầu chuẩn hóa đặc trưng (StandardScaler) trước huấn luyện để đảm bảo các chiều đóng góp đồng đều vào hàm kernel.
+SVM phù hợp khi số chiều đặc trưng cao so với số mẫu---điển hình trong HAR với hàng chục đến hàng trăm đặc trưng và vài trăm mẫu. Yêu cầu chuẩn hóa đặc trưng (StandardScaler) trước huấn luyện để đảm bảo các chiều đóng góp đồng đều vào hàm kernel.
 
 \paragraph{Neural Network (NN)}
-Perceptron đa lớp (MLP) với lan truyền ngược, phù hợp học các ánh xạ phi tuyến phức tạp. Một kiến trúc tham chiếu cho bài toán 5 lớp với 90 đặc trưng đầu vào:
+Perceptron đa lớp (MLP) với lan truyền ngược, phù hợp học các ánh xạ phi tuyến phức tạp. Một kiến trúc tham chiếu cho bài toán 5 lớp với 63 đặc trưng đầu vào:
 \begin{itemize}
-    \item Kiến trúc: [90 đầu vào] $\rightarrow$ [100 ẩn, ReLU] $\rightarrow$ [num\_classes, Softmax]
+    \item Kiến trúc: [63 đầu vào] $\rightarrow$ [100 ẩn, ReLU] $\rightarrow$ [num\_classes, Softmax]
     \item Trình tối ưu: Adam ($\eta=0{,}001$, $\beta_1=0{,}9$, $\beta_2=0{,}999$)
     \item Chính quy hóa: Phạt L2 $\alpha=0{,}0001$; dừng sớm (patience=10)
     \item Lịch trình: Tối đa 500 epoch, batch đầy đủ
@@ -476,9 +490,16 @@ Cân bằng lớp là quan trọng cho triển khai thực tế nơi tất cả 
     \item \texttt{learning\_rate\_init}: [0.001, 0.01]
 \end{itemize}
 
-Tối ưu hóa xác định các cấu hình tối đa hóa độ chính xác xác thực chéo, thường cải thiện hiệu suất cơ sở 2--5\%.
+Tối ưu hóa xác định các cấu hình tối đa hóa độ chính xác xác thực chéo, thường cải thiện hiệu suất cơ sở 2--5\%. Hình~\ref{fig:ui_training} minh họa giao diện cấu hình huấn luyện.
 
-\section{Tạo Mã cho Triển khai Biên}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_training_config.png}
+    \caption{Giao diện cấu hình huấn luyện mô hình. Người dùng chọn thuật toán (Random Forest, Neural Network, SVM, PyTorch MLP/CNN), cấu hình tối ưu hóa siêu tham số với GridSearchCV, chiến lược cân bằng lớp, và theo dõi tiến trình huấn luyện thời gian thực.}
+    \label{fig:ui_training}
+\end{figure}
+
+\section{Tạo mã cho triển khai biên}
 
 \subsection{Kiến trúc}
 Hệ thống con tạo mã dịch các mô hình đã huấn luyện thành các gói triển khai phù hợp với nhiều họ thiết bị và môi trường thực thi khác nhau, thay vì nhắm đến một bo mạch đơn lẻ. Kiến trúc tuân theo mẫu thiết kế Factory, trong đó generator được chọn theo ba trục: \textit{loại mô hình}, \textit{họ nền tảng đích} và \textit{cách tiếp cận triển khai}. Danh sách khóa nền tảng và backend cụ thể được tóm tắt trong Bảng~\ref{tab:deployment_target_matrix}.
@@ -507,6 +528,15 @@ Kiến trúc gồm ba lớp chính:
         \bottomrule
     \end{tabular}
 \end{table}
+
+Hình~\ref{fig:ui_code_generation} minh họa giao diện tạo mã với các tùy chọn cấu hình triển khai và xem trước mã C++ được sinh ra.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/ui_code_generation.png}
+    \caption{Giao diện tạo mã triển khai. Hiển thị các tệp header, implementation và Arduino sketch được sinh ra. Người dùng chọn chế độ tối ưu hóa (Accuracy, Speed, Power, Balanced), cấu hình nền tảng đích và tải xuống gói triển khai hoàn chỉnh.}
+    \label{fig:ui_code_generation}
+\end{figure}
 
 \subsection{Lý do chọn tạo mã trực tiếp thay vì Runtime Engine}
 \label{sec:codegen_rationale}
@@ -775,7 +805,7 @@ Bốn chế độ tối ưu hóa triển khai có thể cấu hình khi tạo m�
 \begin{itemize}
     \item Số học dấu phẩy động độ chính xác đầy đủ
     \item Không đơn giản hóa mô hình (tất cả cây/vectors hỗ trợ được giữ lại)
-    \item Bộ đặc trưng hoàn chỉnh (90 đặc trưng miền thời gian)
+    \item Bộ đặc trưng hoàn chỉnh (toàn bộ đặc trưng được chọn, không cắt giảm)
 \end{itemize}
 
 \paragraph{Chế độ Speed}
@@ -813,24 +843,24 @@ Thỏa hiệp giữa độ chính xác, tốc độ và điện năng:
 \end{itemize}
 Nhờ cách phân lớp này, cùng một mô hình đã huấn luyện có thể được xuất lại cho nhiều đích triển khai mà không cần huấn luyện lại, ngoại trừ các điều chỉnh phụ thuộc tài nguyên như chế độ tối ưu hóa hoặc backend suy luận.
 
-\section{Thiết kế Thực nghiệm}
+\section{Thiết kế thực nghiệm}
 
-\subsection{Tập Dữ liệu}
+\subsection{Tập dữ liệu}
 Các thử nghiệm xác thực sử dụng một tập dữ liệu Nhận dạng Hoạt động Con người (HAR) được thu thập từ một đối tượng duy nhất thực hiện năm hoạt động:
 \begin{itemize}
     \item \textit{Running}, \textit{Still}, \textit{Walking}, \textit{Walking Downstairs}, \textit{Walking Upstairs}
 \end{itemize}
 Dữ liệu được thu thập bằng nền tảng Seeed XIAO nRF52840 Sense ở 100Hz qua nhiều phiên ghi. Trong luận văn này, thiết bị này được dùng như nền tảng cảm biến và benchmark tham chiếu; năng lực đa thiết bị được đánh giá riêng thông qua kiến trúc generator và các loại gói sinh ra cho từng đích. Mỗi hoạt động được ghi trong 30--60 giây qua nhiều phiên, với chú trọng vào việc ghi nhận đầy đủ các giai đoạn chuyển tiếp giữa các hoạt động. Giao diện cửa sổ kéo thả được sử dụng để phân đoạn các bản ghi liên tục thành \textbf{mẫu được gán nhãn} (các đoạn hoạt động được chú thích thủ công), trích xuất nhiều cửa sổ đại diện mỗi hoạt động.
 
-\textit{Quy trình Trích xuất Đặc trưng}: Mỗi mẫu được gán nhãn (thường dài 30-60 giây) sau đó được xử lý bằng cách tiếp cận cửa sổ trượt (Phần~\ref{sec:feature_extraction}) với cửa sổ 1,5 giây và chồng lấp 50\%. Điều này chuyển đổi các mẫu được gán nhãn thành 159 \textbf{vectors đặc trưng} (điểm dữ liệu huấn luyện) được chia thành các tập huấn luyện (101 mẫu, 63,5\%), xác thực (28 mẫu, 17,6\%) và kiểm tra (30 mẫu, 18,9\%). Tập dữ liệu chứa năm lớp hoạt động:
+\textit{Quy trình Trích xuất Đặc trưng}: Mỗi mẫu được gán nhãn (thường dài 30--60 giây) sau đó được xử lý bằng cách tiếp cận cửa sổ trượt (Phần~\ref{sec:feature_extraction}) với cửa sổ 1,5 giây và chồng lấp 50\%. Điều này chuyển đổi các mẫu được gán nhãn thành 507 \textbf{cửa sổ đặc trưng} cho bài toán 5 lớp (345 cho bài toán 3 lớp). Tăng cường dữ liệu (augmentation) với hệ số 2 sử dụng ba phương pháp (jitter, rotation, scaling) tạo thêm 1014 cửa sổ tổng hợp, nâng tổng lên 1521 mẫu (5 lớp) hoặc 1035 mẫu (3 lớp). Dữ liệu được chia theo tỷ lệ 70\% huấn luyện, 15\% xác thực, 15\% kiểm tra sử dụng phân chia phân tầng (stratified split), cho ra: huấn luyện 1063 mẫu, xác thực 229 mẫu, kiểm tra 229 mẫu (5 lớp). Phân bố các lớp hoạt động (trước tăng cường):
 \begin{itemize}
-    \item Running: 30 mẫu tổng cộng (18,9\%)
-    \item Still: 30 mẫu tổng cộng (18,9\%)
-    \item Walking: 30 mẫu tổng cộng (18,9\%)
-    \item Walking Downstairs: 35 mẫu tổng cộng (22,0\%)
-    \item Walking Upstairs: 34 mẫu tổng cộng (21,4\%)
+    \item Running: 124 cửa sổ (24,5\%)
+    \item Still: 112 cửa sổ (22,1\%)
+    \item Walking: 109 cửa sổ (21,5\%)
+    \item Walking Downstairs: 85 cửa sổ (16,8\%)
+    \item Walking Upstairs: 77 cửa sổ (15,2\%)
 \end{itemize}
-Tỷ lệ mất cân bằng lớp: 1,17:1 (walking downstairs so với running/still/walking), đại diện cho một tập dữ liệu tương đối cân bằng. Mỗi vector đặc trưng chứa 90 đặc trưng miền thời gian (15 đặc trưng × 6 trục cảm biến).
+Tỷ lệ mất cân bằng lớp: 1,61:1 (running so với walking upstairs), đại diện cho một tập dữ liệu tương đối cân bằng. Mỗi vector đặc trưng chứa 63 đặc trưng bất biến hướng (orientation-invariant).
 
 \textbf{Cấu hình đánh giá}: Các thử nghiệm được thực hiện với hai cấu hình phân lớp:
 \begin{itemize}
@@ -886,5 +916,5 @@ Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: su
     \item Các họ đích được hỗ trợ ở mức generator: Arduino-compatible, ARM Cortex-M, generic C/C++, ESP-IDF, MicroPython, Zephyr; cùng các backend TFLite Micro và ONNX Runtime
 \end{itemize}
 
-\textbf{Tính khả dụng Mã:}
+\textbf{Tính khả dụng mã:}
 Mã nguồn, các tập dữ liệu mẫu và các ví dụ triển khai có sẵn trong kho dự án.

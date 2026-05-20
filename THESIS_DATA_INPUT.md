@@ -213,6 +213,34 @@ Per-Class Performance (test set):
 - **Orientation**: _____________ (e.g., "USB port facing up, mounted on wrist")
 - **Test date**: _____________
 
+### 2.2 Pytorch MLP — On-Device Performance
+
+| Activity | Correct Predictions | Total Samples | Accuracy | Avg Inference Time | Notes |
+|----------|---------------------|---------------|----------|-------------------|-------|
+| Running | _____ | _____ | ____.__%  | _____ms | _____________ |
+| Still | _____ | _____ | ____.__%  | _____ms | _____________ |
+| Walking | _____ | _____ | ____.__%  | _____ms | _____________ |
+| Walking Downstairs | _____ | _____ | ____.__%  | _____ms | _____________ |
+| Walking Upstairs | _____ | _____ | ____.__%  | _____ms | _____________ |
+| **OVERALL** | **_____** | **_____** | **____.__%** | **_____ms** | |
+
+**Confusion observed**: _________________________________________________________
+**Unknown predictions**: _____ out of _____ (____%)
+
+### 2.2 Pytorch CNN — On-Device Performance
+
+| Activity | Correct Predictions | Total Samples | Accuracy | Avg Inference Time | Notes |
+|----------|---------------------|---------------|----------|-------------------|-------|
+| Running | _____ | _____ | ____.__%  | _____ms | _____________ |
+| Still | _____ | _____ | ____.__%  | _____ms | _____________ |
+| Walking | _____ | _____ | ____.__%  | _____ms | _____________ |
+| Walking Downstairs | _____ | _____ | ____.__%  | _____ms | _____________ |
+| Walking Upstairs | _____ | _____ | ____.__%  | _____ms | _____________ |
+| **OVERALL** | **_____** | **_____** | **____.__%** | **_____ms** | |
+
+**Confusion observed**: _________________________________________________________
+**Unknown predictions**: _____ out of _____ (____%)
+
 ### 2.2 Neural Network — On-Device Performance
 
 | Activity | Correct Predictions | Total Samples | Accuracy | Avg Inference Time | Notes |
@@ -226,6 +254,8 @@ Per-Class Performance (test set):
 
 **Confusion observed**: _________________________________________________________
 **Unknown predictions**: _____ out of _____ (____%)
+
+**Problem: Not quantized with quantization int8 option -> inference performane low, hanging symptom**
 
 ### 2.3 Random Forest — On-Device Performance
 
@@ -280,9 +310,11 @@ ________________________________________________________________________________
 
 | Model | Sketch Size | Global Variables | Flash Used | SRAM Used | Notes |
 |-------|-------------|------------------|------------|-----------|-------|
-| Neural Network | _____ bytes | _____ bytes | _____% | _____% | _____________ |
-| Random Forest | _____ bytes | _____ bytes | _____% | _____% | _____________ |
-| SVM | _____ bytes | _____ bytes | _____% | _____% | _____________ |
+| Pytorch CNN | 145728 bytes | 126440 bytes | 17% | 53% | _____________ |
+| Pytorch MLP | 177168 bytes | 49640 bytes | 21% | 20% | _____________ |
+| Neural Network | 155816 bytes | 49640 bytes | 19% | 20% | _____________ |
+| Random Forest | 187936 bytes | 49640 bytes | 23% | 20% | _____________ |
+| SVM | 132952 bytes | 49632 bytes | 16% | 20% | _____________ |
 
 **Maximum capacity** (Seeed XIAO nRF52840):
 

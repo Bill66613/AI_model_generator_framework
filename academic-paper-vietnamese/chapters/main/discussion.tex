@@ -16,16 +16,11 @@ Cân bằng trọng số lớp (\texttt{class\_weight='balanced'}) được bậ
 Lựa chọn thiết kế bật cân bằng lớp mặc định phản ánh nguyên tắc ưu tiên triển khai thực tế: trong ứng dụng HAR, tất cả hoạt động phải được phát hiện đáng tin cậy, không chỉ các lớp thường xuyên nhất. Điều này đặc biệt quan trọng trong các bối cảnh an toàn (phát hiện té ngã, giám sát bệnh nhân) nơi bỏ sót lớp thiểu số có thể gây hậu quả nghiêm trọng \cite{he2009learning}.
 
 \subsection{Tính Khả Thi Triển Khai Biên}
-Dữ liệu triển khai tham khảo trên bài toán 3 lớp cho thấy mô hình PyTorch 1D-CNN đạt 99,4\% độ chính xác trên thiết bị với tỷ lệ từ chối chỉ 0,6\% (ngưỡng tin cậy $\tau = 0{,}6$) và độ tin cậy trung bình 98,8\%. Kết quả này xác nhận rằng pipeline do framework sinh ra có thể vận hành chính xác trên nền tảng tham chiếu Seeed XIAO nRF52840 (ARM Cortex-M4F @ 64~MHz).
+Kết quả triển khai trên thiết bị (Bảng~\ref{tab:deployment_status}) cho thấy một phát hiện quan trọng: chỉ PyTorch 1D-CNN hoạt động đáng tin cậy trên cả hai cấu hình bài toán (3 lớp và 5 lớp), trong khi Random Forest chỉ ổn định cho bài toán 3 lớp. Ba thuật toán còn lại (Neural Network sklearn, SVM, PyTorch MLP) gặp các vấn đề khác nhau --- từ treo hệ thống đến nhầm lẫn lớp có hệ thống.
 
-Với cửa sổ 1,5 giây và bước trượt 0,75 giây, phân loại thời gian thực yêu cầu suy luận hoàn thành trong 750ms---biên độ dư thừa đáng kể cho vi điều khiển lớp Cortex-M4F, để lại khoảng trống cho:
-\begin{itemize}
-    \item Giao tiếp không dây (truyền BLE kết quả)
-    \item Quản lý điện năng (ngủ sâu giữa các chu kỳ suy luận)
-    \item Các phương thức cảm biến bổ sung
-\end{itemize}
+Phát hiện này bổ sung chiều sâu cho kết luận về lựa chọn thuật toán: biên độ chênh lệch 1,75 điểm phần trăm trên tập kiểm tra offline trở nên không có ý nghĩa khi một số mô hình hoàn toàn không hoạt động trên thiết bị. Tiêu chí lựa chọn mô hình cho triển khai biên cần mở rộng từ ``độ chính xác cao nhất'' sang bao gồm \textit{khả năng triển khai thực tế}---bao gồm khối lượng tính toán suy luận, yêu cầu bộ nhớ, và tính ổn định của pipeline code generation.
 
-Các phép đo chi tiết về thời gian suy luận, bộ nhớ và tiêu thụ điện năng trên nền tảng tham chiếu cần được bổ sung cho phiên bản cuối cùng.
+Đáng chú ý, CNN --- mô hình end-to-end hoạt động trên dữ liệu thô --- hoạt động tốt nhất trên thiết bị, trong khi các mô hình dựa trên đặc trưng thủ công gặp nhiều vấn đề hơn. Điều này gợi ý rằng việc loại bỏ bước trích xuất đặc trưng trong mã C++ (nguồn chính của sai lệch tương đồng) mang lại lợi thế triển khai đáng kể, dù với chi phí mô hình lớn hơn và tính diễn giải thấp hơn.
 
 \subsection{Tiền Xử Lý Tương Tác: Một Thay Đổi Mô Hình}
 Giao diện cửa sổ thời gian kéo thả mới lạ đại diện cho một thay đổi mô hình từ các quy trình tiền xử lý truyền thống. Các phương pháp thông thường yêu cầu người dùng hoặc:
@@ -97,7 +92,7 @@ Luận văn này cố ý chọn học máy cổ điển (Random Forest, SVM, Neu
     \item \textbf{Khả Năng Diễn Giải}: Tầm quan trọng đặc trưng Random Forest và ranh giới quyết định SVM có thể kiểm toán; các mạng sâu mờ đục
 \end{itemize}
 
-Tuy nhiên, kết quả thực nghiệm cho thấy PyTorch MLP và 1D-CNN đạt hiệu suất cao nhất (99,13\% trên 5 lớp), xác nhận giá trị của cả hai hướng tiếp cận. Framework hỗ trợ đồng thời cả hai: ML cổ điển cho prototyping nhanh và vi điều khiển hạn chế, học sâu cho bài toán phức tạp hơn.
+Tuy nhiên, kết quả thực nghiệm cho thấy PyTorch MLP và 1D-CNN đạt hiệu suất cao nhất (99,13\% trên 5 lớp), và quan trọng hơn, \textit{chỉ 1D-CNN hoạt động đáng tin cậy trên thiết bị cho cả hai cấu hình bài toán} (Bảng~\ref{tab:deployment_status}). Điều này xác nhận giá trị của cả hai hướng tiếp cận: ML cổ điển cho prototyping nhanh và các bài toán đơn giản (RF hoạt động tốt cho 3 lớp), học sâu end-to-end cho triển khai đáng tin cậy trên các bài toán phức tạp.
 
 \subsection{Đặc Trưng Thủ Công vs Đặc Trưng Học}
 Bộ 63 đặc trưng bất biến hướng (orientation-invariant) được sử dụng bao gồm thống kê thời gian trên biên độ tổng hợp (acc\_mag, gyro\_mag, acc\_jerk\_mag) cộng với đặc trưng phổ DFT. Thiết kế này yêu cầu kiến thức miền nhưng đảm bảo khả năng diễn giải, biểu diễn gọn nhẹ, bất biến hướng gắn thiết bị, và tương đồng bit-exact giữa Python và C++. Kết quả thực nghiệm (97--99\% trên 5 lớp) xác nhận hiệu quả của bộ đặc trưng này. Học sâu từ đầu đến cuối (1D-CNN) đạt hiệu suất tương đương (99,13\%) nhưng với chi phí mô hình lớn hơn và tính minh bạch giảm.

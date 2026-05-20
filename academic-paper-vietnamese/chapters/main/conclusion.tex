@@ -1,25 +1,25 @@
 \chapter{Kết Luận}
 \label{chap:conclusion}
 
-\section{Tóm Tắt Đóng Góp}
+\section{Tóm tắt đóng góp}
 
 Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển động được hỗ trợ bởi AI trở nên có thể tiếp cận với các nhà nghiên cứu, nhà phát triển và giáo viên mà không hy sinh hiệu suất hoặc kiểm soát trên các thiết bị biên dị thể. Luận văn này trình bày một framework mã nguồn mở toàn diện thống nhất tiền xử lý dữ liệu, huấn luyện mô hình và triển khai biên vào một quy trình đơn thân thiện với người dùng. Các đóng góp chính của hệ thống trải dài đổi mới thuật toán, kỹ thuật phần mềm và xác thực thực nghiệm:
 
-\subsection{Đóng Góp Kỹ Thuật}
+\subsection{Đóng góp kỹ thuật}
 \begin{enumerate}
-    \item \textbf{Giao Diện Tiền Xử Lý Tương Tác Mới Lạ}: Cơ chế phân đoạn cửa sổ thời gian kéo thả đại diện cho công cụ chú thích trực quan đầu tiên cho dữ liệu cảm biến chuyển động, loại bỏ sự lựa chọn truyền thống giữa việc coding logic phân đoạn phức tạp và chấp nhận các phương pháp tự động hộp đen. Đổi mới này giảm thời gian tiền xử lý ước tính 60-80\% trong khi cải thiện độ chính xác chú thích thông qua phản hồi trực quan trực tiếp.
+    \item \textbf{Giao diện tiền xử lý tương tác mới lạ}: Cơ chế phân đoạn cửa sổ thời gian kéo thả đại diện cho công cụ chú thích trực quan đầu tiên cho dữ liệu cảm biến chuyển động, loại bỏ sự lựa chọn truyền thống giữa việc coding logic phân đoạn phức tạp và chấp nhận các phương pháp tự động hộp đen. Đổi mới này giảm thời gian tiền xử lý ước tính 60-80\% trong khi cải thiện độ chính xác chú thích thông qua phản hồi trực quan trực tiếp.
 
-    \item \textbf{Hỗ Trợ Đa Thuật Toán Toàn Diện}: Không giống như các nền tảng thương mại giới hạn ở mạng nơ-ron hoặc các thuật toán ML chuyên biệt, framework này tích hợp năm thuật toán (Random Forest, SVM, Neural Network, PyTorch MLP, PyTorch 1D-CNN) với các API nhất quán. Tính linh hoạt này cho phép người dùng chọn các thuật toán khớp với các ràng buộc triển khai của họ---Random Forest cho tạo mẫu nhanh (huấn luyện 0,15s), PyTorch MLP/CNN cho độ chính xác tối đa (99,13\%), hoặc SVM cho khả năng diễn giải lý thuyết.
+    \item \textbf{Hỗ trợ đa thuật toán toàn diện}: Không giống như các nền tảng thương mại giới hạn ở mạng nơ-ron hoặc các thuật toán ML chuyên biệt, framework này tích hợp năm thuật toán (Random Forest, SVM, Neural Network, PyTorch MLP, PyTorch 1D-CNN) với các API nhất quán. Tính linh hoạt này cho phép người dùng chọn các thuật toán khớp với các ràng buộc triển khai của họ---Random Forest cho tạo mẫu nhanh (huấn luyện 0,15s), PyTorch MLP/CNN cho độ chính xác tối đa (99,13\%), hoặc SVM cho khả năng diễn giải lý thuyết.
 
-    \item \textbf{Kiến Trúc Triển Khai Đa Thiết bị Nhận Biết Tối Ưu hóa}: Thay vì gắn với một bo mạch duy nhất, tầng generator được tổ chức theo ba trục---loại mô hình, nền tảng đích và backend triển khai---cho phép xuất các gói C/C++/MicroPython cho Arduino-compatible boards, ARM Cortex-M, ESP-IDF, Zephyr và các backend runtime thay thế như TFLite Micro hoặc ONNX Runtime. Bốn chế độ tối ưu hóa (\texttt{accuracy}, \texttt{balanced}, \texttt{speed}, \texttt{power}) điều chỉnh độ chính xác số học và chiến lược bộ đệm theo ràng buộc tài nguyên của nền tảng đích.
+    \item \textbf{Kiến trúc triển khai đa thiết bị nhận biết tối ưu hóa}: Thay vì gắn với một bo mạch duy nhất, tầng generator được tổ chức theo ba trục---loại mô hình, nền tảng đích và backend triển khai---cho phép xuất các gói C/C++/MicroPython cho Arduino-compatible boards, ARM Cortex-M, ESP-IDF, Zephyr và các backend runtime thay thế như TFLite Micro hoặc ONNX Runtime. Bốn chế độ tối ưu hóa (\texttt{accuracy}, \texttt{balanced}, \texttt{speed}, \texttt{power}) điều chỉnh độ chính xác số học và chiến lược bộ đệm theo ràng buộc tài nguyên của nền tảng đích.
 
-    \item \textbf{Xử Lý Mất Cân Bằng Lớp}: Bằng cách làm cho \texttt{class\_weight='balanced'} là một cấu hình mặc định thay vì tham số tùy chọn, framework hệ thống giải quyết một thách thức quan trọng nhưng thường bị bỏ qua trong theo dõi chuyển động thực tế. Thực nghiệm chứng minh các lớp thiểu số (Walking Downstairs: 38 mẫu, Walking Upstairs: 35 mẫu) đạt recall 0,971--1,000 và F1 $\geq$ 0,949, xác nhận hiệu quả của chiến lược cân bằng.
+    \item \textbf{Xử lý mất cân bằng lớp}: Bằng cách làm cho \texttt{class\_weight='balanced'} là một cấu hình mặc định thay vì tham số tùy chọn, framework hệ thống giải quyết một thách thức quan trọng nhưng thường bị bỏ qua trong theo dõi chuyển động thực tế. Thực nghiệm chứng minh các lớp thiểu số (Walking Downstairs: 38 mẫu, Walking Upstairs: 35 mẫu) đạt recall 0,971--1,000 và F1 $\geq$ 0,949, xác nhận hiệu quả của chiến lược cân bằng.
 
-    \item \textbf{Đảm Bảo Tương Đồng Huấn Luyện-Triển Khai}: Luận văn này xác định và giải quyết một thách thức ít được nghiên cứu trong edge ML: sự không khớp giữa pipeline trích xuất đặc trưng huấn luyện (Python) và suy luận (C++). Quy trình xác minh 12 điểm kiểm tra đảm bảo tính nhất quán bit-exact cho các đặc trưng miền thời gian, bao gồm sửa lỗi zero-padding, thống nhất công thức kurtosis/skewness, và reorder đặc trưng tự động tại thời điểm tạo mã. Phát hiện này nhấn mạnh rằng tính minh bạch không chỉ là triết lý mã nguồn mở mà là yêu cầu kỹ thuật thiết yếu cho triển khai edge ML đáng tin cậy \cite{paleyes2022challenges}.
+    \item \textbf{Đảm bảo tương đồng huấn luyện-triển khai}: Luận văn này xác định và giải quyết một thách thức ít được nghiên cứu trong edge ML: sự không khớp giữa pipeline trích xuất đặc trưng huấn luyện (Python) và suy luận (C++). Quy trình xác minh 12 điểm kiểm tra đảm bảo tính nhất quán bit-exact cho các đặc trưng miền thời gian, bao gồm sửa lỗi zero-padding, thống nhất công thức kurtosis/skewness, và reorder đặc trưng tự động tại thời điểm tạo mã. Phát hiện này nhấn mạnh rằng tính minh bạch không chỉ là triết lý mã nguồn mở mà là yêu cầu kỹ thuật thiết yếu cho triển khai edge ML đáng tin cậy \cite{paleyes2022challenges}.
 
-    \item \textbf{Tăng Cường Dữ Liệu Nhận Biết Lớp}: Framework tích hợp hệ thống tăng cường dữ liệu với năm phương pháp biến đổi đặc thù IMU \cite{um2017data}, cùng với chiến lược nhận biết lớp mới lạ tự động phân biệt hoạt động tĩnh và động. Hoạt động tĩnh chỉ nhận micro-jitter ($\sigma = 0{,}01$) thay vì biến đổi đầy đủ, bảo toàn đặc tính phân biệt ``gần bất động'' thiết yếu cho phân loại chính xác. Thiết kế này giải quyết vấn đề class confusion được quan sát khi áp dụng tăng cường đồng nhất.
+    \item \textbf{Tăng cường dữ liệu nhận biết lớp}: Framework tích hợp hệ thống tăng cường dữ liệu với năm phương pháp biến đổi đặc thù IMU \cite{um2017data}, cùng với chiến lược nhận biết lớp mới lạ tự động phân biệt hoạt động tĩnh và động. Hoạt động tĩnh chỉ nhận micro-jitter ($\sigma = 0{,}01$) thay vì biến đổi đầy đủ, bảo toàn đặc tính phân biệt ``gần bất động'' thiết yếu cho phân loại chính xác. Thiết kế này giải quyết vấn đề class confusion được quan sát khi áp dụng tăng cường đồng nhất.
 
-    \item \textbf{Ngưỡng Tin Cậy cho Từ Chối Hoạt Động Không Xác Định}: Mã C++ đã tạo tích hợp cơ chế từ chối dự đoán dựa trên ngưỡng tin cậy, trích xuất trực tiếp từ đầu ra mô hình hiện có (softmax/tỷ lệ bỏ phiếu) mà không yêu cầu mô hình phát hiện bất thường riêng biệt \cite{hendrycks2017baseline}. Phương pháp này không tốn thêm bộ nhớ, không cần dữ liệu huấn luyện bổ sung, và là bước phòng thủ thiết yếu cho triển khai thực tế nơi đầu vào ngoài phân phối là phổ biến.
+    \item \textbf{Ngưỡng tin cậy cho từ chối hoạt động không xác định}: Mã C++ đã tạo tích hợp cơ chế từ chối dự đoán dựa trên ngưỡng tin cậy, trích xuất trực tiếp từ đầu ra mô hình hiện có (softmax/tỷ lệ bỏ phiếu) mà không yêu cầu mô hình phát hiện bất thường riêng biệt \cite{hendrycks2017baseline}. Phương pháp này không tốn thêm bộ nhớ, không cần dữ liệu huấn luyện bổ sung, và là bước phòng thủ thiết yếu cho triển khai thực tế nơi đầu vào ngoài phân phối là phổ biến.
 \end{enumerate}
 
 \subsection{Xác Thực Thực Nghiệm}
@@ -50,15 +50,15 @@ Các mục tiêu nghiên cứu ban đầu được nêu trong Mục 1.3 đã đ�
 
 \begin{enumerate}
     \item \textbf{Hệ Thống Tiền Xử Lý Tương Tác} \checkmark: Giao diện cửa sổ thời gian kéo thả được triển khai thành công và tích hợp với kiểm tra tín hiệu trực quan
-    
+
     \item \textbf{Hỗ Trợ Đa Thuật Toán} \checkmark: Năm thuật toán (RF, SVM, NN, PyTorch MLP, PyTorch 1D-CNN) được tích hợp, tất cả đạt 97,38--99,13\% trên bài toán 5 lớp, cho phép lựa chọn theo ràng buộc triển khai
-    
+
     \item \textbf{Tạo Mã Không Phụ Thuộc Nền Tảng} \checkmark: Kiến trúc trình tạo modular được tổ chức theo ma trận model-platform-backend, hỗ trợ nhiều họ đích triển khai; benchmark định lượng hiện được báo cáo trên nền tảng tham chiếu ARM Cortex-M4 với bốn chế độ tối ưu hóa
-    
+
     \item \textbf{Xác Thực Hiệu Quả Framework} \checkmark: Đánh giá toàn diện chứng minh độ chính xác cạnh tranh (97,38--99,13\%), triển khai thành công trên thiết bị tham chiếu (99,4\% trên thiết bị cho CNN bài toán 3 lớp), và khả năng tái đóng gói cùng một pipeline cho nhiều đích triển khai khác nhau
-    
+
     \item \textbf{Khả Năng Tiếp Cận} \checkmark: GUI dựa trên web với đường cong học tập thấp làm cho phát triển edge AI tiên tiến có thể tiếp cận với phi chuyên gia trong khi duy trì khả năng cấp chuyên nghiệp
-    
+
     \item \textbf{Độ Tin Cậy Triển Khai} \checkmark: Quy trình xác minh tương đồng huấn luyện-triển khai 12 điểm, ngưỡng tin cậy và tăng cường dữ liệu nhận biết lớp đảm bảo mô hình hoạt động đáng tin cậy trên phần cứng thực, không chỉ trong môi trường mô phỏng
 \end{enumerate}
 
