@@ -1,7 +1,7 @@
-\chapter{Phương pháp Luận}
+\chapter{Phương pháp luận}
 \label{chap:methodology}
 
-\section{Tổng quan Kiến trúc Framework}
+\section{Tổng quan kiến trúc Framework}
 Framework được đề xuất triển khai một quy trình từ đầu đến cuối để tạo các mô hình AI được điều chỉnh cho theo dõi chuyển động trên các thiết bị biên. Kiến trúc hệ thống bao gồm năm thành phần chính: (1) tải lên và quản lý dữ liệu, (2) tiền xử lý tương tác với phân đoạn trực quan, (3) trích xuất đặc trưng, (4) huấn luyện mô hình với tối ưu hóa siêu tham số, và (5) tạo mã đặc thù cho nền tảng. Framework được triển khai bằng Python với giao diện web Dash, scikit-learn và PyTorch cho học máy, cùng các trình tạo mã tùy chỉnh cho triển khai đa nền tảng (C/C++, MicroPython, TFLite Micro, ONNX Runtime). Hình \ref{fig:architecture} minh họa quy trình làm việc tổng thể.
 
 \begin{figure}[H]
@@ -33,7 +33,7 @@ Framework được đề xuất triển khai một quy trình từ đầu đến
     \node[stepbox, right=of s1] (s2) {\textbf{Tiền xử lý}\\[4pt]\scriptsize Lọc · Kalman\\Làm mịn tín hiệu};
     \node[stepbox, right=of s2] (s3) {\textbf{Đặc trưng}\\[4pt]\scriptsize 90 features\\Sliding window};
     \node[stepbox, right=of s3] (s4) {\textbf{Huấn luyện}\\[4pt]\scriptsize RF · SVM\\MLP · CNN};
-    \node[stepbox, right=of s4] (s5) {\textbf{Tạo Mã}\\[4pt]\scriptsize C/C++ · MicroPython\\TFLite · ONNX};
+    \node[stepbox, right=of s4] (s5) {\textbf{Tạo mã}\\[4pt]\scriptsize C/C++ · MicroPython\\TFLite · ONNX};
     \node[stepbox, right=of s5] (s6) {\textbf{Triển khai}\\[4pt]\scriptsize MCU · Arduino\\Cortex-M · ESP32};
 
     % --- Phase grouping backgrounds ---
@@ -78,12 +78,12 @@ Framework được đề xuất triển khai một quy trình từ đầu đến
 \label{fig:architecture}
 \end{figure}
 
-\section{Dữ liệu Cảm biến Quán tính cho Nhận dạng Hoạt động}
+\section{Dữ liệu cảm biến quán tính cho nhận dạng hoạt động}
 \label{sec:imu_data_rationale}
 
 Nhận dạng hoạt động con người dựa trên cảm biến đặt ra yêu cầu cơ bản: tín hiệu đầu vào phải mã hóa đủ thông tin để phân biệt các hoạt động có cấu trúc động học khác nhau. Phần này trình bày cơ sở lý thuyết giải thích tại sao cảm biến quán tính (IMU) là lựa chọn phù hợp và các nguyên tắc chi phối cách framework tiếp nhận dữ liệu đó.
 
-\subsection{Gia tốc kế và Con quay hồi chuyển: Tính Bổ sung Thông tin}
+\subsection{Gia tốc kế và con quay hồi chuyển: Tính bổ sung thông tin}
 \label{sec:imu_complementarity}
 
 Cảm biến gia tốc kế đo gia tốc tuyến tính trên mỗi trục, bao gồm thành phần trọng lực chiếu lên thiết bị. Tín hiệu này phản ánh trực tiếp biên độ và tính tuần hoàn của chuyển động chi: mỗi bước chân tạo ra một xung gia tốc đặc trưng, chạy tạo biên độ lớn hơn đi bộ, trong khi trạng thái đứng yên duy trì độ lớn tín hiệu xấp xỉ $g = 9{,}81$~m/s². Tuy nhiên, gia tốc kế đơn thuần gặp phải một hạn chế cơ bản: khi thiết bị nghiêng hoặc xoay, vectơ trọng trường chiếu lên cả ba trục thay đổi theo, khiến tín hiệu bị nhập nhằng giữa chuyển động tịnh tiến thực sự và thay đổi định hướng thiết bị. Hệ quả thực tế là leo cầu thang và xuống cầu thang tạo ra biên dạng gia tốc trục thẳng đứng tương tự nhau---cùng biên độ, cùng tần số bước---nhưng khác nhau rõ rệt ở chuyển động xoay của cổ chân và đầu gối trong mỗi bước.
@@ -92,7 +92,7 @@ Cảm biến con quay hồi chuyển đo vận tốc góc (°/s) và không bị
 
 Tổ hợp sáu trục (ba gia tốc kế cộng ba con quay hồi chuyển) nắm bắt đồng thời cả trạng thái tịnh tiến và trạng thái xoay, cung cấp biểu diễn động học đầy đủ cho bài toán phân loại \cite{filippeschi2017survey_imu}. Ưu thế này được xác nhận trên các tập dữ liệu chuẩn: UCI-HAR \cite{anguita2013har} và PAMAP2 \cite{reiss2012pamap2} đạt độ chính xác cao hơn so với cấu hình chỉ dùng ba trục gia tốc kế như trong WISDM \cite{banos2014wisdm}. Framework tiếp nhận dữ liệu với bất kỳ số trục nào---ba trục, sáu trục hoặc nhiều hơn---nhưng đề xuất cấu hình sáu trục như điểm cân bằng giữa khả năng phân biệt hoạt động và chi phí tính toán triển khai. Mở rộng thêm trục (chín trục với từ kế) bổ sung thông tin định hướng tuyệt đối nhưng phụ thuộc môi trường từ trường và không cải thiện đáng kể khả năng nhận dạng các hoạt động thể chất thông thường.
 
-\subsection{Tần số Lấy mẫu: Định lý Nyquist và Nội dung Phổ Hoạt động}
+\subsection{Tần số lấy mẫu: Định lý Nyquist và nội dung phổ hoạt động}
 \label{sec:sampling_rate_rationale}
 
 Định lý lấy mẫu Shannon-Nyquist quy định: để tái tạo chính xác tín hiệu liên tục từ chuỗi rời rạc, tần số lấy mẫu $f_s$ phải thỏa mãn $f_s \geq 2 f_{\max}$, trong đó $f_{\max}$ là thành phần tần số cao nhất trong tín hiệu. Vận dụng điều này vào bài toán HAR đòi hỏi xác định nội dung phổ thực tế của tín hiệu IMU trong các hoạt động phổ biến. Phân tích phổ cho thấy phần lớn năng lượng tín hiệu tập trung trong dải tần thấp: hoạt động đứng yên và chuyển tiếp chậm dưới 1~Hz; bước đi có tần số cơ bản 1--2~Hz với các sóng hài đến khoảng 8~Hz; chạy có tần số cơ bản 2--3~Hz và các thành phần xung tác động chân (heel-strike transients) đến khoảng 20~Hz \cite{whittle2014gait}. Tần số lấy mẫu tối thiểu lý thuyết để bảo toàn toàn bộ thông tin phân biệt là khoảng 40~Hz. Các tập dữ liệu chuẩn lấy mẫu ở các mức khác nhau: WISDM ở 20~Hz (có thể aliasing sóng hài của hoạt động chạy), UCI-HAR ở 50~Hz, PAMAP2 ở 100~Hz.
@@ -101,7 +101,7 @@ Framework không áp đặt tần số lấy mẫu cố định---người dùng
 
 Về đánh đổi thực tế: tần số lấy mẫu cao hơn cung cấp thêm chu kỳ tín hiệu trong mỗi cửa sổ, làm phong phú thêm các đặc trưng thống kê---đặc biệt là tỷ lệ qua không và tỷ lệ qua trung bình vốn nhạy với mật độ chu kỳ---nhưng đồng thời tăng kích thước bộ đệm vòng cần thiết trên vi điều khiển và kéo dài thời gian trích xuất đặc trưng mỗi chu kỳ suy luận. Sự đánh đổi này thuộc về quyết định thiết kế của người dùng, không phải của framework.
 
-\section{Quy trình Tiền xử lý Tương tác}
+\section{Quy trình tiền xử lý tương tác}
 
 \subsection{Tải lên và trực quan hóa dữ liệu}
 Người dùng tải lên các tập dữ liệu CSV chứa các phép đo IMU, tổ chức theo hoạt động (mỗi tệp tương ứng với một lớp). Framework tự động phát hiện tên cột cảm biến, tần số lấy mẫu và hiển thị biểu đồ đồng bộ của tín hiệu thô trên tất cả các trục, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý.
@@ -207,7 +207,7 @@ Không phải toàn bộ bản ghi đều có chất lượng đồng đều: gi
 
 Thiết kế này tách bạch rõ hai quyết định: \textit{đâu là dữ liệu đáng tin cậy} (người dùng kiểm soát) và \textit{cách biến dữ liệu đó thành mẫu huấn luyện} (hệ thống tự động hóa hoàn toàn). Nhãn hoạt động được kế thừa từ tệp nguồn nhưng có thể gán lại thủ công---ví dụ, trích xuất các đoạn \textit{standing} từ tệp \textit{walking} trong các giai đoạn chuyển tiếp. So với chú thích dấu thời gian thủ công từng khung, cách tiếp cận này giảm đáng kể công sức thu thập trong khi vẫn bảo tồn kiểm soát chất lượng dữ liệu.
 
-\section{Trích xuất Đặc trưng}
+\section{Trích xuất đặc trưng}
 \label{sec:feature_extraction}
 
 \subsection{Tham số cửa sổ và ràng buộc nhất quán}
@@ -291,19 +291,19 @@ Biểu diễn thống kê này bắt giữ biên độ, động lực học, đ�
 
 \textbf{Loại \texttt{raw} (6 đặc trưng)}: Truyền trực tiếp các giá trị cảm biến thô mà không trích xuất đặc trưng. Phù hợp làm đường cơ sở (baseline) hoặc cung cấp đầu vào cho bộ phân loại học sâu bên ngoài.
 
-\subsection{Chiến lược Đệm Cửa sổ (Window Padding Strategy)}
+\subsection{Chiến lược đệm cửa sổ (Window Padding Strategy)}
 \label{sec:window_padding}
 
 Trong quá trình phân đoạn dữ liệu, các cửa sổ thời gian được trích xuất từ tín hiệu thô có thể ngắn hơn kích thước mục tiêu (150 mẫu ở 100Hz = 1,5 giây). Điều này xảy ra khi người dùng chọn các phân đoạn hoạt động ngắn thông qua giao diện kéo thả, hoặc khi cửa sổ trượt cuối cùng trong một đoạn không đủ dài.
 
-\paragraph{Vấn đề với Đệm Số Không (Zero-Padding)}
-Phương pháp đệm bằng số không---thường được sử dụng trong xử lý tín hiệu số \cite{oppenheim1999discrete}---tạo ra các hàng dữ liệu có tất cả giá trị cảm biến bằng 0. Đối với gia tốc kế, điều này có nghĩa $a_x = a_y = a_z = 0$, dẫn đến magnitude gia tốc:
+\paragraph{Vấn đề với Zero-Padding}
+Phương pháp zero-padding---thường được sử dụng trong xử lý tín hiệu số \cite{oppenheim1999discrete}---tạo ra các hàng dữ liệu có tất cả giá trị cảm biến bằng 0. Đối với gia tốc kế, điều này có nghĩa $a_x = a_y = a_z = 0$, dẫn đến magnitude gia tốc:
 \begin{equation}
     ||\mathbf{a}|| = \sqrt{a_x^2 + a_y^2 + a_z^2} = 0
 \end{equation}
 Tuy nhiên, trong thực tế, magnitude gia tốc \textit{luôn lớn hơn 0} do gia tốc trọng trường ($\approx 9{,}81$ m/s²), kể cả khi thiết bị hoàn toàn đứng yên. Do đó, zero-padding tạo ra các giá trị \textbf{vật lý bất khả thi} (physically impossible) gây nhiễu nghiêm trọng cho phân phối đặc trưng thống kê: $\text{min} = 0$ thay vì $\approx 9{,}81$, median và phần trăm thứ 25 bị kéo về 0.
 
-\paragraph{Giải pháp: Lặp Giá trị Biên (Edge-Value Replication)}
+\paragraph{Giải pháp: Lặp giá trị biên (Edge-Value Replication)}
 Framework sử dụng chiến lược lặp giá trị cuối cùng của cửa sổ để đệm đến kích thước mục tiêu. Cho cửa sổ $\mathbf{W} = [w_1, w_2, \ldots, w_k]$ với $k < N$ (kích thước mục tiêu), cửa sổ đệm trở thành:
 \begin{equation}
     \mathbf{W}' = [w_1, w_2, \ldots, w_k, \underbrace{w_k, w_k, \ldots, w_k}_{N-k \text{ lần}}]
@@ -312,27 +312,27 @@ Phương pháp này: (1) bảo toàn các đặc tính thống kê tín hiệu g
 
 \textit{Ý nghĩa thực nghiệm}: Trong quá trình phát triển, zero-padding khiến mô hình đã triển khai luôn dự đoán sai lớp \textit{walking\_downstairs} bất kể hoạt động thực tế, do các đặc trưng đầu vào nằm ngoài phân phối huấn luyện (xem Mục~\ref{sec:training_deployment_parity} để phân tích chi tiết).
 
-\subsection{Tăng cường Dữ liệu cho Huấn luyện (Data Augmentation)}
+\subsection{Tăng cường dữ liệu cho huấn luyện (Data Augmentation)}
 \label{sec:data_augmentation}
 
 Để cải thiện tính tổng quát hóa của mô hình và giảm hiện tượng quá khớp (overfitting), đặc biệt với các tập dữ liệu nhỏ điển hình của thu thập dữ liệu đối tượng đơn, các kỹ thuật tăng cường dữ liệu (data augmentation) được thiết kế riêng cho dữ liệu IMU có thể được áp dụng \cite{um2017data, iwana2021empirical}. Tăng cường được thực hiện ở cấp cửa sổ---trước khi trích xuất đặc trưng---để tạo ra các biến thể thực tế của tín hiệu gốc mà không làm thay đổi bản chất hoạt động.
 
-\subsubsection{Các Phương pháp Tăng cường}
+\subsubsection{Các phương pháp tăng cường}
 Năm phương pháp biến đổi được triển khai, mỗi phương pháp mô phỏng một nguồn biến thiên thực tế khác nhau trong dữ liệu cảm biến quán tính:
 
 \begin{enumerate}
     \item \textbf{Nhiễu Jitter}: Thêm nhiễu Gaussian $\mathcal{N}(0, \sigma^2)$ vào mỗi mẫu, mô phỏng nhiễu cảm biến tự nhiên và biến thiên môi trường. Tham số $\sigma$ (mặc định: 0,05) kiểm soát cường độ nhiễu \cite{um2017data}.
-    
+
     \item \textbf{Tỷ lệ (Scaling)}: Nhân toàn bộ cửa sổ với hệ số tỷ lệ ngẫu nhiên $s \sim \mathcal{N}(1, \sigma_s^2)$, mô phỏng sự khác biệt về cường độ chuyển động giữa các lần thực hiện. Ví dụ, $s = 1{,}15$ tương ứng với bước đi mạnh hơn 15\%.
-    
+
     \item \textbf{Xoay (Rotation)}: Áp dụng ma trận xoay ngẫu nhiên lên các trục gia tốc kế và con quay hồi chuyển, mô phỏng sự thay đổi vị trí đặt cảm biến trên cơ thể---một nguồn biến thiên phổ biến và quan trọng trong ứng dụng HAR thực tế \cite{eyobu2018feature}. Góc xoay tối đa có thể cấu hình (mặc định: $15^{\circ}$).
-    
-    \item \textbf{Biến dạng Thời gian (Time Warping)}: Áp dụng biến đổi phi tuyến lên trục thời gian qua nội suy cubic spline, mô phỏng sự biến thiên tốc độ tự nhiên trong thực hiện hoạt động---ví dụ, bước đi bắt đầu chậm và tăng tốc dần \cite{le_guennec2016augmentation}.
-    
+
+    \item \textbf{Biến dạng thời gian (Time Warping)}: Áp dụng biến đổi phi tuyến lên trục thời gian qua nội suy cubic spline, mô phỏng sự biến thiên tốc độ tự nhiên trong thực hiện hoạt động---ví dụ, bước đi bắt đầu chậm và tăng tốc dần \cite{le_guennec2016augmentation}.
+
     \item \textbf{Hoán vị (Permutation)}: Chia cửa sổ thành $k$ đoạn (mặc định: $k = 4$) và hoán vị thứ tự ngẫu nhiên, giúp mô hình học các đặc trưng thống kê cục bộ thay vì phụ thuộc vào thứ tự thời gian toàn cục.
 \end{enumerate}
 
-\subsubsection{Tăng cường Nhận biết Lớp (Class-Aware Augmentation)}
+\subsubsection{Tăng cường nhận biết lớp (Class-Aware Augmentation)}
 \label{sec:class_aware_augmentation}
 
 Một đóng góp quan trọng của framework là chiến lược tăng cường \textit{nhận biết lớp}, giải quyết một vấn đề tinh tế nhưng nghiêm trọng: việc áp dụng các phép biến đổi mạnh (jitter, rotation, scaling) lên các hoạt động tĩnh (static activities) như \textit{still}, \textit{standing} hay \textit{sitting} tạo ra tín hiệu nhân tạo có các dao động nhỏ giống với hoạt động cường độ thấp (ví dụ: \textit{walking\_downstairs} với rung nhẹ). Điều này gây \textbf{nhầm lẫn lớp} (class confusion), làm suy giảm đáng kể hiệu suất phát hiện hoạt động tĩnh.
@@ -347,7 +347,7 @@ Người dùng cũng có thể xác định thủ công danh sách nhãn tĩnh q
 
 \textbf{Cơ sở lý thuyết}: Chiến lược này tuân thủ nguyên tắc rằng tăng cường phải bảo toàn các đặc tính phân biệt (discriminative properties) của mỗi lớp \cite{buda2018systematic}. Với hoạt động tĩnh, đặc tính phân biệt chính là biên độ dao động cực thấp ($\sigma_{\text{acc}} < 0{,}1$ m/s²); các phép biến đổi mạnh phá hủy chính xác đặc tính này, trong khi micro-jitter bảo toàn nó.
 
-\subsection{Ngưỡng Tin cậy cho Từ chối Hoạt động Không xác định}
+\subsection{Ngưỡng tin cậy cho từ chối hoạt động không xác định}
 \label{sec:confidence_threshold}
 
 Trong triển khai thực tế, thiết bị biên thường ghi nhận các chuyển động không thuộc bất kỳ lớp nào đã huấn luyện (ví dụ: ngồi xuống, cúi người, hoặc đeo thiết bị ở vị trí bất thường). Các hệ thống phân loại truyền thống bắt buộc phải gán một nhãn cho mọi đầu vào, bất kể mức độ tin cậy, dẫn đến các dự đoán sai với độ tin cậy cao---hiện tượng được gọi là \textit{overconfident misclassification} \cite{hendrycks2017baseline, guo2017calibration}.
@@ -371,9 +371,9 @@ Giá trị $\tau = 0{,}6$ được chọn để cân bằng giữa tỷ lệ t�
 
 \textbf{So sánh với nền tảng thương mại}: Edge Impulse cung cấp chức năng ``anomaly detection'' yêu cầu huấn luyện một khối riêng biệt trên dữ liệu bổ sung. Cách tiếp cận được đề xuất trích xuất tin cậy trực tiếp từ đầu ra mô hình hiện có---không tốn thêm bộ nhớ, không yêu cầu dữ liệu huấn luyện bổ sung, và tích hợp tự nhiên vào quy trình suy luận đã có.
 
-\section{Huấn luyện Mô hình Học máy}
+\section{Huấn luyện mô hình học máy}
 
-\subsection{Các Thuật toán Học máy Áp dụng}
+\subsection{Các thuật toán học máy áp dụng}
 Bốn nhóm thuật toán học máy dưới đây, bao gồm cả học máy cổ điển và học sâu, đã được chứng minh hiệu quả trong nhận dạng hoạt động và phù hợp cho triển khai biên. Mỗi nhóm thể hiện đặc tính đánh đổi khác nhau giữa độ chính xác, yêu cầu dữ liệu và chi phí tài nguyên---các yếu tố cần cân nhắc khi lựa chọn cho ứng dụng cụ thể:
 
 \paragraph{Random Forest (RF)}
@@ -427,14 +427,14 @@ Biến thể hai chiều xử lý cửa sổ cảm biến như ảnh $W \times C
 \end{itemize}
 2D-CNN phù hợp khi tương quan không gian giữa các trục cảm biến mang thông tin phân biệt---ví dụ, leo cầu thang tạo mẫu tương quan đặc trưng giữa gia tốc thẳng đứng và con quay hồi chuyển. So với 1D-CNN, 2D-CNN học các đặc trưng liên kênh một cách tường minh, nhưng đòi hỏi nhiều dữ liệu hơn để hội tụ do không gian tham số lớn hơn.
 
-\subsection{Giao thức Huấn luyện và Đánh giá}
+\subsection{Giao thức huấn luyện và đánh giá}
 
-\subsubsection{Chiến lược Chia Dữ liệu}
+\subsubsection{Chiến lược chia dữ liệu}
 Để ngăn rò rỉ thông tin và đảm bảo ước lượng hiệu suất không thiên vị, giao thức phân chia ba chiều là phương pháp được khuyến nghị trong học máy \cite{goodfellow2016deep}:
 \begin{enumerate}
-    \item \textbf{Tập Huấn luyện (60\%)}: Dùng để khớp các tham số mô hình
-    \item \textbf{Tập Xác thực (20\%)}: Dùng để điều chỉnh siêu tham số, lựa chọn mô hình và giám sát tiến trình huấn luyện
-    \item \textbf{Tập Kiểm tra (20\%)}: Được giữ lại hoàn toàn; chỉ đánh giá một lần duy nhất sau khi huấn luyện hoàn tất
+    \item \textbf{Tập huấn luyện (60\%)}: Dùng để khớp các tham số mô hình
+    \item \textbf{Tập xác thực (20\%)}: Dùng để điều chỉnh siêu tham số, lựa chọn mô hình và giám sát tiến trình huấn luyện
+    \item \textbf{Tập kiểm tra (20\%)}: Được giữ lại hoàn toàn; chỉ đánh giá một lần duy nhất sau khi huấn luyện hoàn tất
 \end{enumerate}
 
 Tất cả các phân chia nên sử dụng lấy mẫu phân tầng để bảo tồn tỷ lệ lớp, đặc biệt quan trọng với tập HAR có phân phối không đồng đều.
@@ -443,7 +443,7 @@ Tất cả các phân chia nên sử dụng lấy mẫu phân tầng để bảo
 
 \textit{Xác thực Chéo}: Đối với phân tích khám phá khi dữ liệu hạn chế, xác thực chéo 5-fold có thể thực hiện trên tập huấn luyện+xác thực kết hợp (80\% dữ liệu), trong khi vẫn bảo tồn tập kiểm tra (20\%) là hoàn toàn chưa thấy. Phương pháp này cung cấp ước lượng hiệu suất mạnh mẽ cho các nghiên cứu so sánh thuật toán mà không yêu cầu phân chia xác thực riêng biệt.
 
-\subsubsection{Xử lý Mất cân bằng Lớp}
+\subsubsection{Xử lý mất cân bằng lớp}
 Các tập dữ liệu HAR thường thể hiện mất cân bằng lớp (ví dụ: nhiều mẫu \textit{standing} hơn \textit{walking\_downstairs}), khiến mô hình huấn luyện trực tiếp thiên vị về các lớp đa số và suy giảm khả năng nhận dạng lớp thiểu số. Hai kỹ thuật chính được áp dụng để xử lý vấn đề này:
 \begin{itemize}
     \item \textbf{Cân bằng Trọng số Lớp}: Đối với RF và SVM, tham số \texttt{class\_weight='balanced'} gán trọng số $w_c = \frac{n\_samples}{n\_classes \times n\_samples_c}$ trong đó $n\_samples_c$ là số lượng của lớp $c$. Điều này tăng đóng góp mất mát của các phân loại sai lớp thiểu số trong quá trình huấn luyện.
@@ -451,7 +451,7 @@ Các tập dữ liệu HAR thường thể hiện mất cân bằng lớp (ví d
 \end{itemize}
 Cân bằng lớp là quan trọng cho triển khai thực tế nơi tất cả các lớp hoạt động phải được phát hiện một cách đáng tin cậy, không chỉ những lớp thường xuyên nhất.
 
-\subsection{Tối ưu hóa Siêu tham số}
+\subsection{Tối ưu hóa siêu tham số}
 Điều chỉnh siêu tham số có hệ thống là bước quan trọng để đạt hiệu suất tốt nhất. GridSearchCV là một phương pháp phổ biến, duyệt toàn bộ lưới tổ hợp tham số và đánh giá từng tổ hợp qua xác thực chéo 5-fold. Các không gian tìm kiếm điển hình cho từng thuật toán:
 
 \textbf{Random Forest:}
@@ -508,12 +508,12 @@ Kiến trúc gồm ba lớp chính:
     \end{tabular}
 \end{table}
 
-\subsection{Lý do Chọn Tạo Mã Trực tiếp thay vì Runtime Engine}
+\subsection{Lý do chọn tạo mã trực tiếp thay vì Runtime Engine}
 \label{sec:codegen_rationale}
 
 Việc lựa chọn phương pháp triển khai mô hình ML lên vi điều khiển có ảnh hưởng trực tiếp đến mức sử dụng tài nguyên, tính minh bạch và phạm vi thuật toán được hỗ trợ. Phần này phân tích ba cách tiếp cận chính và luận giải cho quyết định thiết kế trong bối cảnh HAR biên.
 
-\subsubsection{Các Phương pháp Triển khai Mô hình trên Vi điều khiển}
+\subsubsection{Các phương pháp triển khai mô hình trên vi điều khiển}
 
 Có ba cách tiếp cận chính để triển khai mô hình ML trên vi điều khiển, mỗi cách thể hiện đánh đổi khác nhau giữa tính tiện lợi, hiệu suất và kiểm soát:
 
@@ -538,7 +538,7 @@ Phương pháp này trích xuất trực tiếp các tham số đã huấn luy�
 
 \textit{Nhược điểm:} Yêu cầu triển khai thủ công logic suy luận cho mỗi thuật toán; không hưởng các tối ưu hóa toán tử tự động cấp vi kiến trúc; khó mở rộng sang các kiến trúc phức tạp (CNN nhiều lớp, attention).
 
-\subsubsection{Phân tích So sánh Định lượng}
+\subsubsection{Phân tích so sánh định lượng}
 
 Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên các tiêu chí quan trọng cho triển khai vi điều khiển bị giới hạn tài nguyên:
 
@@ -568,25 +568,25 @@ Bảng~\ref{tab:codegen_comparison} tóm tắt so sánh ba phương pháp trên 
     \end{minipage}
 \end{table}
 
-\subsubsection{Lập luận cho Lựa chọn Thiết kế}
+\subsubsection{Lập luận cho lựa chọn thiết kế}
 
 Quyết định sử dụng tạo mã trực tiếp được lập luận bởi bốn yếu tố:
 
 \paragraph{(1) Dấu chân bộ nhớ tối thiểu}
 Trên các vi điều khiển lớp wearable như Seeed XIAO nRF52840 (1MB flash, 256KB RAM), mỗi KB đều quan trọng. TFLite Micro interpreter chiếm khoảng 150--250KB flash \cite{warden2019tinyml, ray2023tinyml_survey}---tương đương 15--25\% tổng flash khả dụng---chỉ riêng runtime, trước khi tính trọng số mô hình. Phương pháp trực tiếp loại bỏ hoàn toàn overhead này: một mô hình Neural Network chỉ chiếm 95KB (trọng số + logic suy luận + trích xuất đặc trưng), để lại $>$900KB cho firmware ứng dụng và giúp việc chuyển sang các board cùng lớp tài nguyên trở nên khả thi hơn.
 
-\paragraph{(2) Minh bạch và Khả năng Xác minh}
+\paragraph{(2) Minh bạch và khả năng xác minh}
 Một yêu cầu quan trọng trong thiết kế hệ thống suy luận nhúng là \textit{khả năng kiểm tra và xác minh mã đã tạo} (xem Phần~\ref{sec:training_deployment_parity}). Khi phát hiện lỗi zero-padding và sai lệch công thức kurtosis, có thể truy vết trực tiếp đến mã C++ đã tạo, so sánh từng dòng với triển khai Python, và sửa chữa. Với runtime đóng gói (TFLite Micro) hoặc trình biên dịch đóng (EON Compiler), quá trình gỡ lỗi này sẽ không thể thực hiện---lỗi sẽ biểu hiện như ``mô hình hoạt động kém trên thiết bị'' mà không có cách xác định nguyên nhân gốc.
 
 Khả năng xác minh này đặc biệt quan trọng cho ứng dụng y tế và an toàn, nơi các tiêu chuẩn quy định (FDA, IEC 62304) yêu cầu khả năng truy vết và kiểm toán đầy đủ cho mọi thành phần phần mềm liên quan đến quyết định lâm sàng.
 
-\paragraph{(3) Hỗ trợ Trực tiếp các Thuật toán ML Cổ điển}
+\paragraph{(3) Hỗ trợ trực tiếp các thuật toán ML cổ điển}
 Hệ sinh thái TFLite Micro và ONNX Runtime Micro được thiết kế chủ yếu cho mạng nơ-ron. Triển khai Random Forest hoặc SVM qua các nền tảng này yêu cầu chuyển đổi nhiều bước: scikit-learn $\rightarrow$ ONNX (\texttt{skl2onnx}) $\rightarrow$ TFLite (\texttt{onnx-tf}) $\rightarrow$ TFLite Micro. Mỗi bước chuyển đổi giới thiệu rủi ro sai lệch số và mất thông tin (ví dụ: ONNX không hỗ trợ chính xác tham số \texttt{class\_weight} của scikit-learn). Phương pháp trực tiếp đọc các thuộc tính nội bộ của scikit-learn (\texttt{model.coefs\_}, \texttt{model.support\_vectors\_}, \texttt{model.estimators\_}) mà không qua định dạng trung gian, loại bỏ hoàn toàn chuỗi chuyển đổi dễ lỗi này.
 
-\paragraph{(4) Các Thuật toán Cổ điển là Lựa chọn Phù hợp cho HAR Biên}
+\paragraph{(4) Các thuật toán cổ điển là lựa chọn phù hợp cho HAR biên}
 Lựa chọn tạo mã trực tiếp liên kết chặt chẽ với lựa chọn thuật toán. Cho bài toán HAR 5--10 lớp với $<$1000 vectors đặc trưng và 63 đặc trưng bất biến hướng, các thuật toán cổ điển đạt hiệu suất cạnh tranh (97--99\%) với chi phí tài nguyên thấp hơn đáng kể. Các mô hình này có cấu trúc suy luận đơn giản---nhân ma trận cho NN, duyệt cây cho RF, tính kernel cho SVM---có thể triển khai chính xác trong vài trăm dòng C++ mà không cần framework tính toán phức tạp. Điều này tạo thành một \textit{sweet spot} giữa hiệu suất mô hình và tính khả thi triển khai cho các thiết bị đeo bị giới hạn tài nguyên.
 
-\subsubsection{Hạn chế và Các Phương pháp Bổ sung}
+\subsubsection{Hạn chế và các phương pháp bổ sung}
 Tạo mã trực tiếp không phải giải pháp phổ quát. Nó không phù hợp cho:
 \begin{itemize}
     \item \textbf{Mạng sâu nhiều lớp}: LSTM, Transformer, hoặc CNN với hơn 4--5 lớp convolution yêu cầu các toán tử phức tạp (attention, bidirectional) mà triển khai thủ công dễ lỗi và khó bảo trì
@@ -600,10 +600,10 @@ Tạo mã trực tiếp không phải giải pháp phổ quát. Nó không phù 
 
 Đường dẫn triển khai TFLite Micro là phương pháp bổ sung phù hợp cho các kiến trúc mô hình neural network. Quá trình chuyển đổi tuân theo pipeline ONNX $\to$ TensorFlow $\to$ TFLite với các hạn chế quan trọng về phạm vi hỗ trợ \cite{tensorflow2015_whitepaper}.
 
-\subsubsection{Phạm vi Hỗ trợ theo Loại Mô hình}
+\subsubsection{Phạm vi hỗ trợ theo loại mô hình}
 Nghiên cứu thực nghiệm cho thấy khả năng chuyển đổi khác nhau đáng kể giữa các loại mô hình:
 
-\paragraph{Neural Network và CNN: Chuyển đổi Trực tiếp (hỗ trợ)}
+\paragraph{Neural Network và CNN: Chuyển đổi trực tiếp (hỗ trợ)}
 Các mô hình neural network (MLP) và CNN từ PyTorch có thể chuyển đổi thành công qua pipeline:
 \begin{enumerate}
     \item PyTorch model $\rightarrow$ ONNX (\texttt{torch.onnx.export})
@@ -631,13 +631,13 @@ Các mô hình Random Forest và SVM gặp rào cản chuyển đổi do hạn c
 
 \textbf{Hạn chế Surrogate}: Keras surrogate là \textit{xấp xỉ}, không phải triển khai chính xác. Độ thỏa thuận kỳ vọng 80-90\% giữa mô hình gốc và surrogate. Cho độ chính xác tối đa, \textit{tạo mã trực tiếp C++ vẫn là phương pháp được khuyến nghị cho RF/SVM}.
 
-\subsubsection{Khuyến nghị Sử dụng}
+\subsubsection{Khuyến nghị sử dụng}
 \begin{itemize}
     \item \textbf{NN/CNN}: Sử dụng TFLite Micro để tận dụng runtime tối ưu hóa và hỗ trợ quantization INT8
     \item \textbf{RF/SVM}: Ưu tiên tạo mã trực tiếp C++ (chính xác, nhanh, nhỏ gọn). TFLite surrogate chỉ khi yêu cầu tích hợp runtime chuẩn hóa
 \end{itemize}
 
-\subsection{Cấu trúc Mã Đã Tạo}
+\subsection{Cấu trúc mã đã tạo}
 Đối với mỗi mô hình đã huấn luyện, trình tạo sản xuất một gói triển khai gồm các tệp tham số, tệp cài đặt và tệp ví dụ tích hợp. Cụ thể:
 \begin{enumerate}
     \item \textbf{Tệp Header (.h)}: Chứa các tham số mô hình (ví dụ: vectors hỗ trợ, cấu trúc cây, ma trận trọng số), khai báo hàm, các macro số lượng đặc trưng/lớp
@@ -647,14 +647,14 @@ Các mô hình Random Forest và SVM gặp rào cản chuyển đổi do hạn c
 
 \textbf{Xác minh Công thức Thống kê}: Mã C++ đã tạo cho trích xuất đặc trưng sử dụng các công thức thống kê được xác minh khớp chính xác với triển khai Python (pandas/NumPy). Cụ thể, các đặc trưng kurtosis và skewness sử dụng \textit{độ lệch chuẩn tổng thể} (population standard deviation, chia $n$) cho chuẩn hóa z-scores, thay vì độ lệch chuẩn mẫu (chia $n-1$). Sự khác biệt này, mặc dù nhỏ ($\sim$1,3\% cho $n=150$), là hệ thống và tích lũy qua nhiều đặc trưng, có thể ảnh hưởng đến độ chính xác triển khai nếu không được xử lý.
 
-\subsection{Lượng tử hóa Mô hình cho Triển khai Biên}
+\subsection{Lượng tử hóa mô hình cho triển khai biên}
 \label{sec:quantization}
 
 Lượng tử hóa (model quantization) là kỹ thuật nén mô hình then chốt trong triển khai TinyML, chuyển đổi các tham số mô hình từ biểu diễn dấu phẩy động 32-bit (float32) sang số nguyên 8-bit (int8) hoặc 16-bit (int16). Trên vi điều khiển như Cortex-M4F với 256~KB RAM và 1~MB flash, lượng tử hóa có thể quyết định liệu một mô hình có thể triển khai được hay không: chuyển đổi từ float32 sang int8 giảm kích thước trọng số $4\times$, giảm băng thông bộ nhớ và tăng tốc suy luận 2--3$\times$ nhờ các tập lệnh SIMD integer của ARM \cite{lin2022mcunet}.
 
-\subsubsection{Các Loại Lượng tử hóa}
+\subsubsection{Các loại lượng tử hóa}
 
-\paragraph{Lượng tử hóa Sau Huấn luyện (Post-Training Quantization, PTQ)}
+\paragraph{Lượng tử hóa sau huấn luyện (Post-Training Quantization, PTQ)}
 PTQ áp dụng sau khi huấn luyện hoàn tất mà không cần sửa đổi quy trình huấn luyện. Mỗi tham số float32 $x$ được ánh xạ sang giá trị lượng tử hóa $x_q$ theo:
 \begin{equation}
     x_q = \mathrm{clip}\!\left(\mathrm{round}\!\left(\frac{x}{s}\right) + z,\; 0,\; 255\right)
@@ -662,14 +662,14 @@ PTQ áp dụng sau khi huấn luyện hoàn tất mà không cần sửa đổi 
 \end{equation}
 trong đó $s = \frac{x_{\max} - x_{\min}}{255}$ là hệ số tỷ lệ và $z \in [0, 255]$ là điểm zero-point giữ nguyên giá trị số không. Có hai biến thể PTQ: \textit{lượng tử hóa trọng số} (weight-only), trong đó chỉ trọng số mô hình được chuyển đổi còn phép tính suy luận vẫn dùng float32; và \textit{lượng tử hóa tĩnh} (static PTQ), trong đó cả trọng số lẫn giá trị kích hoạt đều được lượng tử hóa, đòi hỏi một tập hiệu chỉnh nhỏ (100--500 mẫu đại diện) để đo phân phối kích hoạt trong thực tế. PTQ thường gây suy giảm độ chính xác 0,5--2\% cho các mô hình HAR \cite{warden2019tinyml}.
 
-\paragraph{Lượng tử hóa Trong Huấn luyện (Quantization-Aware Training, QAT)}
+\paragraph{Lượng tử hóa trong huấn luyện (Quantization-Aware Training, QAT)}
 QAT chèn các toán tử ``giả lượng tử hóa'' (fake quantization) vào đồ thị tính toán trong quá trình huấn luyện, mô phỏng sai số lượng tử hóa để mô hình học cách bù đắp. QAT thường giảm suy giảm độ chính xác xuống dưới 0,3\% nhưng đòi hỏi sửa đổi pipeline huấn luyện và thực tế chỉ áp dụng cho mạng nơ-ron---Random Forest và SVM có cấu trúc rời rạc (ngưỡng quyết định, vector hỗ trợ) không tương thích với kỹ thuật đạo hàm giả (straight-through estimator) mà QAT dựa vào.
 
-\subsubsection{Chiến lược Lượng tử hóa theo Phương pháp Tạo Mã}
+\subsubsection{Chiến lược lượng tử hóa theo phương pháp tạo mã}
 
 Tùy theo phương pháp tạo mã được chọn, lượng tử hóa được áp dụng theo hai đường dẫn khác nhau:
 
-\paragraph{Lượng tử hóa Trọng số trong Tạo Mã Trực tiếp}
+\paragraph{Lượng tử hóa trọng số trong tạo mã trực tiếp}
 Trong đường dẫn tạo mã trực tiếp, lượng tử hóa được thực hiện ở cấp độ biểu diễn tham số trong mã C++ đã tạo. Chế độ tối ưu hóa kiểm soát số chữ số thập phân khi nhúng hằng số float32 vào mã nguồn---tương đương lượng tử hóa trọng số mức thấp:
 \begin{itemize}
     \item \textbf{Accuracy}: float32 đầy đủ (6 chữ số thập phân), không xấp xỉ
@@ -682,7 +682,7 @@ Phép suy luận vẫn thực hiện bằng số học float32 trên FPU của C
 \end{equation}
 trong đó $s$ là tích của hai scale tương ứng (trọng số và đầu vào), $f(\cdot)$ là hàm kích hoạt ReLU hoặc softmax.
 
-\paragraph{Lượng tử hóa INT8 Đầy đủ qua Đường dẫn TFLite Micro}
+\paragraph{Lượng tử hóa INT8 đầy đủ qua đường dẫn TFLite Micro}
 Đường dẫn TFLite Micro (áp dụng cho NN và CNN) hỗ trợ static PTQ với INT8 đầy đủ---cả trọng số lẫn kích hoạt. Quy trình thực hiện:
 \begin{enumerate}
     \item Chuyển đổi mô hình Keras/PyTorch sang TFLite (\texttt{TFLiteConverter})
@@ -695,7 +695,7 @@ Bảng~\ref{tab:quantization_tradeoff} so sánh hai đường dẫn lượng t�
 
 \begin{table}[H]
     \centering
-    \caption{So sánh Chiến lược Lượng tử hóa theo Phương pháp Tạo Mã}
+    \caption{So sánh chiến lược lượng tử hóa theo phương pháp tạo mã}
     \label{tab:quantization_tradeoff}
     \small
     \begin{tabular}{@{}p{3.5cm}p{3.5cm}p{4.2cm}@{}}
@@ -712,7 +712,7 @@ Bảng~\ref{tab:quantization_tradeoff} so sánh hai đường dẫn lượng t�
     \end{tabular}
 \end{table}
 
-\subsubsection{Đặc thù Lượng tử hóa cho Đặc trưng HAR Miền Thời gian}
+\subsubsection{Đặc thù lượng tử hóa cho đặc trưng HAR miền thời gian}
 
 Bài toán HAR với đặc trưng thống kê miền thời gian có các đặc tính thuận lợi cho lượng tử hóa so với thị giác máy tính hay xử lý ngôn ngữ tự nhiên:
 
@@ -723,7 +723,7 @@ Bài toán HAR với đặc trưng thống kê miền thời gian có các đặ
     \item \textbf{Kurtosis và Skewness nhạy hơn}: Các đặc trưng hình dạng phân phối có phạm vi giá trị rộng hơn và nhạy với lượng tử hóa mạnh hơn các đặc trưng năng lượng (RMS, Energy). Do đó, chế độ \textit{Balanced} khuyến nghị sử dụng 3 chữ số thập phân để bảo toàn các đặc trưng này.
 \end{itemize}
 
-\subsection{Kiến trúc Tạo Mã Đa Kiến trúc}
+\subsection{Kiến trúc tạo mã đa kiến trúc}
 \label{sec:multi_architecture_codegen}
 
 Hai loại pipeline mô hình tồn tại với yêu cầu metadata và validation khác biệt đáng kể, đòi hỏi kiến trúc tạo mã có khả năng nhận biết loại mô hình (architecture-aware):
@@ -760,14 +760,14 @@ Một lỗi metadata đã được phát hiện và sửa chữa trong CNN pipel
 
 \textbf{Phân biệt với Edge Impulse}: Edge Impulse xử lý sự phức tạp này bằng cách có ``processing blocks'' riêng biệt cho feature-based và raw-input models. Tương tự, cần phân biệt loại mô hình tại thời điểm tạo mã để sinh metadata và validation logic chính xác.
 
-\subsubsection{Lưu ý về Tính Nhất quán Metadata}
+\subsubsection{Lưu ý về tính nhất quán Metadata}
 Trường \texttt{trained\_models.json} có ngữ nghĩa khác nhau tùy theo loại mô hình:
 \begin{itemize}
     \item \texttt{features}: \texttt{X\_train.shape[1]}---với CNN là \texttt{window\_size\_samples} (150), với MLP là feature count (33, 53, hoặc 90)
     \item \texttt{num\_features\_extracted}: Luôn là output count của FE pipeline---có ý nghĩa cho feature-based models, chỉ mang tính thông tin cho CNN
 \end{itemize}
 
-\subsection{Các Chiến lược Tối ưu hóa}
+\subsection{Các chiến lược tối ưu hóa}
 Bốn chế độ tối ưu hóa triển khai có thể cấu hình khi tạo mã, mỗi chế độ thể hiện đánh đổi khác nhau giữa độ chính xác và chi phí tài nguyên:
 
 \paragraph{Chế độ Accuracy}
@@ -839,27 +839,27 @@ Tỷ lệ mất cân bằng lớp: 1,17:1 (walking downstairs so với running/s
 \end{itemize}
 Cấu hình 3 lớp phản ánh thực tế rằng các biến thể đi bộ (bằng phẳng, lên cầu thang, xuống cầu thang) tạo ra tín hiệu IMU rất tương đồng khi chỉ sử dụng một cảm biến đeo cổ tay, gây nhầm lẫn hệ thống giữa các lớp walking trong kiểm thử trên thiết bị thực. Nhiều ứng dụng thực tế (theo dõi sức khỏe, phát hiện ngã) chỉ cần phân biệt mức độ hoạt động tổng thể (tĩnh/đi bộ/chạy) thay vì chi tiết hóa kiểu di chuyển, do đó cấu hình 3 lớp phù hợp hơn cho triển khai biên.
 
-\subsection{Các Số liệu Đánh giá}
+\subsection{Các số liệu đánh giá}
 Hiệu suất mô hình được đánh giá bằng cách sử dụng:
 \begin{itemize}
-    \item \textbf{Độ chính xác Tổng thể}: Phần trăm cửa sổ được phân loại chính xác
-    \item \textbf{Precision Từng Lớp}: $P_c = \frac{TP_c}{TP_c + FP_c}$
-    \item \textbf{Recall Từng Lớp}: $R_c = \frac{TP_c}{TP_c + FN_c}$
+    \item \textbf{Độ chính xác tổng thể}: Phần trăm cửa sổ được phân loại chính xác
+    \item \textbf{Precision từng lớp}: $P_c = \frac{TP_c}{TP_c + FP_c}$
+    \item \textbf{Recall từng lớp}: $R_c = \frac{TP_c}{TP_c + FN_c}$
     \item \textbf{F1-Score}: Trung bình điều hòa của precision và recall
-    \item \textbf{Ma trận Nhầm lẫn}: Trực quan hóa các mẫu phân loại sai
+    \item \textbf{Confusion Matrix}: Trực quan hóa các mẫu phân loại sai
 \end{itemize}
 
 Hiệu suất triển khai biên được đo qua:
 \begin{itemize}
-    \item \textbf{Thời gian Suy luận}: Thời gian trung bình để phân loại một cửa sổ 150 mẫu (ms), được đo bằng cách sử dụng thời gian Arduino \texttt{micros()} qua 100 dự đoán liên tiếp trên phần cứng đích
-    \item \textbf{Sử dụng Bộ nhớ}: Flash (lưu trữ chương trình) và SRAM (biến/bộ đệm thời gian chạy) tiêu thụ (KB), được trích xuất từ các tệp bản đồ trình biên dịch và đầu ra xây dựng Arduino IDE cho thấy kích thước nhị phân đã biên dịch thực tế
-    \item \textbf{Tiêu thụ Điện năng}: Dòng điện trung bình rút trong các giai đoạn hoạt động khác nhau (nhàn rỗi, lấy mẫu cảm biến, trích xuất đặc trưng, dự đoán)\footnote{Các giá trị điện năng được báo cáo là ước lượng tính toán từ đặc tả dòng điện ARM Cortex-M4F điển hình (8--12\,mA hoạt động, 2--3\,mA nhàn rỗi ở 64\,MHz) và phần trăm thời gian thực thi đã đo, không phải đo lường trực tiếp bằng thiết bị chuyên dụng (Joulescope, Nordic PPK2). Giá trị thực tế có thể thay đổi $\pm$15--20\%.}
-    \item \textbf{Tần số Dự đoán}: Tốc độ suy luận bền vững tính đến chi phí lấy mẫu cảm biến (dự đoán mỗi giây)
-    \item \textbf{Độ phủ Đích Triển khai}: Số lượng họ nền tảng và backend triển khai có thể được sinh mã từ cùng một mô hình đã huấn luyện, được xác minh qua ma trận generator và cấu trúc tệp đầu ra
+    \item \textbf{Thời gian suy luận}: Thời gian trung bình để phân loại một cửa sổ 150 mẫu (ms), được đo bằng cách sử dụng thời gian Arduino \texttt{micros()} qua 100 dự đoán liên tiếp trên phần cứng đích
+    \item \textbf{Sử dụng bộ nhớ}: Flash (lưu trữ chương trình) và SRAM (biến/bộ đệm thời gian chạy) tiêu thụ (KB), được trích xuất từ các tệp bản đồ trình biên dịch và đầu ra xây dựng Arduino IDE cho thấy kích thước nhị phân đã biên dịch thực tế
+    \item \textbf{Tiêu thụ điện năng}: Dòng điện trung bình rút trong các giai đoạn hoạt động khác nhau (nhàn rỗi, lấy mẫu cảm biến, trích xuất đặc trưng, dự đoán)\footnote{Các giá trị điện năng được báo cáo là ước lượng tính toán từ đặc tả dòng điện ARM Cortex-M4F điển hình (8--12\,mA hoạt động, 2--3\,mA nhàn rỗi ở 64\,MHz) và phần trăm thời gian thực thi đã đo, không phải đo lường trực tiếp bằng thiết bị chuyên dụng (Joulescope, Nordic PPK2). Giá trị thực tế có thể thay đổi $\pm$15--20\%.}
+    \item \textbf{Tần số dự đoán}: Tốc độ suy luận bền vững tính đến chi phí lấy mẫu cảm biến (dự đoán mỗi giây)
+    \item \textbf{Độ phủ đích triển khai}: Số lượng họ nền tảng và backend triển khai có thể được sinh mã từ cùng một mô hình đã huấn luyện, được xác minh qua ma trận generator và cấu trúc tệp đầu ra
 \end{itemize}
 Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: suy luận $<$ 100ms mỗi cửa sổ (cho phép cập nhật 10Hz thời gian thực), flash $<$ 500KB (để lại khoảng trống cho mã ứng dụng), SRAM $<$ 128KB (50\% của 256KB có sẵn), điện năng $<$ 50mW trung bình (hỗ trợ hoạt động pin nhiều giờ).
 
-\subsection{Các So sánh Cơ sở}
+\subsection{Các so sánh cơ sở}
 Để đặt hiệu suất trong ngữ cảnh, kết quả được so sánh với:
 \begin{enumerate}
     \item \textbf{Edge Impulse}: Nền tảng thương mại với quy trình tự động (áp dụng giới hạn gói miễn phí), so sánh ở cả khía cạnh độ chính xác mô hình lẫn tài nguyên triển khai
@@ -867,8 +867,8 @@ Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: su
     \item \textbf{Huấn luyện không cân bằng}: Cùng quy trình nhưng không áp dụng cân bằng trọng số lớp (nghiên cứu loại bỏ---ablation study)
 \end{enumerate}
 
-\section{Chi tiết Triển khai}
-\textbf{Ngăn xếp Phần mềm:}
+\section{Chi tiết triển khai}
+\textbf{Ngăn xếp phần mềm:}
 \begin{itemize}
     \item Python 3.10 với Dash 2.14 (giao diện web)
     \item scikit-learn 1.3 (học máy cổ điển: RF, SVM, MLP)
