@@ -99,7 +99,7 @@ Tổ hợp sáu trục (ba gia tốc kế cộng ba con quay hồi chuyển) n�
 
 Framework không áp đặt tần số lấy mẫu cố định---người dùng cấu hình theo đặc tính cảm biến và yêu cầu ứng dụng. Tuy nhiên, có một ràng buộc thiết kế không thể bỏ qua: \textbf{tần số lấy mẫu phải nhất quán giữa giai đoạn huấn luyện và giai đoạn suy luận triển khai}. Yêu cầu này xuất phát từ nguyên tắc tương đồng huấn luyện-triển khai: toàn bộ các đặc trưng thống kê miền thời gian được tính trên cửa sổ cố định theo \textit{số mẫu}, không phải theo khoảng thời gian tuyệt đối. Nếu tần số lấy mẫu thay đổi giữa hai giai đoạn, cùng một cửa sổ 150 mẫu sẽ tương ứng với các khoảng thời gian khác nhau, làm biến dạng hệ thống toàn bộ phân phối đặc trưng và suy giảm độ chính xác mô hình mà không có bất kỳ cảnh báo nào. Để đảm bảo tính nhất quán này, framework nhúng tần số lấy mẫu đã chọn dưới dạng hằng số biên dịch trong mã triển khai được sinh ra.
 
-Về đánh đổi thực tế: tần số lấy mẫu cao hơn cung cấp thêm chu kỳ tín hiệu trong mỗi cửa sổ, làm phong phú thêm các đặc trưng thống kê---đặc biệt là tỷ lệ qua không và tỷ lệ qua trung bình vốn nhạy với mật độ chu kỳ---nhưng đồng thời tăng kích thước bộ đệm vòng cần thiết trên vi điều khiển và kéo dài thời gian trích xuất đặc trưng mỗi chu kỳ suy luận. Sự đánh đổi này thuộc về quyết định thiết kế của người dùng, không phải của framework.
+Về đánh đổi thực tế: tần số lấy mẫu cao hơn cung cấp thêm chu kỳ tín hiệu trong mỗi cửa sổ, làm phong phú thêm các đặc trưng thống kê---đặc biệt là zero-crossing rate và mean-crossing rate vốn nhạy với mật độ chu kỳ---nhưng đồng thời tăng kích thước bộ đệm vòng cần thiết trên vi điều khiển và kéo dài thời gian trích xuất đặc trưng mỗi chu kỳ suy luận. Sự đánh đổi này thuộc về quyết định thiết kế của người dùng, không phải của framework.
 
 \section{Quy trình tiền xử lý tương tác}
 
@@ -278,10 +278,10 @@ Loại \texttt{time\_domain} áp dụng 15 đặc trưng thống kê (statistica
 \begin{itemize}
     \item \textbf{Xu hướng trung tâm (central tendency)}: Trung bình (mean), trung vị (median)
     \item \textbf{Phân tán (dispersion)}: Độ lệch chuẩn (std), phương sai (variance), phạm vi (range = max $-$ min), IQR (interquartile range)
-    \item \textbf{Cực trị (extrema)}: Tối thiểu (min), tối đa (max), Q1 (phần trăm 25), Q3 (phần trăm 75)
+    \item \textbf{Cực trị (extrema)}: Tối thiểu (min), tối đa (max), Q1 (25th percentile), Q3 (75th percentile)
     \item \textbf{Hình dạng (shape)}: Độ lệch (skewness) $\gamma = \frac{E[(X-\mu)^3]}{\sigma^3}$, độ nhọn (kurtosis) $\kappa = \frac{E[(X-\mu)^4]}{\sigma^4} - 3$
     \item \textbf{Năng lượng (energy)}: RMS $= \sqrt{\frac{1}{N}\sum_{i=1}^{N} x_i^2}$, năng lượng tín hiệu (signal energy) $E = \sum_{i=1}^{N} x_i^2$
-    \item \textbf{Proxy tần số (frequency proxy)}: Tỷ lệ qua không (zero-crossing rate), tỷ lệ qua trung bình (mean-crossing rate)
+    \item \textbf{Đặc trưng xấp xỉ tần số (frequency proxy)}: Tỷ lệ qua không (zero-crossing rate), tỷ lệ qua trung bình (mean-crossing rate)
 \end{itemize}
 Biểu diễn thống kê này bắt giữ biên độ, động lực học, đặc tính phân phối và thông tin giả tần số đủ để phân biệt các hoạt động có dấu hiệu sinh cơ học riêng biệt. Loại này phù hợp khi hướng cảm biến cố định và cần khai thác tối đa thông tin từng trục.
 
@@ -660,10 +660,10 @@ PTQ áp dụng sau khi huấn luyện hoàn tất mà không cần sửa đổi 
     x_q = \mathrm{clip}\!\left(\mathrm{round}\!\left(\frac{x}{s}\right) + z,\; 0,\; 255\right)
     \label{eq:quantization}
 \end{equation}
-trong đó $s = \frac{x_{\max} - x_{\min}}{255}$ là hệ số tỷ lệ và $z \in [0, 255]$ là điểm zero-point giữ nguyên giá trị số không. Có hai biến thể PTQ: \textit{lượng tử hóa trọng số} (weight-only), trong đó chỉ trọng số mô hình được chuyển đổi còn phép tính suy luận vẫn dùng float32; và \textit{lượng tử hóa tĩnh} (static PTQ), trong đó cả trọng số lẫn giá trị kích hoạt đều được lượng tử hóa, đòi hỏi một tập hiệu chỉnh nhỏ (100--500 mẫu đại diện) để đo phân phối kích hoạt trong thực tế. PTQ thường gây suy giảm độ chính xác 0,5--2\% cho các mô hình HAR \cite{warden2019tinyml}.
+trong đó $s = \frac{x_{\max} - x_{\min}}{255}$ là hệ số tỷ lệ và $z \in [0, 255]$ là zero-point giữ nguyên giá trị số không. Có hai biến thể PTQ: \textit{lượng tử hóa trọng số} (weight-only), trong đó chỉ trọng số mô hình được chuyển đổi còn phép tính suy luận vẫn dùng float32; và \textit{lượng tử hóa tĩnh} (static PTQ), trong đó cả trọng số lẫn giá trị kích hoạt đều được lượng tử hóa, đòi hỏi một tập hiệu chỉnh nhỏ (100--500 mẫu đại diện) để đo phân phối kích hoạt trong thực tế. PTQ thường gây suy giảm độ chính xác 0,5--2\% cho các mô hình HAR \cite{warden2019tinyml}.
 
 \paragraph{Lượng tử hóa trong huấn luyện (Quantization-Aware Training, QAT)}
-QAT chèn các toán tử ``giả lượng tử hóa'' (fake quantization) vào đồ thị tính toán trong quá trình huấn luyện, mô phỏng sai số lượng tử hóa để mô hình học cách bù đắp. QAT thường giảm suy giảm độ chính xác xuống dưới 0,3\% nhưng đòi hỏi sửa đổi pipeline huấn luyện và thực tế chỉ áp dụng cho mạng nơ-ron---Random Forest và SVM có cấu trúc rời rạc (ngưỡng quyết định, vector hỗ trợ) không tương thích với kỹ thuật đạo hàm giả (straight-through estimator) mà QAT dựa vào.
+QAT chèn các toán tử \textit{fake quantization} (lượng tử hóa giả) vào đồ thị tính toán trong quá trình huấn luyện, mô phỏng sai số lượng tử hóa để mô hình học cách bù đắp. QAT thường giảm suy giảm độ chính xác xuống dưới 0,3\% nhưng đòi hỏi sửa đổi pipeline huấn luyện và thực tế chỉ áp dụng cho mạng nơ-ron---Random Forest và SVM có cấu trúc rời rạc (ngưỡng quyết định, vector hỗ trợ) không tương thích với kỹ thuật đạo hàm giả (straight-through estimator) mà QAT dựa vào.
 
 \subsubsection{Chiến lược lượng tử hóa theo phương pháp tạo mã}
 
@@ -782,7 +782,7 @@ Bốn chế độ tối ưu hóa triển khai có thể cấu hình khi tạo m�
 Tối thiểu hóa độ trễ suy luận:
 \begin{itemize}
     \item Giảm độ phức tạp mô hình (ít cây hơn, giảm vectors hỗ trợ SVM qua cắt tỉa)
-    \item Thứ tự tính toán đặc trưng tối ưu hóa (các mẫu truy cập thân thiện cache)
+    \item Thứ tự tính toán đặc trưng tối ưu hóa (các mẫu truy cập cache-friendly)
     \item Mở rộng vòng lặp và các hàm nội tuyến
 \end{itemize}
 
@@ -864,7 +864,7 @@ Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: su
 \begin{enumerate}
     \item \textbf{Edge Impulse}: Nền tảng thương mại với quy trình tự động (áp dụng giới hạn gói miễn phí), so sánh ở cả khía cạnh độ chính xác mô hình lẫn tài nguyên triển khai
     \item \textbf{Triển khai TFLite Micro thủ công}: Quy trình chuyển đổi mô hình thủ công qua pipeline PyTorch $\rightarrow$ ONNX $\rightarrow$ TFLite, đại diện cho cách tiếp cận tùy chỉnh cấp chuyên gia
-    \item \textbf{Huấn luyện không cân bằng}: Cùng quy trình nhưng không áp dụng cân bằng trọng số lớp (nghiên cứu loại bỏ---ablation study)
+    \item \textbf{Huấn luyện không cân bằng}: Cùng quy trình nhưng không áp dụng cân bằng trọng số lớp (ablation study)
 \end{enumerate}
 
 \section{Chi tiết triển khai}
