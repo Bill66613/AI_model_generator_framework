@@ -1,0 +1,246 @@
+\chapter{Thảo Luận và Kết Luận}
+\label{chap:discussion_conclusion}
+
+\section{Diễn Giải Các Phát Hiện Chính}
+
+\subsection{Hiệu Suất Mô Hình và Lựa Chọn Thuật Toán}
+Các kết quả thực nghiệm chứng minh rằng tất cả năm thuật toán đạt độ chính xác cao (97,38--99,13\%) trên nhiệm vụ HAR năm lớp, và đạt 100\% trên bài toán 3 lớp cơ bản. Biên độ chênh lệch chỉ 1,75 điểm phần trăm giữa thuật toán tốt nhất (PyTorch MLP/CNN: 99,13\%) và thấp nhất (SVM: 97,38\%) cho thấy \textbf{chất lượng pipeline trích xuất đặc trưng quan trọng hơn lựa chọn thuật toán} khi 63 đặc trưng bất biến hướng đã được thiết kế tốt. Huấn luyện nhanh của Random Forest (0,15s) và Neural Network sklearn (0,42s) làm cho chúng hấp dẫn cho tạo mẫu nhanh và các quy trình phát triển lặp lại.
+
+\subsection{Cân Bằng Lớp trong Thực hành}
+Cân bằng trọng số lớp (\texttt{class\_weight='balanced'}) được bật mặc định cho RF và SVM trong framework. Kết quả thực nghiệm cho thấy các lớp thiểu số (Walking Downstairs: 38 mẫu, Walking Upstairs: 35 mẫu) vẫn đạt recall 0,971--1,000 và F1 $\geq$ 0,949---xác nhận hiệu quả của chiến lược cân bằng. Lựa chọn thiết kế này phản ánh nguyên tắc ưu tiên triển khai thực tế: trong ứng dụng HAR, tất cả hoạt động phải được phát hiện đáng tin cậy, không chỉ các lớp thường xuyên nhất.
+
+\subsection{Tính Khả Thi Triển Khai Biên}
+Kết quả triển khai trên thiết bị (Bảng~\ref{tab:deployment_status}) cho thấy một phát hiện quan trọng: \textbf{chỉ PyTorch 1D-CNN hoạt động đáng tin cậy trên cả hai cấu hình bài toán} (3 lớp và 5 lớp), trong khi Random Forest chỉ ổn định cho bài toán 3 lớp. Phát hiện này nhấn mạnh rằng biên độ chênh lệch 1,75 điểm phần trăm trên tập kiểm tra offline trở nên không có ý nghĩa khi một số mô hình gặp nhầm lẫn lớp nghiêm trọng trên thiết bị. Tiêu chí lựa chọn mô hình cho triển khai biên cần mở rộng từ ``độ chính xác cao nhất'' sang bao gồm \textit{khả năng triển khai thực tế}.
+
+Đáng chú ý, CNN---mô hình end-to-end hoạt động trên dữ liệu thô---hoạt động tốt nhất trên thiết bị. Việc loại bỏ bước trích xuất đặc trưng trong mã C++ (nguồn chính của sai lệch tương đồng) mang lại lợi thế triển khai đáng kể, dù với chi phí mô hình lớn hơn và tính diễn giải thấp hơn.
+
+\subsection{Tiền Xử Lý Tương Tác: Một Thay Đổi Mô Hình}
+Giao diện cửa sổ thời gian kéo thả mới lạ đại diện cho một thay đổi mô hình từ các quy trình tiền xử lý truyền thống. Các phương pháp thông thường yêu cầu người dùng hoặc viết mã để phân đoạn dữ liệu (rào cản kỹ thuật cao), hoặc sử dụng phân đoạn tự động hộp đen (không kiểm soát, lỗi thường xuyên). Giao diện kéo thả loại bỏ các điểm ma sát này bằng cách cho phép thao tác trực quan trực tiếp của các biểu đồ tín hiệu, giảm thời gian tiền xử lý ước tính 60-80\% so với chú thích dấu thời gian thủ công.
+
+\section{So Sánh với Công Trình Liên Quan}
+
+\subsection{Các Nền Tảng Thương Mại}
+So sánh trực tiếp với \textbf{Edge Impulse} trên cùng tập dữ liệu 3 lớp (Bảng~\ref{tab:edge_impulse_comparison}) cho thấy framework đề xuất đạt F1~=~1,00 so với 0,96 của Edge Impulse, và hoạt động tốt trên thiết bị trong khi Edge Impulse thất bại ở lớp running. Đáng chú ý, sklearn Neural Network của framework cũng gặp lỗi tương tự với Edge Impulse (không nhận dạng được running), gợi ý đây là vấn đề chung của mô hình dựa trên đặc trưng với biên quyết định mỏng. Về tài nguyên (Bảng~\ref{tab:resource_comparison}), cả hai đều sử dụng INT8 nhưng framework đề xuất chiếm ít flash hơn (18--23\% so với 51\%) nhờ tạo mã trực tiếp không cần runtime.
+
+\textbf{SensiML} nhắm mục tiêu triển khai IoT thương mại với AutoML tinh vi nhưng chi phí \$99--500/tháng. Các điểm phân biệt kiến trúc chính nằm ở tính minh bạch mã sinh ra, hỗ trợ thuật toán ML cổ điển, và khả năng xác minh tương đồng Python$\leftrightarrow$C++ (xem Bảng~\ref{tab:qualitative_comparison} trong Chương~\ref{chap:results}).
+
+\subsection{Các Hệ Thống HAR Học Thuật}
+So với nghiên cứu HAR học thuật sử dụng các phương pháp dựa trên IMU tương tự \cite{anguita2013har}, độ chính xác đạt được (97--99\% trên 5 lớp) cạnh tranh với các kết quả đã công bố trên các tập dữ liệu benchmark (92--97\% điển hình). Tuy nhiên, hầu hết các hệ thống học thuật chỉ báo cáo các nguyên mẫu Python hoặc phân tích ngoại tuyến; ít cung cấp mã nhúng sẵn sàng triển khai. Đóng góp của luận văn nằm ở việc bắc cầu ``khoảng cách triển khai'' này bằng cách tự động hóa việc dịch từ các mô hình scikit-learn/PyTorch đã huấn luyện sang mã suy luận vi điều khiển.
+
+\section{Các Đánh Đổi Thiết Kế}
+
+\subsection{ML Cổ Điển vs Học Sâu}
+Luận văn này cố ý chọn học máy cổ điển (Random Forest, SVM, Neural Networks) cùng với học sâu (PyTorch CNN) để cung cấp lựa chọn linh hoạt. Kết quả thực nghiệm xác nhận giá trị của cả hai hướng tiếp cận: \textbf{ML cổ điển cho prototyping nhanh và các bài toán đơn giản} (RF hoạt động tốt cho 3 lớp, huấn luyện 0,15s), \textbf{học sâu end-to-end cho triển khai đáng tin cậy} trên các bài toán phức tạp (chỉ 1D-CNN hoạt động đáng tin cậy trên cả hai cấu hình).
+
+\subsection{Đặc Trưng Thủ Công vs Đặc Trưng Học}
+Bộ 63 đặc trưng bất biến hướng đạt 97--99\% độ chính xác, xác nhận hiệu quả của thiết kế dựa trên kiến thức miền. Học sâu 1D-CNN đạt hiệu suất tương đương (99,13\%) nhưng với chi phí mô hình lớn hơn và tính minh bạch giảm. Phương pháp trung gian---sử dụng các bộ mã hóa tự động convolutional cho trích xuất đặc trưng học theo sau bởi ML cổ điển cho phân loại---có thể kết hợp lợi ích và là hướng công việc tương lai.
+
+\subsection{Tạo Mã Trực tiếp vs Runtime Suy luận}
+\label{sec:codegen_tradeoff_discussion}
+
+Ba lợi ích dự kiến đã được xác nhận qua thực nghiệm:
+
+Thứ nhất, \textit{dấu chân bộ nhớ tối thiểu}: Neural Network chỉ chiếm 95KB flash bao gồm trọng số, logic suy luận, trích xuất đặc trưng 15 thống kê, và chuẩn hóa StandardScaler. Với TFLite Micro, cùng chức năng sẽ yêu cầu thêm 150--250KB cho runtime interpreter, đẩy tổng lên 245--345KB.
+
+Thứ hai, \textit{minh bạch cho gỡ lỗi}---đây là yếu tố có tác động lớn nhất ngoài dự kiến. Khi mô hình đã triển khai luôn dự đoán \texttt{walking\_downstairs}, có thể: (a) đọc chính xác mã C++ đã tạo để xác minh logic suy luận, (b) in giá trị đặc trưng trung gian trên serial để so sánh với Python, (c) xác định lỗi zero-padding và kurtosis formula bằng cách truy vết từng dòng. Kinh nghiệm phát triển thực tế cho thấy 3 trong 10 phát hiện kỹ thuật chỉ có thể phát hiện nhờ khả năng kiểm tra mã đã tạo dòng-theo-dòng.
+
+Thứ ba, \textit{hỗ trợ trực tiếp ML cổ điển}: Framework hỗ trợ Random Forest---thuật toán không có đường dẫn chuyển đổi trực tiếp sang TFLite Micro.
+
+Chi phí phát triển: Framework yêu cầu triển khai logic suy luận riêng cho mỗi thuật toán ($\sim$1580 dòng mã cho trích xuất đặc trưng chung, mỗi trình tạo đặc thù thêm 200--500 dòng). Tuy nhiên, chi phí này là \textit{một lần}: sau khi trình tạo được xác minh cho một thuật toán, nó hoạt động chính xác cho mọi mô hình được huấn luyện bằng thuật toán đó.
+
+\textbf{Kết luận}: Tạo mã trực tiếp là lựa chọn đúng cho bối cảnh cụ thể của framework (tập dữ liệu vừa phải, thuật toán ML cổ điển, vi điều khiển bị giới hạn tài nguyên, yêu cầu minh bạch cao).
+
+\subsection{Các Chế Độ Tối Ưu Hóa}
+Bốn chế độ tối ưu hóa (accuracy, speed, power, balanced) cung cấp tính linh hoạt, nhưng yêu cầu người dùng hiểu các đánh đổi. Các thiết kế thay thế có thể bao gồm lập hồ sơ tự động, tối ưu hóa đa mục tiêu, hoặc runtime thích ứng điều chỉnh động độ phức tạp suy luận dựa trên mức pin hoặc cường độ chuyển động.
+
+\section{Tương Đồng Huấn Luyện-Triển Khai trong Edge ML}
+\label{sec:training_deployment_parity}
+
+Một phát hiện quan trọng trong quá trình phát triển là tầm quan trọng thiết yếu của \textit{tương đồng huấn luyện-triển khai}---sự đảm bảo rằng quá trình trích xuất đặc trưng trong môi trường huấn luyện (Python) tạo ra kết quả \textbf{giống hệt} với quá trình trên thiết bị biên (C++/MicroPython). Vấn đề này ít được nghiên cứu trong tài liệu edge ML nhưng có tác động nghiêm trọng đến hiệu suất triển khai thực tế \cite{paleyes2022challenges, sculley2015hidden}.
+
+\subsection{Các Nguồn Không Khớp Được Xác Định}
+Trong quá trình phát triển, đã xác định và giải quyết nhiều nguồn sai lệch:
+
+\paragraph{Artifact Đệm Số Không (Zero-Padding Artifact)}
+Pipeline ban đầu đệm các cửa sổ ngắn hơn kích thước mục tiêu bằng hàng toàn số không. Trên thiết bị thực, bộ đệm trượt luôn chứa đầy dữ liệu cảm biến thực, vì cảm biến liên tục đo gia tốc trọng trường. Sự khác biệt này tạo ra phân phối đặc trưng hoàn toàn khác nhau giữa huấn luyện ($\text{acc\_mag\_min} = 0$) và triển khai ($\text{acc\_mag\_min} \approx 9{,}81$).
+
+\paragraph{Sai Lệch Công Thức Thống Kê}
+Công thức độ nhọn (kurtosis) trong mã C++ ban đầu sử dụng độ lệch chuẩn mẫu ($n-1$), trong khi Python pandas sử dụng độ lệch chuẩn tổng thể ($n$). Sai lệch hệ thống $(n-1)/n)^2 \approx 0{,}987$ cho $n = 150$ tương đương $\sim$1,3\% cho mỗi đặc trưng kurtosis và skewness---nhỏ nhưng hệ thống và tích lũy qua 6 trục.
+
+\paragraph{Thứ Tự Đặc Trưng Không Khớp}
+Python huấn luyện trên các cột DataFrame được sắp xếp theo thứ tự bảng chữ cái, trong khi C++ trích xuất đặc trưng theo thứ tự cố định. Mức reorder đặc trưng tại thời điểm tạo mã đảm bảo trọng số mô hình và tham số scaler tương ứng chính xác.
+
+\subsection{Tác Động Thực Tế}
+Trong ca kiểm chứng trên thiết bị tham chiếu Seeed XIAO nRF52840, các lỗi không khớp khiến mô hình luôn dự đoán lớp \texttt{walking\_downstairs} bất kể hoạt động thực tế. Bài học này không chỉ áp dụng cho XIAO mà cho toàn bộ ma trận đích của framework.
+
+\subsection{Danh Sách Kiểm Tra Tương Đồng}
+Bảng~\ref{tab:parity_checklist} tóm tắt 12 biện pháp đảm bảo tương đồng đã được triển khai và xác minh trong framework:
+
+\begin{table}[H]
+    \centering
+    \caption{Danh sách kiểm tra tương đồng huấn luyện-triển khai}
+    \small
+    \begin{tabular}{@{}clp{7cm}@{}}
+        \toprule
+        \# & Biện pháp & Mô tả \\
+        \midrule
+        1 & Loại bỏ FFT & Tránh sai lệch triển khai FFT giữa Python và C++ \\
+        2 & Edge-value replication & Thay thế zero-padding bằng lặp giá trị biên \\
+        3 & Kurtosis/skewness & Sử dụng population std cho z-scores, khớp pandas \\
+        4 & Thứ tự đặc trưng & Reorder tham số mô hình tại thời điểm tạo mã \\
+        5 & Đơn vị cảm biến & m/s² cho gia tốc, deg/s cho con quay hồi chuyển \\
+        6 & Tốc độ lấy mẫu & 100Hz trong cả thu thập và suy luận \\
+        7 & Kích thước cửa sổ & 150 mẫu, đọc từ metadata mô hình \\
+        8 & StandardScaler & Cùng mean/std, cùng clamp range \\
+        9 & Chuẩn hóa đơn & Scaling chỉ xảy ra 1 lần trong pipeline \\
+        10 & Feature order remap & Trọng số/scaler reorder cho thứ tự C++ \\
+        11 & Trích xuất idempotent & Tham số mô hình chỉ trích xuất 1 lần \\
+        12 & Xác thực kiến trúc & Phân biệt CNN (raw window) vs feature-based \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:parity_checklist}
+\end{table}
+
+\subsection{So Sánh với Nền Tảng Thương Mại}
+Các nền tảng thương mại như Edge Impulse hoạt động theo mô hình hộp đen, trong đó pipeline trích xuất đặc trưng không thể kiểm tra hoặc xác minh bởi người dùng. Tính \textbf{minh bạch hoàn toàn} của framework cho phép kiểm tra trực tiếp giá trị đặc trưng, truy vết ngược đến nguyên nhân gốc, xác minh từng công thức giữa Python và C++, và sửa lỗi mà không chờ nhà cung cấp. Phát hiện này nhấn mạnh rằng \textbf{tính minh bạch không chỉ là triết lý mã nguồn mở mà là yêu cầu kỹ thuật thiết yếu} cho triển khai edge ML đáng tin cậy.
+
+\subsection{Bộ Lọc Kalman: Đột Phá về Parity}
+\label{sec:disc_kalman_parity}
+
+Việc triển khai bộ lọc Kalman constant-velocity đại diện cho một đột phá quan trọng---đây là lần đầu tiên framework có một bộ lọc tiền xử lý với \textbf{khoảng cách parity bằng không}.
+
+Các bộ lọc IIR Butterworth truyền thống tồn tại lỗ hổng parity vốn có: \texttt{filtfilt} (non-causal, zero-phase) trong huấn luyện xử lý dữ liệu theo hai chiều, trong khi \texttt{lfilter} (causal, forward-only) trong triển khai chỉ có thể xử lý theo một chiều do ràng buộc thời gian thực. Khoảng cách này gây sai lệch đặc biệt nghiêm trọng với các đặc trưng nhạy cảm với pha như skewness và kurtosis.
+
+Bộ lọc Kalman khắc phục vấn đề này từ gốc: (1) tính nhân quả tự nhiên---chỉ sử dụng observation hiện tại và trạng thái trước đó, (2) tính thích ứng---gain điều chỉnh tự động dựa trên prediction error, (3) mô hình vật lý phù hợp với bản chất chuyển động của dữ liệu IMU, (4) tham số trực quan---process noise (Q) và measurement noise (R) có ý nghĩa vật lý rõ ràng.
+
+\section{Tăng Cường Dữ Liệu và Ngưỡng Tin Cậy}
+
+\subsection{Tăng Cường Nhận Biết Lớp}
+\label{sec:augmentation_discussion}
+
+Năm phương pháp tăng cường được chọn (jitter, scaling, rotation, time warping, permutation) mô phỏng các nguồn biến thiên thực tế. Tuy nhiên, thực nghiệm ban đầu áp dụng tất cả phương pháp đồng nhất cho mọi lớp phát hiện vấn đề: hoạt động \textit{still} bị phân loại sai thành \textit{walking\_downstairs} do jitter và rotation trên cửa sổ tĩnh tạo ra dao động nhân tạo.
+
+Chiến lược nhận biết lớp giải quyết vấn đề này bằng cách tự động phân biệt hoạt động tĩnh và động: hoạt động tĩnh chỉ nhận micro-jitter ($\sigma = 0{,}01$) thay vì biến đổi đầy đủ, bảo toàn đặc tính phân biệt ``gần bất động''. Nguyên tắc thiết kế: \textbf{tăng cường không được phá hủy đặc tính khiến một lớp khác biệt với các lớp khác}.
+
+\subsection{Ngưỡng Tin Cậy cho Từ Chối Hoạt Động Không Xác Định}
+\label{sec:confidence_discussion}
+
+Các hệ thống phân loại tiêu chuẩn gán một nhãn cho mọi đầu vào, kể cả khi đầu vào thuộc phân phối ngoài. Framework trích xuất tin cậy trực tiếp từ đầu ra phân loại hiện có (softmax/tỷ lệ bỏ phiếu) mà không yêu cầu mô hình phát hiện bất thường riêng biệt \cite{hendrycks2017baseline}. Phương pháp này có ba ưu điểm: không tốn thêm bộ nhớ, không cần dữ liệu bổ sung, và tích hợp tự nhiên trong quá trình suy luận.
+
+\textbf{Hạn chế}: Tin cậy softmax thường kém hiệu chỉnh \cite{guo2017calibration}. Random Forest có tin cậy hiệu chỉnh tự nhiên tốt hơn (tỷ lệ bỏ phiếu có ý nghĩa thống kê xác suất), trong khi Neural Network/SVM qua softmax có thể quá tự tin. Các kỹ thuật hiệu chỉnh nhiệt độ (temperature scaling) có thể cải thiện chất lượng tin cậy. Ngưỡng $\tau = 0{,}6$ là giá trị thực nghiệm; điều chỉnh tự động dựa trên đường cong ROC tập xác thực là hướng tương lai.
+
+\section{Phân Tích Các Phát Hiện Kỹ Thuật Quan Trọng}
+
+\subsection{Kiến Trúc Tạo Mã Đa Kiến Trúc}
+\label{sec:disc_multi_arch}
+
+Việc hỗ trợ đồng thời các mô hình feature-based (RF/SVM/NN) và end-to-end (CNN) trong cùng một framework đặt ra thách thức kiến trúc độc đáo. Case study về CNN metadata mismatch minh họa tầm quan trọng của architecture-aware code generation: CNN model hiển thị filename "f33" (33 features) mặc dù thực tế sử dụng 6 channels per timestep. Fallback logic không phân biệt được giữa feature-based models (cần statistical feature names) và CNN models (cần channel placeholders). Giải pháp: architecture-aware metadata generation với logic phân nhánh rõ ràng cho từng loại mô hình.
+
+\subsection{Hạn Chế TFLite và Giải Pháp Keras Surrogate}
+\label{sec:disc_tflite_limitations}
+
+Pipeline chuyển đổi ONNX$\rightarrow$TFLite bị gián đoạn: \texttt{skl2onnx} thành công tạo ONNX-ML operators (TreeEnsembleClassifier, SVMClassifier), nhưng \texttt{onnx2tf} không hỗ trợ ONNX-ML operators---chỉ hỗ trợ standard ONNX operators. Kết quả: RF/SVM không thể chuyển đổi trực tiếp sang TFLite.
+
+Giải pháp Keras surrogate có ưu điểm (tận dụng quantization INT8, tương thích với hệ sinh thái TensorFlow) nhưng có nhược điểm: approximation loss (Keras MLP chỉ đạt 80-90\% agreement với RF/SVM gốc), memory overhead, và training complexity. \textbf{Khuyến nghị}: RF/SVM ưu tiên direct C++ generation (exact, compact, fast); NN/CNN sử dụng TFLite để tận dụng ecosystem mature; TFLite surrogate chỉ khi yêu cầu standardized runtime integration.
+
+\section{Các Hạn Chế}
+
+\subsection{Hạn Chế Tập Dữ Liệu}
+Xác thực hiện tại sử dụng dữ liệu từ một đối tượng đơn thực hiện năm hoạt động. Công việc tương lai nên tiến hành các nghiên cứu đa đối tượng trải dần các nhân khẩu học đa dạng (tuổi, giới tính, mức độ di động), mở rộng phân loại hoạt động để bao gồm các sự kiện té ngã, các hoạt động phức tạp (nấu ăn, lái xe), chuyển đổi hoạt động, và xác thực trên các tập dữ liệu benchmark công khai (UCI HAR, WISDM, PAMAP2).
+
+\subsection{Lựa Chọn Kích Thước Cửa Sổ}
+Cửa sổ 1,5 giây (150 mẫu @ 100Hz) với bước trượt 0,75 giây là một lựa chọn cân bằng bối cảnh thời gian và khả năng phản hồi. Framework này hiện tại sử dụng kích thước cửa sổ cố định; các chiến lược cửa sổ thích ứng (thay đổi kích thước dựa trên cường độ hoạt động) có thể cải thiện hiệu suất nhưng thêm độ phức tạp.
+
+\subsection{Vị Trí và Hướng Cảm Biến}
+Các thử nghiệm giả định IMU được đeo ở cổ tay trong một hướng nhất quán. Triển khai thực tế gặp phải sự biến đổi: các vị trí cơ thể khác nhau tạo ra các đặc tính tín hiệu riêng biệt, quay thiết bị giới thiệu sự mơ hồ về hướng, và nhiều cảm biến đồng thời yêu cầu hợp nhất cảm biến. Các hệ thống mạnh mẽ yêu cầu trích xuất đặc trưng không phụ thuộc hướng hoặc các thuật toán ước lượng hướng.
+
+\subsection{Sự Đa Dạng Nền Tảng Tính Toán}
+Framework hiện đã hiện thực generator cho nhiều họ đích, nhưng mức độ xác thực cần được phân tách thành hai lớp. Ở lớp thứ nhất, \textit{khả năng triển khai} đã được chứng minh bởi kiến trúc factory và các generator đặc thù nền tảng. Ở lớp thứ hai, \textit{benchmark định lượng liên thiết bị} vẫn mới chỉ được đo chi tiết trên XIAO. Phát biểu chính xác của luận văn là ``framework cung cấp năng lực triển khai đa thiết bị ở mức kiến trúc và sinh mã, với XIAO là nền tảng thực nghiệm tham chiếu đầu tiên''. Các bước tiếp theo cần bổ sung benchmark trên AVR (Arduino Uno), RISC-V (ESP32-C3), ARM Cortex-M0+ (Raspberry Pi Pico).
+
+\subsection{Tính Hợp Lệ Bên Ngoài}
+Kết quả cụ thể cho nhận dạng hoạt động con người sử dụng các cảm biến IMU đeo cổ tay. Khả năng áp dụng cho các lĩnh vực theo dõi chuyển động khác (nhận dạng cử chỉ, theo dõi hành vi động vật, lập hồ sơ chuyển động robot) vẫn cần được xác thực. Kiến trúc của framework được thiết kế để không phụ thuộc miền, nhưng các chiến lược tiền xử lý và bộ đặc trưng có thể yêu cầu thích ứng.
+
+\section{Hướng Phát Triển Tương Lai}
+
+\subsection{Các Mở Rộng Ngắn Hạn}
+Các cải tiến ngay lập tức trong kiến trúc hiện tại:
+\begin{enumerate}
+    \item \textbf{Các Thuật Toán Bổ Sung}: Tích hợp XGBoost, LightGBM, k-NN
+    \item \textbf{Lựa Chọn Đặc Trưng}: Triển khai phân tích tầm quan trọng đặc trưng tự động để giảm chiều
+    \item \textbf{Nén Mô Hình}: Cắt tỉa, huấn luyện nhận thức lượng tử hóa để giảm thêm bộ nhớ
+    \item \textbf{Nhiều Nền Tảng Hơn}: Mở rộng benchmark trên ESP32, STM32, nRF5340
+    \item \textbf{Trực Quan Hóa Thời Gian Thực}: Luồng hoạt động trực tiếp từ thiết bị đã triển khai đến GUI framework
+\end{enumerate}
+
+\subsection{Tầm Nhìn Dài Hạn}
+Các cải tiến chuyển đổi yêu cầu thay đổi kiến trúc:
+\begin{enumerate}
+    \item \textbf{Mở Rộng Học Sâu}: Tích hợp LSTM/Transformer và mở rộng đường dẫn TFLite Micro cho các kiến trúc phức tạp hơn
+    \item \textbf{Học Liên Bang}: Huấn luyện mô hình cộng tác bảo vệ quyền riêng tư trên nhiều thiết bị
+    \item \textbf{AI Có Thể Giải Thích}: Trực quan hóa các mẫu cảm biến nào kích hoạt dự đoán cụ thể (tích hợp LIME, SHAP)
+    \item \textbf{Hợp Nhất Đa Phương Thức}: Tích hợp IMU + GPS + nhịp tim + âm thanh với đồng bộ hóa đặc trưng tự động
+    \item \textbf{Học Trực Tuyến}: Cho phép các mô hình đã triển khai thích ứng với các mẫu cụ thể của người dùng theo thời gian
+    \item \textbf{Backend Đám Mây}: Sao lưu dữ liệu tùy chọn, phiên bản mô hình và chia sẻ mô hình cộng đồng trong khi duy trì kiến trúc local-first
+    \item \textbf{Hiệu Chỉnh Tin Cậy}: Áp dụng temperature scaling \cite{guo2017calibration} để cải thiện chất lượng hiệu chỉnh tin cậy softmax
+    \item \textbf{Tăng Cường Thích Ứng}: Mở rộng chiến lược nhận biết lớp để tự động xác định tham số tăng cường tối ưu cho từng lớp dựa trên đặc tính tín hiệu
+\end{enumerate}
+
+\subsection{Các Cải Tiến Khả Năng Sử Dụng}
+\begin{itemize}
+    \item Các nghiên cứu người dùng chính thức so sánh giao diện tiền xử lý với các lựa chọn thay thế (Edge Impulse, coding thủ công)
+    \item Các quy trình làm việc có hướng dẫn cho người dùng mới với hướng dẫn từng bước và các tập dữ liệu ví dụ
+    \item Giám sát thiết bị thời gian thực cho thấy các luồng cảm biến trực tiếp và kết quả dự đoán
+\end{itemize}
+
+\section{Kết Luận}
+
+\subsection{Tóm Tắt Đóng Góp}
+Nghiên cứu này giải quyết thách thức làm cho theo dõi chuyển động được hỗ trợ bởi AI trở nên có thể tiếp cận với các nhà nghiên cứu, nhà phát triển và giáo viên mà không hy sinh hiệu suất hoặc kiểm soát trên các thiết bị biên dị thể. Luận văn trình bày một framework mã nguồn mở toàn diện thống nhất tiền xử lý dữ liệu, huấn luyện mô hình và triển khai biên vào một quy trình đơn thân thiện với người dùng.
+
+\textbf{Bảy đóng góp kỹ thuật chính}:
+\begin{enumerate}
+    \item Giao diện tiền xử lý tương tác kéo thả giảm thời gian tiền xử lý 60-80\%
+    \item Hỗ trợ đa thuật toán (RF, SVM, NN, PyTorch MLP, PyTorch 1D-CNN) với API nhất quán
+    \item Kiến trúc triển khai đa thiết bị nhận biết tối ưu hóa với bốn chế độ
+    \item Xử lý mất cân bằng lớp hệ thống với \texttt{class\_weight='balanced'} mặc định
+    \item Đảm bảo tương đồng huấn luyện-triển khai qua quy trình xác minh 12 điểm kiểm tra
+    \item Tăng cường dữ liệu nhận biết lớp với chiến lược phân biệt tĩnh/động
+    \item Ngưỡng tin cậy cho từ chối hoạt động không xác định mà không cần mô hình bổ sung
+\end{enumerate}
+
+\textbf{Xác thực thực nghiệm}: Độ chính xác 97,38--99,13\% trên năm thuật toán cho bài toán 5 lớp, 100\% cho bài toán 3 lớp; F1-scores 0,949--1,000 trên tất cả các lớp hoạt động bao gồm các lớp thiểu số; triển khai thành công trên nền tảng tham chiếu Seeed XIAO nRF52840 với PyTorch 1D-CNN đạt 99,4\% độ chính xác trên thiết bị.
+
+\subsection{Xem Lại Các Mục Tiêu Nghiên Cứu}
+Các mục tiêu nghiên cứu ban đầu được nêu trong Mục~1.3 đã được giải quyết toàn diện:
+\begin{enumerate}
+    \item \textbf{Hệ Thống Tiền Xử Lý Tương Tác} \checkmark: Giao diện cửa sổ thời gian kéo thả được triển khai thành công
+    \item \textbf{Hỗ Trợ Đa Thuật Toán} \checkmark: Năm thuật toán tích hợp, tất cả đạt 97,38--99,13\%
+    \item \textbf{Tạo Mã Không Phụ Thuộc Nền Tảng} \checkmark: Kiến trúc trình tạo modular theo ma trận model-platform-backend
+    \item \textbf{Xác Thực Hiệu Quả Framework} \checkmark: Độ chính xác cạnh tranh và triển khai thành công trên thiết bị tham chiếu
+    \item \textbf{Khả Năng Tiếp Cận} \checkmark: GUI dựa trên web với đường cong học tập thấp
+    \item \textbf{Độ Tin Cậy Triển Khai} \checkmark: Quy trình xác minh tương đồng 12 điểm, ngưỡng tin cậy và tăng cường nhận biết lớp
+\end{enumerate}
+
+\subsection{Các Ứng Dụng Thực Tế}
+Framework đã xác thực cho phép các ứng dụng thực tế đa dạng:
+
+\paragraph{Y Tế và Phục Hồi Chức Năng}
+Các hệ thống đeo để giám sát mức độ hoạt động của bệnh nhân, theo dõi tiến trình phục hồi chức năng (phục hồi di động sau phẫu thuật, trị liệu đột quỵ), phát hiện té ngã trong quần thể người cao tuổi và cung cấp dữ liệu hoạt động khách quan cho các thử nghiệm lâm sàng.
+
+\paragraph{Thể Thao và Thể Dục}
+Phát hiện và phân loại tập luyện tự động, phân tích hình thức để phòng ngừa chấn thương (phát hiện bất đối xứng dáng đi, kỹ thuật nâng không đúng) và phản hồi đào tạo cá nhân hóa. Cửa sổ trượt 1,5 giây với bước trượt 0,75 giây đảm bảo phản hồi gần thời gian thực.
+
+\paragraph{Nghiên Cứu và Giáo Dục}
+Nền tảng chi phí thấp để giảng dạy các khái niệm edge AI trong các khóa học đại học/sau đại học, cho phép các phòng thí nghiệm thực hành mà không cần giấy phép thương mại đắt đỏ. Các nhà nghiên cứu có thể nhanh chóng tạo mẫu các thuật toán nhận dạng hoạt động mới lạ và triển khai lên phần cứng để xác thực hiện trường.
+
+\paragraph{Nhà Thông Minh và Hỗ Trợ Sống Môi Trường}
+Giám sát hoạt động cho người cao tuổi sống độc lập (phát hiện các mẫu không hoạt động bất thường, theo dõi thói quen hàng ngày), tự động hóa nhà thông minh nhận biết bối cảnh (điều chỉnh ánh sáng/nhiệt độ dựa trên hoạt động được phát hiện) và phân tích xu hướng sức khỏe dài hạn.
+
+\subsection{Suy Nghĩ Cuối Cùng}
+Luận văn này đã trình bày một framework toàn diện giải quyết các thách thức cơ bản trong theo dõi chuyển động dựa trên biên: khả năng tiếp cận, hiệu suất và tính linh hoạt. Giá trị cốt lõi của framework không nằm ở việc tối ưu cho riêng Seeed XIAO, mà ở khả năng chuyển cùng một pipeline sang nhiều thiết bị biên khác nhau mà vẫn giữ được tính minh bạch và khả năng kiểm chứng. Xác thực thực nghiệm xác nhận rằng \textbf{dân chủ hóa và xuất sắc hiệu suất không loại trừ lẫn nhau---chúng có thể và nên cùng tồn tại}.
+
+Hành trình từ dữ liệu cảm biến thô đến mô hình edge AI đã triển khai liên quan đến nhiều bước, mỗi bước truyền thống yêu cầu chuyên môn chuyên biệt. Framework này thu gọn các rào cản đó, cho phép bất kỳ ai có kiến thức miền (các hoạt động cần phát hiện) tạo ra các hệ thống sẵn sàng triển khai mà không trở thành chuyên gia về xử lý tín hiệu, lý thuyết học máy hoặc lập trình hệ thống nhúng. Đây là bản chất của dân chủ hóa: \textbf{hạ thấp rào cản mà không hạ thấp tiêu chuẩn}.
+
+Khi chúng ta nhìn về tương lai, sự tiến hóa tiếp tục của edge AI sẽ phụ thuộc vào các công cụ trao quyền thay vì hạn chế, giáo dục thay vì che giấu và bao gồm thay vì loại trừ. Framework này đại diện cho một bước trong hướng đó. Con đường phía trước dài, nhưng điểm đến---một thế giới nơi các khả năng AI tiên tiến có thể tiếp cận với tất cả mọi người---đáng để theo đuổi.
+
+Mã nguồn, tài liệu và các tập dữ liệu ví dụ có sẵn công khai để hỗ trợ khả năng tái tạo, giáo dục và đóng góp cộng đồng. Các nhà nghiên cứu và nhà thực hành được khuyến khích xây dựng trên nền tảng này, mở rộng khả năng của framework và áp dụng nó cho các thách thức theo dõi chuyển động mới lạ. Cùng nhau, chúng ta có thể bắc cầu khoảng cách giữa nghiên cứu phòng thí nghiệm và triển khai thực tế, chuyển đổi bối cảnh phát triển edge AI.

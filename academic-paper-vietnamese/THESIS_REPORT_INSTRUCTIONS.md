@@ -23,13 +23,12 @@
 |---------|------|--------|---------------|
 | Ch.1 Giới thiệu | `chapters/main/introduction.tex` | ✅ Reframed for multi-device deployment | Collect more cross-device benchmark evidence if available |
 | Ch.2 Công trình liên quan | `chapters/main/relatedwork.tex` | ✅ Written in Vietnamese | — |
-| Ch.3 Phương pháp luận | `chapters/main/methodology.tex` | ✅ Reframed | Added multi-device generator matrix + reference-platform wording |
-| Ch.4 Thiết kế và hiện thực | `chapters/main/design_implementation.tex` | ✅ Written | NEW chapter - software architecture & implementation details |
-| Ch.5 Kết quả | `chapters/main/results.tex` | ⚠️ Reframed + placeholder numbers | Needs real data after retrain; add TFLite section + Kalman impact |
-| Ch.6 Thảo luận | `chapters/main/discussion.tex` | ✅ Reframed | Separated architectural multi-device support from single-platform benchmark evidence |
-| Ch.7 Kết luận | `chapters/main/conclusion.tex` | ✅ Reframed | Multi-device contribution now explicit; XIAO framed as representative case |
+| Ch.3 Phương pháp luận | `chapters/main/methodology.tex` | ✅ Reframed | UI figures moved to Ch.4; theory-focused |
+| Ch.4 Thiết kế và hiện thực | `chapters/main/design_implementation.tex` | ✅ NEW | Software architecture, UI screenshots, module design |
+| Ch.5 Kết quả thực nghiệm | `chapters/main/results.tex` | ⚠️ Reframed + placeholder numbers | Needs real data after retrain; add TFLite section + Kalman impact |
+| Ch.6 Thảo luận và Kết luận | `chapters/main/discussion_conclusion.tex` | ✅ MERGED | Discussion + Conclusion merged; redundancy removed |
 | References | `references.bib` | ✅ Updated | Added 11 new refs (augmentation, confidence, parity, calibration) |
-| Figures | `figures/` | ❌ Missing | Need confusion matrix, architecture, UI screenshots |
+| Figures | `figures/` | ⚠️ Partial | UI screenshots exist; need architecture diagrams |
 
 ### Key Technical Findings (detail in TECHNICAL_FINDINGS.md)
 
@@ -73,6 +72,7 @@ Key technical findings to reflect in the thesis (see `TECHNICAL_FINDINGS.md` for
 | 2026-05-17 | Finding 18 | CNN scaler clamp fix: v2 pipeline [-10,10] clamp destroyed raw sensor values for CNN; added skip_scaler bypass, validator CNN-awareness, memcpy optimization, brace formatting fix |
 | 2026-05-17 | Findings 19-20 | Preprocessing filter parity (filtfilt+SavGol+FFT replicated on device); Conv2D HARCNN2D architecture; spectral_entropy DFT feature added |
 | 2026-05-18 | Ch.4 Created | Added NEW Chapter 4 "Thiết kế và hiện thực" (Design and Implementation) - comprehensive system architecture, module design, code generation details, state management, deployment workflow |
+| 2026-05-21 | Major restructure | Merged Discussion+Conclusion into Ch.6; Created Ch.4 "Thiết kế và hiện thực"; Moved UI figures from Ch.3 to Ch.4; Updated cross-references; New structure: 6 chapters total |
 
 *Add a row here each time this file is updated.*
 

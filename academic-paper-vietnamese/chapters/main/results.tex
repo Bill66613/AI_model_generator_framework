@@ -305,7 +305,7 @@ Bảng~\ref{tab:resource_comparison} so sánh dấu chân bộ nhớ.
 
 Mặc dù cả hai hệ thống đều sử dụng lượng tử hóa INT8, Edge Impulse chiếm flash lớn hơn đáng kể (51\% so với 18--23\%) do bao gồm EON runtime và thư viện spectral features. Framework đề xuất đạt dấu chân nhỏ hơn nhờ tạo mã trực tiếp không cần runtime, đồng thời đạt \textit{độ chính xác triển khai cao hơn} với 1D-CNN và Random Forest (nhận dạng đúng cả 3 lớp so với 2/3 lớp của Edge Impulse).
 
-Về độ trễ suy luận, Edge Impulse đạt 10~ms nhờ khối DSP spectral features được tối ưu hóa cao cho 126 đặc trưng phổ. Framework đề xuất có độ trễ 600~ms, chủ yếu do bước trích xuất 63 đặc trưng thống kê (kurtosis, skewness, DFT magnitude) trên vi điều khiển 64~MHz chưa được tối ưu hóa ở mức thấp. Đây là điểm cần cải thiện trong tương lai (xem Chương~\ref{chap:discussion}), tuy nhiên độ trễ 600~ms vẫn chấp nhận được cho các ứng dụng HAR không yêu cầu phản hồi thời gian thực nghiêm ngặt (cửa sổ dữ liệu đã là 1,5 giây).
+Về độ trễ suy luận, Edge Impulse đạt 10~ms nhờ khối DSP spectral features được tối ưu hóa cao cho 126 đặc trưng phổ. Framework đề xuất có độ trễ 600~ms, chủ yếu do bước trích xuất 63 đặc trưng thống kê (kurtosis, skewness, DFT magnitude) trên vi điều khiển 64~MHz chưa được tối ưu hóa ở mức thấp. Đây là điểm cần cải thiện trong tương lai (xem Chương~\ref{chap:discussion_conclusion}), tuy nhiên độ trễ 600~ms vẫn chấp nhận được cho các ứng dụng HAR không yêu cầu phản hồi thời gian thực nghiêm ngặt (cửa sổ dữ liệu đã là 1,5 giây).
 
 \subsection{So sánh kiến trúc}
 \label{sec:qualitative_comparison}
@@ -330,7 +330,7 @@ Bảng~\ref{tab:qualitative_comparison} tóm tắt các khác biệt kiến trú
     \end{tabular}}
 \end{table}
 
-Điểm phân biệt then chốt là \textbf{tính minh bạch}: mã C++ sinh ra có thể đọc, kiểm tra và sửa đổi trực tiếp. Chính nhờ tính minh bạch này, các lỗi tương đồng huấn luyện--triển khai (zero-padding, sai công thức kurtosis/skewness, sai thứ tự đặc trưng --- Mục~\ref{sec:training_deployment_parity}) đã được phát hiện và sửa chữa---điều không thể thực hiện với các nền tảng hộp đen. Phân tích ý nghĩa kiến trúc được trình bày trong Chương~\ref{chap:discussion}.
+Điểm phân biệt then chốt là \textbf{tính minh bạch}: mã C++ sinh ra có thể đọc, kiểm tra và sửa đổi trực tiếp. Chính nhờ tính minh bạch này, các lỗi tương đồng huấn luyện--triển khai (zero-padding, sai công thức kurtosis/skewness, sai thứ tự đặc trưng --- Mục~\ref{sec:training_deployment_parity}) đã được phát hiện và sửa chữa---điều không thể thực hiện với các nền tảng hộp đen. Phân tích ý nghĩa kiến trúc được trình bày trong Chương~\ref{chap:discussion_conclusion}.
 
 \section{Tóm tắt}
 \label{sec:results_summary}

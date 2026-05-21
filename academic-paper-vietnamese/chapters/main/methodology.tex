@@ -104,14 +104,7 @@ Về đánh đổi thực tế: tần số lấy mẫu cao hơn cung cấp thêm
 \section{Quy trình tiền xử lý tương tác}
 
 \subsection{Tải lên và trực quan hóa dữ liệu}
-Người dùng tải lên các tập dữ liệu CSV chứa các phép đo IMU, tổ chức theo hoạt động (mỗi tệp tương ứng với một lớp). Framework tự động phát hiện tên cột cảm biến, tần số lấy mẫu và hiển thị biểu đồ đồng bộ của tín hiệu thô trên tất cả các trục, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý. Hình~\ref{fig:ui_data_upload} minh họa giao diện tải lên dữ liệu.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_data_upload.png}
-    \caption{Giao diện tải lên và trực quan hóa dữ liệu cảm biến. Framework tự động phát hiện cấu trúc cột IMU và hiển thị biểu đồ tín hiệu đồng bộ trên tất cả các trục gia tốc kế và con quay hồi chuyển, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý.}
-    \label{fig:ui_data_upload}
-\end{figure}
+Người dùng tải lên các tập dữ liệu CSV chứa các phép đo IMU, tổ chức theo hoạt động (mỗi tệp tương ứng với một lớp). Framework tự động phát hiện tên cột cảm biến, tần số lấy mẫu và hiển thị biểu đồ đồng bộ của tín hiệu thô trên tất cả các trục, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý (xem giao diện tại Hình~\ref{fig:ui_data_upload}, Chương~\ref{chap:design_implementation}).
 
 \subsection{Các phương pháp lọc và làm sạch tín hiệu}
 \label{sec:signal_filtering}
@@ -212,14 +205,7 @@ Cơ sở lý thuyết cho lựa chọn $o = 50\%$: độ chồng lắp làm tăn
 
 Không phải toàn bộ bản ghi đều có chất lượng đồng đều: giai đoạn bắt đầu và kết thúc thường chứa các chuyển tiếp hoạt động, nhiễu điện, hoặc đoạn nghỉ ngắn không đại diện cho hoạt động mục tiêu. Giao diện lựa chọn đoạn tương tác cho phép người dùng kéo thả trực tiếp trên biểu đồ tín hiệu để đánh dấu các vùng sạch, bỏ qua các đoạn chuyển tiếp hoặc nhiễu. Nhiều đoạn không chồng lắp trên cùng một tệp được hỗ trợ---cho phép trích xuất nhiều chu kỳ hoạt động riêng biệt từ một bản ghi dài mà không cần cắt tệp thủ công. Sau khi xác nhận, cửa sổ trượt chạy tự động trên từng đoạn theo Phương trình~\ref{eq:sliding_window}, sinh toàn bộ tập huấn luyện trong một thao tác.
 
-Thiết kế này tách bạch rõ hai quyết định: \textit{đâu là dữ liệu đáng tin cậy} (người dùng kiểm soát) và \textit{cách biến dữ liệu đó thành mẫu huấn luyện} (hệ thống tự động hóa hoàn toàn). Nhãn hoạt động được kế thừa từ tệp nguồn nhưng có thể gán lại thủ công---ví dụ, trích xuất các đoạn \textit{standing} từ tệp \textit{walking} trong các giai đoạn chuyển tiếp. So với chú thích dấu thời gian thủ công từng khung, cách tiếp cận này giảm đáng kể công sức thu thập trong khi vẫn bảo tồn kiểm soát chất lượng dữ liệu. Hình~\ref{fig:ui_preprocessing} minh họa giao diện kéo thả cửa sổ trên biểu đồ tín hiệu.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_preprocessing_draggable.png}
-    \caption{Giao diện cửa sổ kéo thả tương tác. Người dùng kéo thả trực tiếp trên biểu đồ tín hiệu để xác định các đoạn hoạt động đại diện. Cửa sổ trượt tự động sinh các mẫu huấn luyện từ các đoạn đã chọn, kết hợp giữa kiểm soát thủ công và tự động hóa.}
-    \label{fig:ui_preprocessing}
-\end{figure}
+Thiết kế này tách bạch rõ hai quyết định: \textit{đâu là dữ liệu đáng tin cậy} (người dùng kiểm soát) và \textit{cách biến dữ liệu đó thành mẫu huấn luyện} (hệ thống tự động hóa hoàn toàn). Nhãn hoạt động được kế thừa từ tệp nguồn nhưng có thể gán lại thủ công---ví dụ, trích xuất các đoạn \textit{standing} từ tệp \textit{walking} trong các giai đoạn chuyển tiếp. So với chú thích dấu thời gian thủ công từng khung, cách tiếp cận này giảm đáng kể công sức thu thập trong khi vẫn bảo tồn kiểm soát chất lượng dữ liệu (xem giao diện kéo thả tại Hình~\ref{fig:ui_preprocessing}, Chương~\ref{chap:design_implementation}).
 
 \section{Trích xuất đặc trưng}
 \label{sec:feature_extraction}
@@ -490,14 +476,7 @@ Cân bằng lớp là quan trọng cho triển khai thực tế nơi tất cả 
     \item \texttt{learning\_rate\_init}: [0.001, 0.01]
 \end{itemize}
 
-Tối ưu hóa xác định các cấu hình tối đa hóa độ chính xác xác thực chéo, thường cải thiện hiệu suất cơ sở 2--5\%. Hình~\ref{fig:ui_training} minh họa giao diện cấu hình huấn luyện.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_training_config.png}
-    \caption{Giao diện cấu hình huấn luyện mô hình. Người dùng chọn thuật toán (Random Forest, Neural Network, SVM, PyTorch MLP/CNN), cấu hình tối ưu hóa siêu tham số với GridSearchCV, chiến lược cân bằng lớp, và theo dõi tiến trình huấn luyện thời gian thực.}
-    \label{fig:ui_training}
-\end{figure}
+Tối ưu hóa xác định các cấu hình tối đa hóa độ chính xác xác thực chéo, thường cải thiện hiệu suất cơ sở 2--5\% (xem giao diện cấu hình huấn luyện tại Hình~\ref{fig:ui_training}, Chương~\ref{chap:design_implementation}).
 
 \section{Tạo mã cho triển khai biên}
 
@@ -529,14 +508,7 @@ Kiến trúc gồm ba lớp chính:
     \end{tabular}
 \end{table}
 
-Hình~\ref{fig:ui_code_generation} minh họa giao diện tạo mã với các tùy chọn cấu hình triển khai và xem trước mã C++ được sinh ra.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{figures/ui_code_generation.png}
-    \caption{Giao diện tạo mã triển khai. Hiển thị các tệp header, implementation và Arduino sketch được sinh ra. Người dùng chọn chế độ tối ưu hóa (Accuracy, Speed, Power, Balanced), cấu hình nền tảng đích và tải xuống gói triển khai hoàn chỉnh.}
-    \label{fig:ui_code_generation}
-\end{figure}
+Chi tiết hiện thực và giao diện tạo mã được trình bày trong Chương~\ref{chap:design_implementation} (Hình~\ref{fig:ui_code_generation}).
 
 \subsection{Lý do chọn tạo mã trực tiếp thay vì Runtime Engine}
 \label{sec:codegen_rationale}
@@ -892,24 +864,4 @@ Các ngưỡng hiệu suất mục tiêu dựa trên yêu cầu ứng dụng: su
 \subsection{So sánh cơ sở}
 Kết quả được so sánh trực tiếp với \textbf{Edge Impulse} (gói miễn phí)---nền tảng TinyML thương mại phổ biến nhất. Cùng tập dữ liệu 3 lớp (running/still/walking) được tải lên Edge Impulse và huấn luyện với mô hình CNN mặc định (đặc trưng phổ, lượng tử hóa INT8, triển khai qua EON Compiler cho Cortex-M4F 64~MHz). So sánh bao gồm độ chính xác huấn luyện, tài nguyên triển khai và hiệu suất trên thiết bị thực (Mục~\ref{sec:edge_impulse_comparison}).
 
-\section{Chi tiết triển khai}
-\textbf{Ngăn xếp phần mềm:}
-\begin{itemize}
-    \item Python 3.10 với Dash 2.14 (giao diện web)
-    \item scikit-learn 1.3 (học máy cổ điển: RF, SVM, MLP)
-    \item PyTorch 2.x (học sâu: MLP, CNN)
-    \item NumPy, Pandas (xử lý dữ liệu)
-    \item Plotly (trực quan hóa)
-    \item Jinja2 (template engine cho tạo mã đa nền tảng)
-\end{itemize}
-
-\textbf{Phần cứng:}
-\begin{itemize}
-    \item Phát triển: Máy trạm Windows 11 (Intel i7, 16GB RAM)
-    \item Benchmark tham chiếu: Seeed XIAO nRF52840 Sense (ARM Cortex-M4F @ 64MHz, 256KB RAM, 1MB Flash)
-    \item Cảm biến: LSM6DS3 6-axis IMU (I2C, lấy mẫu 100Hz)
-    \item Các họ đích được hỗ trợ ở mức generator: Arduino-compatible, ARM Cortex-M, generic C/C++, ESP-IDF, MicroPython, Zephyr; cùng các backend TFLite Micro và ONNX Runtime
-\end{itemize}
-
-\textbf{Tính khả dụng mã:}
-Mã nguồn, các tập dữ liệu mẫu và các ví dụ triển khai có sẵn trong kho dự án.
+Chi tiết triển khai phần mềm và phần cứng được trình bày đầy đủ trong Chương~\ref{chap:design_implementation}.

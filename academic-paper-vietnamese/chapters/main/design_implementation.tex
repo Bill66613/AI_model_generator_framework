@@ -32,64 +32,16 @@ Framework được triển khai dưới dạng ứng dụng web một trang (sin
 \subsection{Kiến trúc ứng dụng}
 \label{subsec:app_architecture}
 
-Framework áp dụng kiến trúc phân lớp rõ ràng với nguyên tắc \textit{separation of concerns}:
+Framework áp dụng kiến trúc phân lớp rõ ràng với nguyên tắc \textit{separation of concerns}. Hệ thống được tổ chức thành bốn lớp chính: (1) \textbf{lớp giao diện} chứa định nghĩa layout Dash cho mỗi tab; (2) \textbf{lớp callback} xử lý tương tác người dùng và điều phối luồng dữ liệu; (3) \textbf{lớp tiện ích} chứa các thuật toán xử lý tín hiệu, trích xuất đặc trưng và huấn luyện mô hình; (4) \textbf{lớp tạo mã} chứa hệ thống generator cho từng mô hình và nền tảng đích. Trạng thái liên phiên được lưu xuống hệ thống file, tách biệt với trạng thái tạm thời trong session.
 
-\paragraph{Cấu trúc thư mục}
-\begin{verbatim}
-app.py                  # Entry point, khởi tạo Dash app
-├── layouts/            # UI components (Python code tạo Dash layout)
-│   ├── data_upload.py
-│   ├── preprocessing.py
-│   ├── feature_engineering.py
-│   ├── training.py
-│   ├── code_generation.py
-│   └── device_testing.py
-├── callbacks/          # Business logic (xử lý sự kiện tương tác)
-│   ├── *_callbacks.py  # Một file per tab, register_callbacks(app)
-├── utils/              # Core algorithms (feature extraction, models)
-│   ├── feature_extraction.py
-│   ├── data_processing.py
-│   ├── data_augmentation.py
-│   └── edge_ml_model.py
-├── deployment/         # Code generation subsystem
-│   ├── code_generator_factory.py
-│   ├── v2/             # Clean architecture với block pattern
-│   │   ├── generator.py
-│   │   ├── feature_block.py
-│   │   ├── classifier_block.py
-│   │   └── models/     # Model-specific blocks
-│   └── converters/     # ONNX, TFLite converters
-├── config/             # Configuration constants
-└── persistent_data/    # Filesystem-based state
-    ├── datasets/
-    ├── windows/
-    ├── training/
-    ├── models/
-    └── generated/
-\end{verbatim}
-
-\paragraph{Quy trình callback registration}
-Dash sử dụng mô hình \textit{callback pattern} để đồng bộ giao diện và trạng thái. Mỗi module trong \texttt{callbacks/} định nghĩa một hàm \texttt{register\_callbacks(app)}, bên trong đó chứa tất cả decorator \texttt{@app.callback} liên quan đến tab tương ứng. Entry point \texttt{app.py} gọi tuần tự các hàm đăng ký này:
-
-\begin{verbatim}
-# app.py
-from callbacks import (
-    data_upload_callbacks,
-    preprocessing_callbacks,
-    feature_engineering_callbacks,
-    # ...
-)
-
-data_upload_callbacks.register_callbacks(app)
-preprocessing_callbacks.register_callbacks(app)
-# ...
-\end{verbatim}
+\paragraph{Quy trình đăng ký callback}
+Dash sử dụng mô hình \textit{callback pattern} để đồng bộ giao diện và trạng thái. Mỗi module callback định nghĩa một hàm \texttt{register\_callbacks(app)}, bên trong đó tập trung toàn bộ logic xử lý sự kiện cho tab tương ứng. Entry point ứng dụng gọi tuần tự các hàm đăng ký này sau khi khởi tạo layout.
 
 Cách tổ chức này đảm bảo:
 \begin{enumerate}
-    \item \textbf{Tính module}: mỗi file callback độc lập, dễ bảo trì.
-    \item \textbf{Tránh circular imports}: callbacks không import lẫn nhau, chỉ import từ \texttt{utils/} và \texttt{deployment/}.
-    \item \textbf{Testability}: mỗi callback có thể kiểm thử riêng biệt bằng cách mock Dash context.
+    \item \textbf{Tính module}: mỗi module callback độc lập, dễ bảo trì và kiểm thử riêng biệt.
+    \item \textbf{Tránh circular imports}: callbacks không import lẫn nhau, chỉ import từ lớp tiện ích và lớp tạo mã.
+    \item \textbf{Testability}: mỗi callback có thể kiểm thử riêng bằng cách mock Dash context.
 \end{enumerate}
 
 \subsection{Quản lý trạng thái}
@@ -107,7 +59,7 @@ Dữ liệu trung gian giữa các giai đoạn được lưu dưới dạng fil
     \begin{itemize}
         \item \texttt{model}: trained model object (sklearn/PyTorch)
         \item \texttt{scaler}: StandardScaler fitted trên train set
-        \item \texttt{label\_encoder}: mapping class names ↔ integers
+        \item \texttt{label\_encoder}: mapping class names $\leftrightarrow$ integers
         \item \texttt{feature\_names}: danh sách features theo thứ tự huấn luyện
         \item \texttt{model\_type}: string identifier (rf/svm/nn/cnn)
         \item \texttt{model\_params}: hyperparameters
@@ -122,11 +74,11 @@ Dash component \texttt{dcc.Store} lưu trạng thái session tạm thời (VD: m
 \paragraph{Luồng dữ liệu}
 Dữ liệu chảy qua pipeline như sau:
 \begin{enumerate}
-    \item \textbf{Tab 1 → Tab 2}: CSV files → \texttt{datasets/} → metadata in \texttt{dcc.Store}
-    \item \textbf{Tab 2 → Tab 3}: Segments selection → sliding windows → \texttt{windows/\{dataset\_name\}.pkl}
-    \item \textbf{Tab 3 → Tab 4}: Feature extraction → \texttt{training/\{dataset\_name\}\_train.csv}
-    \item \textbf{Tab 4 → Tab 5}: Trained model → \texttt{models/\{model\_name\}.joblib}
-    \item \textbf{Tab 5 → Tab 6}: Generated code → \texttt{generated/\{model\_type\}\_models/\{model\_name\}/}
+    \item \textbf{Tab 1 $\rightarrow$ Tab 2}: CSV files $\rightarrow$ \texttt{datasets/} $\rightarrow$ metadata in \texttt{dcc.Store}
+    \item \textbf{Tab 2 $\rightarrow$ Tab 3}: Segments selection $\rightarrow$ sliding windows $\rightarrow$ \texttt{windows/\{dataset\_name\}.pkl}
+    \item \textbf{Tab 3 $\rightarrow$ Tab 4}: Feature extraction $\rightarrow$ \texttt{training/\{dataset\_name\}\_train.csv}
+    \item \textbf{Tab 4 $\rightarrow$ Tab 5}: Trained model $\rightarrow$ \texttt{models/\{model\_name\}.joblib}
+    \item \textbf{Tab 5 $\rightarrow$ Tab 6}: Generated code $\rightarrow$ \texttt{generated/\{model\_type\}\_models/\{model\_name\}/}
 \end{enumerate}
 
 Thiết kế này cho phép người dùng quay lại bất kỳ bước nào để điều chỉnh mà không mất dữ liệu trung gian.
@@ -146,38 +98,14 @@ Người dùng tải lên nhiều file CSV, mỗi file chứa dữ liệu cho m�
     \item \textbf{Timestamp}: \texttt{time}, \texttt{timestamp}, \texttt{Time(s)} (optional, dùng để tính tần số lấy mẫu)
 \end{itemize}
 
-Thuật toán phát hiện cột:
-\begin{verbatim}
-def detect_sensor_columns(df):
-    acc_patterns = ['aX', 'aY', 'aZ', 'AccX', 'AccY', 'AccZ', ...]
-    gyro_patterns = ['gX', 'gY', 'gZ', 'GyroX', 'GyroY', 'GyroZ', ...]
-    
-    acc_cols = [c for c in df.columns if c in acc_patterns]
-    gyro_cols = [c for c in df.columns if c in gyro_patterns]
-    
-    # Fallback: match columns chứa substring 'acc' hoặc 'gyro'
-    if not acc_cols:
-        acc_cols = [c for c in df.columns if 'acc' in c.lower()]
-    # ...
-    
-    return acc_cols, gyro_cols
-\end{verbatim}
+Thuật toán phát hiện cột hoạt động theo hai bước: đầu tiên khớp chính xác với danh sách quy ước đặt tên phổ biến; nếu không tìm thấy, fallback sang khớp substring (VD: ``acc'', ``gyro'') trong tên cột.
 
 \subsection{Trực quan hóa tín hiệu đồng bộ}
 \label{subsec:signal_visualization}
 
-Sau khi tải dữ liệu, framework hiển thị biểu đồ tín hiệu cho tất cả các trục cảm biến. Biểu đồ sử dụng Plotly \texttt{make\_subplots} với shared x-axis để đồng bộ zoom và pan giữa các trục:
+Sau khi tải dữ liệu, framework hiển thị biểu đồ tín hiệu cho tất cả các trục cảm biến với shared x-axis để đồng bộ zoom và pan giữa các trục.
 
-\begin{verbatim}
-fig = make_subplots(
-    rows=6, cols=1, shared_xaxes=True,
-    subplot_titles=['aX', 'aY', 'aZ', 'gX', 'gY', 'gZ']
-)
-for i, col in enumerate(sensor_columns):
-    fig.add_trace(go.Scatter(y=df[col], mode='lines'), row=i+1, col=1)
-\end{verbatim}
-
-Hình~\ref{fig:ui_data_upload} minh họa giao diện này. Trực quan hóa này cho phép người dùng phát hiện các vấn đề chất lượng dữ liệu như:
+Hình~\ref{fig:ui_data_upload}minh họa giao diện này. Trực quan hóa này cho phép người dùng phát hiện các vấn đề chất lượng dữ liệu như:
 \begin{itemize}
     \item \textbf{Nhiễu quá mức}: biên độ tín hiệu dao động lớn không đặc trưng cho hoạt động.
     \item \textbf{Outliers}: các spike đơn lẻ do lỗi cảm biến hoặc va chạm.
@@ -195,15 +123,9 @@ Hình~\ref{fig:ui_data_upload} minh họa giao diện này. Trực quan hóa nà
 \subsection{Phát hiện tần số lấy mẫu}
 \label{subsec:sampling_rate_detection}
 
-Framework tự động tính tần số lấy mẫu dựa trên cột timestamp:
-\begin{verbatim}
-if 'time' in df.columns or 'timestamp' in df.columns:
-    time_col = 'time' if 'time' in df.columns else 'timestamp'
-    time_diff = df[time_col].diff().dropna()
-    sampling_rate = 1.0 / time_diff.mean()  # Hz
-\end{verbatim}
+Framework tự động tính tần số lấy mẫu từ cột timestamp bằng cách lấy nghịch đảo của khoảng thời gian trung bình giữa các mẫu liên tiếp.
 
-Nếu không có cột timestamp, người dùng nhập tần số lấy mẫu thủ công. Tần số này được lưu trong metadata và nhúng vào mã triển khai dưới dạng hằng số \texttt{SAMPLE\_RATE\_HZ}.
+Nếu không có cột timestamp, người dùng nhập tần số lấy mẫu thủ công. Tần số này được lưu trong metadata và nhúng vào mã triển khai dưới dạng hằng số.
 
 \section{Module tiền xử lý tương tác}
 \label{sec:preprocessing_module}
@@ -213,31 +135,14 @@ Module này (Tab 2) cung cấp giao diện kéo thả (drag-and-drop) để ch�
 \subsection{Giao diện lựa chọn đoạn tương tác}
 \label{subsec:interactive_segment_selection}
 
-Dash Plotly hỗ trợ \textit{editable shapes}: người dùng có thể vẽ hình chữ nhật (rectangle) trực tiếp trên biểu đồ để đánh dấu vùng quan tâm. Framework kích hoạt tính năng này qua thuộc tính \texttt{config.editable=True} và \texttt{newshape.drawdirection='horizontal'}.
+Dash Plotly hỗ trợ \textit{editable shapes}: người dùng vẽ hình chữ nhật trực tiếp trên biểu đồ để đánh dấu vùng quan tâm. Khi người dùng vẽ hoặc chỉnh sửa một hình chữ nhật, sự kiện layout được kích hoạt và framework đọc tọa độ x-axis để xác định phạm vi mẫu của đoạn vừa chọn.
 
-Khi người dùng vẽ một rectangle, callback nhận được danh sách shapes:
-\begin{verbatim}
-@app.callback(
-    Output('segment-store', 'data'),
-    Input('signal-graph', 'relayoutData'),
-    State('signal-graph', 'figure')
-)
-def update_segments(relayout_data, figure):
-    if 'shapes' in relayout_data:
-        shapes = relayout_data['shapes']
-        segments = []
-        for shape in shapes:
-            x0 = int(shape['x0'])  # start sample index
-            x1 = int(shape['x1'])  # end sample index
-            segments.append({'start': x0, 'end': x1})
-        return segments
-\end{verbatim}
-
-Framework kiểm tra các ràng buộc:
+Framework kiểm tra ràng buộc cơ bản:
 \begin{itemize}
-    \item \textbf{Không chồng chéo}: các segment không được giao nhau.
     \item \textbf{Chiều dài tối thiểu}: mỗi segment phải có ít nhất \texttt{window\_size} mẫu để sinh được ít nhất 1 cửa sổ.
 \end{itemize}
+
+Các segment có thể chồng chéo nhau — điều này cho phép người dùng thu thập mẫu từ nhiều vùng khác nhau trong cùng một đoạn tín hiệu.
 
 Hình~\ref{fig:ui_preprocessing} minh họa giao diện này.
 
@@ -251,17 +156,7 @@ Hình~\ref{fig:ui_preprocessing} minh họa giao diện này.
 \subsection{Sinh cửa sổ trượt}
 \label{subsec:sliding_window_generation}
 
-Từ mỗi segment, framework áp dụng sliding window với stride cố định:
-\begin{verbatim}
-def generate_windows(df, segments, window_size, stride):
-    windows = []
-    for seg in segments:
-        start, end = seg['start'], seg['end']
-        for i in range(start, end - window_size + 1, stride):
-            window = df.iloc[i:i+window_size]
-            windows.append(window)
-    return windows
-\end{verbatim}
+Từ mỗi segment, framework áp dụng thuật toán sliding window: duyệt từ đầu đến cuối segment với bước nhảy (stride) cố định, mỗi bước cắt ra một cửa sổ có độ dài \texttt{window\_size}.
 
 Tham số mặc định:
 \begin{itemize}
@@ -296,8 +191,9 @@ Framework hỗ trợ 6 chế độ feature extraction, mỗi chế độ tạo r
 \begin{table}[H]
 \centering
 \caption{Các chế độ trích xuất đặc trưng và số lượng features}
-\label{tab:feature_modes}
-\begin{tabular}{@{}lll@{}}
+\label{tab:feature_modes_impl}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llc@{}}
 \toprule
 \textbf{Chế độ} & \textbf{Mô tả} & \textbf{Số features} \\ \midrule
 \texttt{orientation\_invariant\_time\_only} & Magnitude stats (acc+gyro) + jerk & 33 \\
@@ -306,7 +202,8 @@ Framework hỗ trợ 6 chế độ feature extraction, mỗi chế độ tạo r
 \texttt{all} & Time + frequency, per-axis + magnitudes & 156 \\
 \texttt{frequency\_domain} & FFT, PSD, spectral features & 66 \\
 \texttt{raw} & Cửa sổ tín hiệu raw (CNN input) & 6 channels \\ \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \paragraph{Rationale cho orientation-invariant features}
@@ -328,18 +225,11 @@ Framework triển khai 5 phương pháp data augmentation cho dữ liệu IMU:
 \paragraph{Class-aware augmentation}
 Framework tự động phân loại hoạt động thành hai loại:
 \begin{itemize}
-    \item \textbf{Static/transition}: đứng yên, ngồi, nằm → KHÔNG áp dụng time warping và permutation (gây mất tính tự nhiên).
-    \item \textbf{Dynamic/periodic}: đi bộ, chạy, leo cầu thang → áp dụng tất cả augmentation.
+    \item \textbf{Static/transition}: đứng yên, ngồi, nằm $\rightarrow$ KHÔNG áp dụng time warping và permutation (gây mất tính tự nhiên).
+    \item \textbf{Dynamic/periodic}: đi bộ, chạy, leo cầu thang $\rightarrow$ áp dụng tất cả augmentation.
 \end{itemize}
 
-Phân loại dựa trên từ khóa trong tên activity:
-\begin{verbatim}
-STATIC_ACTIVITIES = ['still', 'stand', 'sit', 'lie', 'stationary']
-
-def is_static_activity(activity_name):
-    return any(keyword in activity_name.lower() 
-               for keyword in STATIC_ACTIVITIES)
-\end{verbatim}
+Phân loại dựa trên từ khóa trong tên activity: framework kiểm tra xem tên hoạt động có chứa các từ khóa tĩnh (``still'', ``stand'', ``sit'', ``lie'', ``stationary'') hay không, và áp dụng tập augmentation phù hợp.
 
 Giao diện augmentation cho phép người dùng:
 \begin{itemize}
@@ -360,21 +250,15 @@ Hình~\ref{fig:ui_feature_engineering} minh họa giao diện này.
 \subsection{Phân chia train/validation/test}
 \label{subsec:train_val_test_split}
 
-Framework sử dụng \texttt{sklearn.model\_selection.train\_test\_split} với stratified sampling để đảm bảo tỉ lệ class đồng đều giữa các tập:
+Framework cung cấp hai chế độ phân chia dữ liệu để phù hợp với nhiều kịch bản thực tế:
 
-\begin{verbatim}
-# Split 1: train+val (80%) vs test (20%)
-X_trainval, X_test, y_trainval, y_test = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=42
-)
+\paragraph{Phân chia tự động theo tỉ lệ}
+Người dùng chọn tỉ lệ train/validation/test bằng thanh trượt trực tiếp trên giao diện. Framework sử dụng \texttt{stratified sampling} để đảm bảo tỉ lệ class đồng đều giữa các tập. Kỹ thuật này quan trọng khi dữ liệu mất cân bằng: ví dụ nếu 70\% mẫu thuộc class ``đứng yên'', thì cả train và test đều có 70\% mẫu đó. Tỉ lệ mặc định là train 60\% / validation 20\% / test 20\%, nhưng người dùng có thể điều chỉnh tùy nhu cầu.
 
-# Split 2: train (75% of trainval = 60% total) vs val (25% of trainval = 20% total)
-X_train, X_val, y_train, y_val = train_test_split(
-    X_trainval, y_trainval, test_size=0.25, stratify=y_trainval, random_state=42
-)
-\end{verbatim}
+\paragraph{Phân chia thủ công theo dataset}
+Đối với dữ liệu thu thập từ nhiều đối tượng hoặc nhiều phiên, người dùng có thể chỉ định trực tiếp file CSV nào thuộc tập train và file nào thuộc tập test. Chức năng này cho phép đánh giá \textit{cross-subject generalization}: huấn luyện trên dữ liệu của một nhóm người dùng và kiểm thử trên nhóm hoàn toàn khác, tránh data leakage giữa các đối tượng.
 
-Kết quả cuối cùng: train 60\%, validation 20\%, test 20\%. Validation set được dùng cho hyperparameter tuning (GridSearchCV sử dụng cross-validation trên train+val), test set giữ nguyên không động đến cho đến khi đánh giá cuối cùng.
+Validation set được dùng cho hyperparameter tuning (GridSearchCV sử dụng cross-validation trên train+val), test set giữ nguyên không động đến cho đến khi đánh giá cuối cùng.
 
 \section{Module huấn luyện mô hình}
 \label{sec:training_module}
@@ -404,7 +288,7 @@ PyTorch 2D-CNN & PyTorch & Raw signals (2D) & C++/TFLite \\ \bottomrule
 
 \paragraph{Kiến trúc PyTorch models}
 \begin{itemize}
-    \item \textbf{PyTorch MLP}: 2 hidden layers với ReLU activation. Kích thước layer điều chỉnh theo số features: \texttt{[n\_features → 128 → 64 → n\_classes]}.
+    \item \textbf{PyTorch MLP}: 2 hidden layers với ReLU activation. Kích thước layer điều chỉnh theo số features: \texttt{[n\_features $\rightarrow$ 128 $\rightarrow$ 64 $\rightarrow$ n\_classes]}.
     \item \textbf{PyTorch 1D-CNN}: convolutional layers trên time dimension, kernel size = 5, 2 conv layers + pooling + fully connected. Input shape: \texttt{[batch, 6 channels, 150 timesteps]}.
     \item \textbf{PyTorch 2D-CNN (HARCNN2D)}: sử dụng Conv2D với kernel \texttt{3×n\_channels} để học correlation giữa các sensor axes. Input shape: \texttt{[batch, 1, 150 timesteps, 6 channels]} (reshape từ 1D signal).
 \end{itemize}
@@ -414,33 +298,7 @@ Kiến trúc 2D-CNN đặc biệt hữu ích khi cần học mối quan hệ kh�
 \subsection{Tối ưu hóa siêu tham số}
 \label{subsec:hyperparameter_optimization}
 
-Framework tích hợp \texttt{GridSearchCV} từ scikit-learn với param grid mặc định cho từng thuật toán:
-
-\paragraph{Random Forest}
-\begin{verbatim}
-param_grid = {
-    'n_estimators': [50, 100, 200],
-    'max_depth': [10, 20, None],
-    'min_samples_split': [2, 5, 10]
-}
-\end{verbatim}
-
-\paragraph{SVM}
-\begin{verbatim}
-param_grid = {
-    'C': [0.1, 1.0, 10.0],
-    'gamma': ['scale', 'auto', 0.01, 0.1]
-}
-\end{verbatim}
-
-\paragraph{Neural Network}
-\begin{verbatim}
-param_grid = {
-    'hidden_layer_sizes': [(100,), (128, 64), (256, 128)],
-    'alpha': [0.0001, 0.001, 0.01],  # L2 regularization
-    'learning_rate_init': [0.001, 0.01]
-}
-\end{verbatim}
+Framework tích hợp \texttt{GridSearchCV} từ scikit-learn với param grid mặc định cho từng thuật toán. Random Forest tìm kiếm trên các giá trị \texttt{n\_estimators} (50, 100, 200), \texttt{max\_depth} (10, 20, None) và \texttt{min\_samples\_split}; SVM tìm kiếm trên tham số \texttt{C} và \texttt{gamma}; Neural Network tìm kiếm trên kích thước hidden layers, hệ số L2 regularization và learning rate.
 
 GridSearchCV sử dụng 5-fold cross-validation trên train+validation set, chọn tổ hợp params có accuracy cao nhất, sau đó retrain trên toàn bộ train+val với params tối ưu.
 
@@ -467,28 +325,9 @@ Hình~\ref{fig:ui_training} minh họa giao diện này.
 \subsection{Serialization mô hình}
 \label{subsec:model_serialization}
 
-Sau khi huấn luyện hoàn tất, framework serialize toàn bộ pipeline artifacts vào một file \texttt{.joblib}:
+Sau khi huấn luyện hoàn tất, framework serialize toàn bộ pipeline artifacts vào một file \texttt{.joblib}. Bó mô hình bao gồm: đối tượng model đã huấn luyện, bộ chuẩn hóa \texttt{StandardScaler}, ánh xạ nhãn (label encoder), danh sách tên features (để đảm bảo thứ tự đúng khi suy diễn), kiểu mô hình, siêu tham số tốt nhất, và các chỉ số hiệu suất (accuracy, F1, confusion matrix, classification report).
 
-\begin{verbatim}
-model_bundle = {
-    'model': trained_model,  # sklearn/PyTorch model object
-    'scaler': fitted_scaler,  # StandardScaler
-    'label_encoder': le,  # class name ↔ integer mapping
-    'feature_names': feature_columns,  # preserve order
-    'model_type': 'random_forest',  # identifier
-    'model_params': best_params,  # hyperparams
-    'performance_metrics': {
-        'accuracy': test_accuracy,
-        'f1_score': f1_weighted,
-        'confusion_matrix': cm,
-        'classification_report': report_dict
-    }
-}
-
-joblib.dump(model_bundle, f'models/{model_name}.joblib')
-\end{verbatim}
-
-Dict keys này là \textbf{chuẩn nội bộ} của framework. Module code generation dựa vào cấu trúc này để trích xuất parameters (VD: RF tree structures, NN weights) và sinh mã triển khai.
+Chuẩn nội bộ này là hợp đồng giao diện giữa module huấn luyện và module tạo mã. Module code generation dựa vào dict bundle để trích xuất parameters (VD: cây quyết định của Random Forest, trọng số của Neural Network) và sinh mã triển khai tương ứng.
 
 \section{Module tạo mã triển khai}
 \label{sec:code_generation_module}
@@ -498,44 +337,13 @@ Module này (Tab 5) chịu trách nhiệm chuyển đổi trained model thành m
 \subsection{Kiến trúc Code Generator: Factory Pattern}
 \label{subsec:code_generator_factory}
 
-Framework sử dụng \textit{Factory Pattern} để định tuyến từ \texttt{(model\_type, target\_platform, deployment\_backend)} sang class generator phù hợp:
-
-\begin{verbatim}
-class CodeGeneratorFactory:
-    @staticmethod
-    def create_generator(model_data, platform, backend='direct'):
-        model_type = model_data['model_type']
-        
-        if backend == 'tflite_micro':
-            return TFLiteCodeGenerator(model_data, platform)
-        
-        if model_type == 'random_forest':
-            return RandomForestCodeGenerator(model_data, platform)
-        elif model_type in ['neural_network', 'pytorch_mlp']:
-            return NeuralNetworkCodeGenerator(model_data, platform)
-        elif model_type in ['pytorch_cnn', 'pytorch_cnn2d']:
-            return CNNCodeGenerator(model_data, platform)
-        elif model_type == 'svm':
-            return SVMCodeGenerator(model_data, platform)
-        # ...
-\end{verbatim}
+Framework sử dụng \textit{Factory Pattern} để định tuyến từ \texttt{(model\_type, target\_platform, deployment\_backend)} sang class generator phù hợp. Khi nhận model bundle, factory kiểm tra trường \texttt{model\_type}: nếu deployment backend là TFLite Micro thì tạo \texttt{TFLiteCodeGenerator}; nếu không, sẽ tạo generator tương ứng với thuật toán (Random Forest, Neural Network, CNN, SVM). Tham số platform được truyền vào để generator điều chỉnh cú pháp và API cho từng nền tảng đích.
 
 \subsection{Hệ thống phân cấp Generator}
 \label{subsec:generator_hierarchy}
 
-Framework áp dụng kiến trúc clean architecture với \textbf{block pattern}:
-
-\paragraph{Cấu trúc v2 (hiện tại)}
-\begin{verbatim}
-deployment/v2/
-├── generator.py              # HARCodeGenerator (coordinator)
-├── feature_block.py          # FeatureExtractionBlock
-├── classifier_block.py       # ClassifierBlock (base class)
-└── models/                   # Model-specific blocks
-    ├── random_forest.py      # RandomForestBlock
-    ├── neural_network.py     # NeuralNetworkBlock
-    └── cnn.py                # CNNModelBlock (1D + 2D)
-\end{verbatim}
+\paragraph{Block pattern (kiến trúc hiện tại)}
+Module tạo mã được tổ chức theo \textit{block pattern}: \texttt{HARCodeGenerator} là coordinator, nhận vào model bundle và orchestrate các blocks con. \texttt{FeatureExtractionBlock} phụ trách sinh mã tính toán đặc trưng từ dữ liệu cảm biến thô; \texttt{ClassifierBlock} và các class con của nó (RandomForestBlock, NeuralNetworkBlock, CNNModelBlock, SVMBlock) phụ trách sinh mã inference đặc thù cho từng thuật toán.
 
 \texttt{HARCodeGenerator} là coordinator, nhận vào model bundle và orchestrate các blocks:
 \begin{enumerate}
@@ -701,40 +509,11 @@ Người dùng chọn chế độ tối ưu trong giao diện code generation, f
 Mã được sinh ra bao gồm 3 files chính:
 
 \begin{enumerate}
-    \item \textbf{Header file (\texttt{.h})}: khai báo constants, model parameters, function prototypes.
-    \begin{verbatim}
-    // har_model.h
-    #ifndef HAR_MODEL_H
-    #define HAR_MODEL_H
-    
-    #define NUM_FEATURES 33
-    #define NUM_CLASSES 5
-    #define WINDOW_SIZE 150
-    #define SAMPLE_RATE_HZ 100
-    
-    extern const float SCALER_MEAN[NUM_FEATURES];
-    extern const float SCALER_SCALE[NUM_FEATURES];
-    
-    void extract_features(float* window, float* features);
-    int predict(float* features);
-    const char* get_class_name(int class_id);
-    
-    #endif
-    \end{verbatim}
-    
-    \item \textbf{Implementation file (\texttt{.cpp})}: định nghĩa toàn bộ logic inference.
-    \begin{itemize}
-        \item \texttt{extract\_features()}: tính magnitude, statistical features.
-        \item \texttt{apply\_scaler()}: standardization sử dụng mean/scale từ training.
-        \item \texttt{predict()}: model-specific inference (RF: traverse trees, NN: matrix mult).
-        \item \texttt{get\_class\_name()}: mapping class\_id → readable label.
-    \end{itemize}
-    
-    \item \textbf{Arduino sketch (\texttt{.ino})}: ví dụ hoàn chỉnh cho Seeed XIAO nRF52840.
-    \begin{itemize}
-        \item \texttt{setup()}: khởi tạo IMU (LSM6DS3), serial communication.
-        \item \texttt{loop()}: thu thập 150 mẫu vào buffer → extract\_features → predict → xuất kết quả qua serial.
-    \end{itemize}
+    \item \textbf{Header file (\texttt{.h})}: khai báo constants (số features, số classes, window size, tần số lấy mẫu), tham số scaler, và prototype các hàm inference.
+
+    \item \textbf{Implementation file (\texttt{.cpp})}: định nghĩa toàn bộ logic inference, bao gồm tính toán đặc trưng từ tín hiệu thô, chuẩn hóa bằng scaler từ quá trình huấn luyện, thực thi thuật toán phân loại, và tra cứu nhãn lớp từ kết quả dự đoán.
+
+    \item \textbf{Arduino sketch (\texttt{.ino})}: ví dụ hoàn chỉnh cho Seeed XIAO nRF52840, bao gồm khởi tạo IMU và giao tiếp serial, vòng lặp thu thập đủ 150 mẫu vào bộ đệm rồi trích xuất đặc trưng, phân loại và xuất kết quả.
 \end{enumerate}
 
 Hình~\ref{fig:ui_code_generation} minh họa giao diện code generation.
@@ -929,15 +708,15 @@ Dữ liệu chảy qua framework theo pipeline rõ ràng:
     \begin{itemize}
         \item Input: user uploads CSV files
         \item Output: \texttt{persistent\_data/datasets/\{activity\}.csv}
-        \item State: metadata (columns, sampling rate) → \texttt{dcc.Store}
+        \item State: metadata (columns, sampling rate) $\rightarrow$ \texttt{dcc.Store}
     \end{itemize}
     
     \item \textbf{Preprocessing (Tab 2)}:
     \begin{itemize}
         \item Input: read CSVs from \texttt{datasets/}
         \item Process: user selects segments via drag-and-drop
-        \item Output: sliding windows → \texttt{persistent\_data/windows/\{dataset\_name\}.pkl}
-        \item State: segments list → \texttt{dcc.Store}
+        \item Output: sliding windows $\rightarrow$ \texttt{persistent\_data/windows/\{dataset\_name\}.pkl}
+        \item State: segments list $\rightarrow$ \texttt{dcc.Store}
     \end{itemize}
     
     \item \textbf{Feature Engineering (Tab 3)}:
@@ -945,7 +724,7 @@ Dữ liệu chảy qua framework theo pipeline rõ ràng:
         \item Input: load windows from \texttt{windows/\{dataset\_name\}.pkl}
         \item Process: extract features, augmentation, train/val/test split
         \item Output: \texttt{persistent\_data/training/\{dataset\_name\}\_train.csv}, \texttt{\_val.csv}, \texttt{\_test.csv}
-        \item State: feature mode, augmentation config → saved in CSV metadata
+        \item State: feature mode, augmentation config $\rightarrow$ saved in CSV metadata
     \end{itemize}
     
     \item \textbf{Training (Tab 4)}:
@@ -953,7 +732,7 @@ Dữ liệu chảy qua framework theo pipeline rõ ràng:
         \item Input: load feature matrices from \texttt{training/*.csv}
         \item Process: GridSearchCV, fit model, evaluate
         \item Output: \texttt{persistent\_data/models/\{model\_name\}.joblib}
-        \item State: training metrics → dashboard display
+        \item State: training metrics $\rightarrow$ dashboard display
     \end{itemize}
     
     \item \textbf{Code Generation (Tab 5)}:
@@ -961,7 +740,7 @@ Dữ liệu chảy qua framework theo pipeline rõ ràng:
         \item Input: load model from \texttt{models/\{model\_name\}.joblib}
         \item Process: extract parameters, reorder features, render templates
         \item Output: \texttt{persistent\_data/generated/\{model\_type\}\_models/\{model\_name\}/} (header, cpp, ino)
-        \item State: optimization mode, platform → \texttt{dcc.Store}
+        \item State: optimization mode, platform $\rightarrow$ \texttt{dcc.Store}
     \end{itemize}
     
     \item \textbf{Device Testing (Tab 6)}:
@@ -969,7 +748,7 @@ Dữ liệu chảy qua framework theo pipeline rõ ràng:
         \item Input: serial communication với flashed device
         \item Process: parse predictions, compare with expected
         \item Output: real-time dashboard, logging
-        \item State: serial port, threshold → \texttt{dcc.Store}
+        \item State: serial port, threshold $\rightarrow$ \texttt{dcc.Store}
     \end{itemize}
 \end{enumerate}
 
@@ -982,7 +761,7 @@ Một ưu điểm của thiết kế filesystem-based state management là ngư�
 Nếu người dùng huấn luyện model với \texttt{time\_domain} (90 features) nhưng muốn thử \texttt{orientation\_invariant} (33 features):
 \begin{enumerate}
     \item Quay lại Tab 3, chọn \texttt{orientation\_invariant}.
-    \item Re-run feature extraction → sinh \texttt{*\_train.csv} mới.
+    \item Re-run feature extraction $\rightarrow$ sinh \texttt{*\_train.csv} mới.
     \item Quay lại Tab 4, retrain model trên features mới.
 \end{enumerate}
 Windows đã sinh (Tab 2) được giữ nguyên, không cần re-select segments.
@@ -999,7 +778,7 @@ Nếu GridSearchCV không cho kết quả tốt, người dùng có thể:
 Nếu muốn triển khai model đã huấn luyện lên ESP32 thay vì XIAO:
 \begin{enumerate}
     \item Quay lại Tab 5, chọn platform = \texttt{ESP32}, backend = \texttt{MicroPython}.
-    \item Re-run code generation → sinh MicroPython code mới.
+    \item Re-run code generation $\rightarrow$ sinh MicroPython code mới.
     \item Không cần retrain model.
 \end{enumerate}
 
