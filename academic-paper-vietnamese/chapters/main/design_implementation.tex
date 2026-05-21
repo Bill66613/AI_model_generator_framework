@@ -6,12 +6,12 @@ Chương này trình bày kiến trúc hệ thống, quyết định thiết k�
 \section{Kiến trúc hệ thống}
 \label{sec:system_architecture}
 
-\subsection{Ngăn xếp công nghệ và môi trường phát triển}
+\subsection{Nền tảng công nghệ và môi trường phát triển}
 \label{subsec:tech_stack}
 
 Framework được triển khai dưới dạng ứng dụng web một trang (single-page web application) với các thành phần công nghệ sau:
 
-\paragraph{Ngăn xếp phần mềm}
+\paragraph{Thư viện và framework chính}
 \begin{itemize}
     \item \textbf{Python 3.10}: ngôn ngữ lập trình chính, được chọn vì hệ sinh thái học máy phong phú và khả năng tích hợp nhanh giữa các thư viện khác nhau.
     \item \textbf{Dash 2.14}: framework giao diện web dựa trên Flask và Plotly. Dash cung cấp mô hình lập trình khai báo (declarative) với callback pattern, cho phép xây dựng giao diện tương tác phức tạp mà không cần JavaScript thủ công.
@@ -55,16 +55,7 @@ Dữ liệu trung gian giữa các giai đoạn được lưu dưới dạng fil
     \item \textbf{datasets/}: dữ liệu CSV gốc theo activity class.
     \item \textbf{windows/}: sliding windows đã sinh (pickle format).
     \item \textbf{training/}: feature matrices (CSV) và metrics.
-    \item \textbf{models/}: model serialization (joblib) với dict keys chuẩn:
-    \begin{itemize}
-        \item \texttt{model}: trained model object (sklearn/PyTorch)
-        \item \texttt{scaler}: StandardScaler fitted trên train set
-        \item \texttt{label\_encoder}: mapping class names $\leftrightarrow$ integers
-        \item \texttt{feature\_names}: danh sách features theo thứ tự huấn luyện
-        \item \texttt{model\_type}: string identifier (rf/svm/nn/cnn)
-        \item \texttt{model\_params}: hyperparameters
-        \item \texttt{performance\_metrics}: accuracy, F1, confusion matrix
-    \end{itemize}
+    \item \textbf{models/}: model serialization (joblib) chứa model object, scaler, label encoder, danh sách features và các chỉ số hiệu suất.
     \item \textbf{generated/}: mã nguồn triển khai theo cấu trúc \texttt{\{model\_type\}\_models/\{model\_name\}/}.
 \end{itemize}
 
@@ -72,16 +63,7 @@ Dữ liệu trung gian giữa các giai đoạn được lưu dưới dạng fil
 Dash component \texttt{dcc.Store} lưu trạng thái session tạm thời (VD: metadata cột cảm biến, tần số lấy mẫu, danh sách segments đã chọn). State này được truyền giữa các callbacks trong cùng một session nhưng không persist sau khi reload trang.
 
 \paragraph{Luồng dữ liệu}
-Dữ liệu chảy qua pipeline như sau:
-\begin{enumerate}
-    \item \textbf{Tab 1 $\rightarrow$ Tab 2}: CSV files $\rightarrow$ \texttt{datasets/} $\rightarrow$ metadata in \texttt{dcc.Store}
-    \item \textbf{Tab 2 $\rightarrow$ Tab 3}: Segments selection $\rightarrow$ sliding windows $\rightarrow$ \texttt{windows/\{dataset\_name\}.pkl}
-    \item \textbf{Tab 3 $\rightarrow$ Tab 4}: Feature extraction $\rightarrow$ \texttt{training/\{dataset\_name\}\_train.csv}
-    \item \textbf{Tab 4 $\rightarrow$ Tab 5}: Trained model $\rightarrow$ \texttt{models/\{model\_name\}.joblib}
-    \item \textbf{Tab 5 $\rightarrow$ Tab 6}: Generated code $\rightarrow$ \texttt{generated/\{model\_type\}\_models/\{model\_name\}/}
-\end{enumerate}
-
-Thiết kế này cho phép người dùng quay lại bất kỳ bước nào để điều chỉnh mà không mất dữ liệu trung gian.
+Dữ liệu chảy tuần tự qua sáu tab: từ CSV thô đến dataset đăng ký, qua tiền xử lý và sliding windows, đến feature matrix, model joblib, mã C++ sinh ra, rồi kiểm tra trực tiếp trên thiết bị. Thiết kế file-based này cho phép người dùng quay lại bất kỳ bước nào để điều chỉnh mà không mất kết quả trung gian.
 
 \section{Module quản lý dữ liệu}
 \label{sec:data_management_module}
@@ -91,27 +73,7 @@ Module này (Tab 1 trong giao diện) chịu trách nhiệm tải dữ liệu c�
 \subsection{Giao diện tải dữ liệu}
 \label{subsec:data_upload_interface}
 
-Người dùng tải lên nhiều file CSV, mỗi file chứa dữ liệu cho một activity class. Framework tự động phát hiện cấu trúc cột dựa trên quy ước đặt tên:
-\begin{itemize}
-    \item \textbf{Gia tốc kế}: \texttt{aX}, \texttt{aY}, \texttt{aZ} hoặc \texttt{AccX}, \texttt{AccY}, \texttt{AccZ}
-    \item \textbf{Con quay hồi chuyển}: \texttt{gX}, \texttt{gY}, \texttt{gZ} hoặc \texttt{GyroX}, \texttt{GyroY}, \texttt{GyroZ}
-    \item \textbf{Timestamp}: \texttt{time}, \texttt{timestamp}, \texttt{Time(s)} (optional, dùng để tính tần số lấy mẫu)
-\end{itemize}
-
-Thuật toán phát hiện cột hoạt động theo hai bước: đầu tiên khớp chính xác với danh sách quy ước đặt tên phổ biến; nếu không tìm thấy, fallback sang khớp substring (VD: ``acc'', ``gyro'') trong tên cột.
-
-\subsection{Trực quan hóa tín hiệu đồng bộ}
-\label{subsec:signal_visualization}
-
-Sau khi tải dữ liệu, framework hiển thị biểu đồ tín hiệu cho tất cả các trục cảm biến với shared x-axis để đồng bộ zoom và pan giữa các trục.
-
-Hình~\ref{fig:ui_data_upload}minh họa giao diện này. Trực quan hóa này cho phép người dùng phát hiện các vấn đề chất lượng dữ liệu như:
-\begin{itemize}
-    \item \textbf{Nhiễu quá mức}: biên độ tín hiệu dao động lớn không đặc trưng cho hoạt động.
-    \item \textbf{Outliers}: các spike đơn lẻ do lỗi cảm biến hoặc va chạm.
-    \item \textbf{Saturation}: tín hiệu đạt giá trị max/min range của cảm biến (VD: $\pm 16g$).
-    \item \textbf{Dữ liệu không đồng nhất}: tín hiệu chứa nhiều hoạt động khác nhau trong cùng một file.
-\end{itemize}
+Người dùng tải lên nhiều file CSV, mỗi file chứa dữ liệu cho một activity class. Framework tự động phát hiện cấu trúc cột bằng cách khớp với danh sách quy ước đặt tên phổ biến (như \texttt{aX}/\texttt{AccX} cho gia tốc kế, \texttt{gX}/\texttt{GyroX} cho con quay hồi chuyển); nếu không khớp, fallback sang khớp substring trong tên cột. Tần số lấy mẫu được tự động tính từ cột timestamp (nếu có) hoặc người dùng nhập thủ công; giá trị này được nhúng vào mã triển khai dưới dạng hằng số.
 
 \begin{figure}[H]
     \centering
@@ -119,13 +81,6 @@ Hình~\ref{fig:ui_data_upload}minh họa giao diện này. Trực quan hóa này
     \caption{Giao diện tải lên và trực quan hóa dữ liệu cảm biến. Framework tự động phát hiện cấu trúc cột IMU và hiển thị biểu đồ tín hiệu đồng bộ trên tất cả các trục gia tốc kế và con quay hồi chuyển, cho phép kiểm tra trực quan chất lượng dữ liệu trước khi tiền xử lý.}
     \label{fig:ui_data_upload}
 \end{figure}
-
-\subsection{Phát hiện tần số lấy mẫu}
-\label{subsec:sampling_rate_detection}
-
-Framework tự động tính tần số lấy mẫu từ cột timestamp bằng cách lấy nghịch đảo của khoảng thời gian trung bình giữa các mẫu liên tiếp.
-
-Nếu không có cột timestamp, người dùng nhập tần số lấy mẫu thủ công. Tần số này được lưu trong metadata và nhúng vào mã triển khai dưới dạng hằng số.
 
 \section{Module tiền xử lý tương tác}
 \label{sec:preprocessing_module}
@@ -156,15 +111,7 @@ Hình~\ref{fig:ui_preprocessing} minh họa giao diện này.
 \subsection{Sinh cửa sổ trượt}
 \label{subsec:sliding_window_generation}
 
-Từ mỗi segment, framework áp dụng thuật toán sliding window: duyệt từ đầu đến cuối segment với bước nhảy (stride) cố định, mỗi bước cắt ra một cửa sổ có độ dài \texttt{window\_size}.
-
-Tham số mặc định:
-\begin{itemize}
-    \item \texttt{window\_size = 150} mẫu (1.5s ở 100Hz)
-    \item \texttt{stride = 75} mẫu (50\% overlap)
-\end{itemize}
-
-Overlap 50\% được chọn để tăng số lượng mẫu huấn luyện đồng thời giữ sự đa dạng. Stride càng nhỏ (overlap càng lớn) càng tạo nhiều windows nhưng có nguy cơ overfitting do correlation giữa các windows liền kề.
+Từ mỗi segment, framework áp dụng thuật toán sliding window với tham số mặc định: \texttt{window\_size = 150} mẫu (1,5s ở 100Hz), \texttt{stride = 75} mẫu (overlap 50\%). Overlap 50\% tăng số lượng mẫu huấn luyện đồng thời giữ sự đa dạng; stride càng nhỏ thì số windows tạo ra càng nhiều nhưng tăng nguy cơ overfitting do tương quan giữa các windows liền kề. Công thức và lý thuyết sliding window đã được trình bày trong Chương~\ref{chap:methodology}.
 
 \subsection{Trực quan hóa lọc tín hiệu}
 \label{subsec:signal_filtering_viz}
@@ -206,7 +153,7 @@ Framework hỗ trợ 6 chế độ feature extraction, mỗi chế độ tạo r
 }
 \end{table}
 
-\paragraph{Rationale cho orientation-invariant features}
+\paragraph{Cơ sở chọn đặc trưng bất biến hướng}
 Chế độ \texttt{orientation\_invariant} chỉ sử dụng các đặc trưng tính trên magnitude vectors ($\sqrt{x^2+y^2+z^2}$) thay vì per-axis features. Điều này đảm bảo mô hình không bị ảnh hưởng bởi định hướng lắp đặt cảm biến: đeo thiết bị ngang hoặc dọc, xoay 90° vẫn cho cùng một magnitude. Tuy nhiên, trade-off là mất thông tin về hướng chuyển động (VD: leo cầu thang khó phân biệt với xuống cầu thang chỉ dựa trên magnitude). Thực nghiệm cho thấy chế độ \texttt{time\_domain} (90 features) cân bằng tốt giữa độ chính xác và độ bền hướng.
 
 \subsection{Tích hợp data augmentation}
@@ -322,12 +269,12 @@ Hình~\ref{fig:ui_training} minh họa giao diện này.
     \label{fig:ui_training}
 \end{figure}
 
-\subsection{Serialization mô hình}
+\subsection{Lưu trữ mô hình}
 \label{subsec:model_serialization}
 
-Sau khi huấn luyện hoàn tất, framework serialize toàn bộ pipeline artifacts vào một file \texttt{.joblib}. Bó mô hình bao gồm: đối tượng model đã huấn luyện, bộ chuẩn hóa \texttt{StandardScaler}, ánh xạ nhãn (label encoder), danh sách tên features (để đảm bảo thứ tự đúng khi suy diễn), kiểu mô hình, siêu tham số tốt nhất, và các chỉ số hiệu suất (accuracy, F1, confusion matrix, classification report).
+Sau khi huấn luyện hoàn tất, framework lưu trữ toàn bộ pipeline artifacts vào một file \texttt{.joblib}. Gói mô hình bao gồm: đối tượng model đã huấn luyện, bộ chuẩn hóa \texttt{StandardScaler}, ánh xạ nhãn (label encoder), danh sách tên features (để đảm bảo thứ tự đúng khi suy diễn), kiểu mô hình, siêu tham số tốt nhất, và các chỉ số hiệu suất (accuracy, F1, confusion matrix, classification report).
 
-Chuẩn nội bộ này là hợp đồng giao diện giữa module huấn luyện và module tạo mã. Module code generation dựa vào dict bundle để trích xuất parameters (VD: cây quyết định của Random Forest, trọng số của Neural Network) và sinh mã triển khai tương ứng.
+Cấu trúc này là chuẩn giao tiếp giữa module huấn luyện và module tạo mã. Module code generation đọc gói mô hình để trích xuất parameters (VD: cây quyết định của Random Forest, trọng số của Neural Network) và sinh mã triển khai tương ứng.
 
 \section{Module tạo mã triển khai}
 \label{sec:code_generation_module}
@@ -342,25 +289,25 @@ Framework sử dụng \textit{Factory Pattern} để định tuyến từ \textt
 \subsection{Hệ thống phân cấp Generator}
 \label{subsec:generator_hierarchy}
 
-\paragraph{Block pattern (kiến trúc hiện tại)}
-Module tạo mã được tổ chức theo \textit{block pattern}: \texttt{HARCodeGenerator} là coordinator, nhận vào model bundle và orchestrate các blocks con. \texttt{FeatureExtractionBlock} phụ trách sinh mã tính toán đặc trưng từ dữ liệu cảm biến thô; \texttt{ClassifierBlock} và các class con của nó (RandomForestBlock, NeuralNetworkBlock, CNNModelBlock, SVMBlock) phụ trách sinh mã inference đặc thù cho từng thuật toán.
+\paragraph{Kiến trúc block pattern}
+Module tạo mã được tổ chức theo mô hình block: một coordinator trung tâm nhận vào gói mô hình và điều phối các block con. Block trích xuất đặc trưng phụ trách sinh mã tính toán đặc trưng từ dữ liệu cảm biến thô; block phân loại và các lớp con của nó phụ trách sinh mã suy luận đặc thù cho từng thuật toán.
 
-\texttt{HARCodeGenerator} là coordinator, nhận vào model bundle và orchestrate các blocks:
+Coordinator điều phối hai nhóm block chính:
 \begin{enumerate}
-    \item \textbf{FeatureExtractionBlock}: sinh mã trích xuất features từ raw sensor data (nếu model yêu cầu features). Bao gồm:
+    \item \textbf{Block trích xuất đặc trưng}: sinh mã tính features từ dữ liệu cảm biến thô (nếu mô hình yêu cầu). Bao gồm:
     \begin{itemize}
-        \item Magnitude computation: \texttt{acc\_mag = sqrt(aX*aX + aY*aY + aZ*aZ)}
-        \item Statistical features: mean, std, min, max, median, quartiles, skewness, kurtosis, RMS, energy
-        \item Jerk features: numerical derivative của acc\_mag
-        \item Preprocessing filters: IIR filtfilt, Savitzky-Golay, Kalman (nếu được cấu hình)
+        \item Tính magnitude: $\text{acc\_mag} = \sqrt{aX^2 + aY^2 + aZ^2}$
+        \item Đặc trưng thống kê: mean, std, min, max, median, quartiles, skewness, kurtosis, RMS, energy
+        \item Đặc trưng jerk: đạo hàm số của acc\_mag
+        \item Bộ lọc tiền xử lý: IIR filtfilt, Savitzky-Golay, Kalman (nếu được cấu hình)
     \end{itemize}
     
-    \item \textbf{ClassifierBlock}: sinh mã inference cho thuật toán cụ thể. Mỗi model type có một block riêng:
+    \item \textbf{Block phân loại}: sinh mã suy luận cho thuật toán cụ thể. Mỗi loại mô hình có một block riêng:
     \begin{itemize}
-        \item \textbf{RandomForestBlock}: serialize decision trees thành nested if-else.
-        \item \textbf{NeuralNetworkBlock}: embedding weights/biases và matrix multiplication code.
-        \item \textbf{CNNModelBlock}: sinh Conv1D hoặc Conv2D kernels, pooling, fully connected layers.
-        \item \textbf{SVMBlock}: serialize support vectors và kernel computations.
+        \item \textbf{Random Forest}: chuyển cây quyết định thành chuỗi if-else lồng nhau.
+        \item \textbf{Neural Network}: nhúng trọng số/bias và sinh mã nhân ma trận.
+        \item \textbf{CNN}: sinh các kernel Conv1D hoặc Conv2D, pooling, fully connected layers.
+        \item \textbf{SVM}: nhúng support vectors và sinh mã tính kernel.
     \end{itemize}
 \end{enumerate}
 
@@ -384,7 +331,7 @@ Framework triển khai ma trận deployment với ba chiều độc lập:
 
 \paragraph{Trục 3: Deployment Backend}
 \begin{itemize}
-    \item \textbf{Direct (native)}: mã C/C++ trực tiếp, không dependency.
+    \item \textbf{Direct (native)}: mã C/C++ trực tiếp, không phụ thuộc thư viện ngoài.
     \item \textbf{TFLite Micro}: chuyển đổi PyTorch model sang TFLite, sinh wrapper C++ gọi interpreter. Chỉ áp dụng cho NN/CNN (RF/SVM không convertible qua ONNX-ML operators).
     \item \textbf{ONNX Runtime}: xuất model sang ONNX, deploy với onnxruntime-embedded.
 \end{itemize}
@@ -396,7 +343,7 @@ Framework triển khai ma trận deployment với ba chiều độc lập:
     \item \textbf{Tính linh hoạt}: người dùng tự do lựa chọn backend dựa trên yêu cầu (performance, memory, dependencies).
 \end{itemize}
 
-\subsection{Feature reordering tại thời điểm sinh mã}
+\subsection{Sắp xếp lại thứ tự đặc trưng khi sinh mã}
 \label{subsec:feature_reordering}
 
 Một vấn đề quan trọng trong deployment parity là \textbf{thứ tự features}:
@@ -407,57 +354,15 @@ Một vấn đề quan trọng trong deployment parity là \textbf{thứ tự fe
 
 Nếu model weights được serialize theo thứ tự Python training, nhưng C++ code đưa features vào theo thứ tự khác, kết quả suy luận sẽ sai hoàn toàn.
 
-\paragraph{Giải pháp: Reorder weights tại code-gen time}
-Framework triển khai hàm \texttt{get\_cpp\_feature\_order()} để tính toán thứ tự features trong C++, sau đó reorder model parameters trước khi embedding vào mã:
-
-\begin{verbatim}
-# deployment/code_generator_factory.py
-def get_cpp_feature_order(feature_names):
-    """Return feature names in the order C++ extract_features() outputs them."""
-    magnitude_stats = ['mean', 'std', 'min', 'max', 'range', 'median',
-                       'q25', 'q75', 'iqr', 'skewness', 'kurtosis',
-                       'rms', 'energy', 'zero_crossings', 'mean_crossing_rate']
-    
-    cpp_order = []
-    # Acc magnitude stats
-    for stat in magnitude_stats:
-        if f'acc_mag_{stat}' in feature_names:
-            cpp_order.append(f'acc_mag_{stat}')
-    
-    # Gyro magnitude stats
-    for stat in magnitude_stats:
-        if f'gyro_mag_{stat}' in feature_names:
-            cpp_order.append(f'gyro_mag_{stat}')
-    
-    # Jerk features
-    for suffix in ['mean', 'std', 'max']:
-        if f'acc_jerk_mag_{suffix}' in feature_names:
-            cpp_order.append(f'acc_jerk_mag_{suffix}')
-    
-    return cpp_order
-\end{verbatim}
-
-Sau đó reorder scaler parameters và model weights:
-\begin{verbatim}
-cpp_order = get_cpp_feature_order(feature_names)
-reorder_indices = [feature_names.index(f) for f in cpp_order]
-
-# Reorder scaler
-scaler_mean_reordered = scaler.mean_[reorder_indices]
-scaler_scale_reordered = scaler.scale_[reorder_indices]
-
-# Reorder NN weights (first layer)
-if model_type == 'neural_network':
-    W0 = model.coefs_[0]  # shape: [n_features, hidden_size]
-    W0_reordered = W0[reorder_indices, :]
-\end{verbatim}
+\paragraph{Giải pháp: sắp xếp lại trọng số khi sinh mã}
+Framework xử lý vấn đề này bằng cách tính toán thứ tự đặc trưng trong C++ (magnitude stats cho accelerometer, gyroscope, rồi jerk features), so sánh với thứ tự alphabetical trong Python, và tạo bảng ánh xạ chỉ số tương ứng. Dựa trên bảng ánh xạ này, các tham số scaler (mean, scale) và trọng số lớp đầu tiên của mô hình được sắp xếp lại trước khi nhúng vào mã C++.
 
 Giải pháp này đảm bảo mô hình nhận features theo đúng thứ tự training mà không cần điều chỉnh C++ code.
 
 \subsection{Bốn chế độ tối ưu hóa}
 \label{subsec:optimization_modes}
 
-Framework cung cấp 4 chế độ tối ưu để cân bằng giữa accuracy, speed và power consumption:
+Framework cung cấp 4 chế độ tối ưu để cân bằng giữa accuracy, tốc độ và tiêu thụ điện:
 
 \begin{table}[H]
 \centering
@@ -466,42 +371,14 @@ Framework cung cấp 4 chế độ tối ưu để cân bằng giữa accuracy, 
 \begin{tabular}{@{}llll@{}}
 \toprule
 \textbf{Chế độ} & \textbf{Độ chính xác số} & \textbf{Trade-off} & \textbf{Use case} \\ \midrule
-Accuracy & 6 decimals (float) & Max memory/time & Research, prototyping \\
-Balanced & 3 decimals & Cân bằng & Production general \\
-Speed & 2--3 decimals & Giảm latency & Real-time critical \\
-Power & 3--4 decimals + DSP & Giảm CPU cycles & Battery-powered \\ \bottomrule
+Accuracy & 6 chữ số thập phân & Bộ nhớ tối đa & Nghiên cứu, thử nghiệm \\
+Balanced & 3 chữ số thập phân & Cân bằng & Sản xuất chung \\
+Speed & 2--3 chữ số thập phân & Giảm độ trễ & Thời gian thực \\
+Power & 3--4 chữ số + DSP & Giảm chu kỳ CPU & Thiết bị dùng pin \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Accuracy mode}
-\begin{itemize}
-    \item Sử dụng \texttt{float} (32-bit) cho tất cả tính toán.
-    \item Không làm tròn coefficients.
-    \item Sinh mã với 6 chữ số thập phân: \texttt{const float W[3] = \{0.123456, -0.789123, 0.456789\};}
-\end{itemize}
-
-\paragraph{Balanced mode}
-\begin{itemize}
-    \item Làm tròn coefficients đến 3 chữ số thập phân.
-    \item Sử dụng lookup table cho hàm activation (tanh, sigmoid) nếu được lặp lại nhiều lần.
-    \item Giảm 20--30\% kích thước mã và tăng 10--15\% tốc độ so với Accuracy mode.
-\end{itemize}
-
-\paragraph{Speed mode}
-\begin{itemize}
-    \item Làm tròn aggressive (2 decimals).
-    \item Loại bỏ các features có importance thấp (chỉ giữ top 70\%).
-    \item Sử dụng integer arithmetic khi có thể (VD: magnitude computation với shift thay vì sqrt nếu chỉ cần so sánh).
-\end{itemize}
-
-\paragraph{Power mode}
-\begin{itemize}
-    \item Sử dụng ARM CMSIS-DSP intrinsics (nếu platform hỗ trợ) để tận dụng hardware accelerators.
-    \item Giảm tần số lấy mẫu nếu bandwidth cho phép (VD: 50Hz thay vì 100Hz).
-    \item Tính toán batch nhiều windows trước khi gọi classification (amortized cost).
-\end{itemize}
-
-Người dùng chọn chế độ tối ưu trong giao diện code generation, framework tự động áp dụng các transformations tương ứng.
+Chế độ \textit{Accuracy} sử dụng số thực 32-bit đầy đủ; \textit{Balanced} làm tròn hệ số và dùng bảng tra cho hàm activation, giảm 20--30\% kích thước mã; \textit{Speed} áp dụng làm tròn mạnh và loại bỏ các đặc trưng đóng góp thấp; \textit{Power} tận dụng ARM CMSIS-DSP khi nền tảng hỗ trợ. Người dùng chọn chế độ trong giao diện code generation, framework tự động áp dụng các chuyển đổi tương ứng.
 
 \subsection{Gói đầu ra triển khai}
 \label{subsec:deployment_package}
@@ -528,88 +405,16 @@ Hình~\ref{fig:ui_code_generation} minh họa giao diện code generation.
 \subsection{Kiến trúc đa mô hình: CNN code generation}
 \label{subsec:cnn_code_generation}
 
-CNN deployment khác với traditional ML vì không cần feature extraction—model nhận raw sensor data trực tiếp. Code generator cho CNN phải sinh:
+CNN deployment khác với traditional ML vì không cần feature extraction---model nhận raw sensor data trực tiếp. Code generator cho CNN phải sinh các thành phần sau:
 
-\paragraph{Conv1D kernel implementation}
-\begin{verbatim}
-// Generated convolution kernel
-void conv1d_layer1(float* input, float* output) {
-    // input: [6 channels, 150 timesteps]
-    // kernel: [32 filters, 6 channels, 5 timesteps]
-    // output: [32 channels, 146 timesteps]
-    
-    for (int f = 0; f < 32; f++) {  // for each output filter
-        for (int t = 0; t < 146; t++) {  // for each output timestep
-            float sum = 0.0;
-            for (int c = 0; c < 6; c++) {  // for each input channel
-                for (int k = 0; k < 5; k++) {  // for each kernel position
-                    sum += input[c*150 + t+k] * KERNEL[f][c][k];
-                }
-            }
-            output[f*146 + t] = relu(sum + BIAS[f]);
-        }
-    }
-}
-\end{verbatim}
+\paragraph{Conv1D và Conv2D kernel}
+Đối với 1D-CNN, generator sinh mã thực hiện phép tích chập một chiều trên trục thời gian: mỗi filter duyệt qua tín hiệu đầu vào (6 channels $\times$ 150 timesteps) với kernel size 5, tạo ra feature map đầu ra. Đối với 2D-CNN (HARCNN2D), generator sinh phép tích chập hai chiều với kernel shape $(3 \times \text{n\_channels})$ để học tương quan chéo giữa các kênh cảm biến. Tất cả trọng số kernel và bias được nhúng trực tiếp dưới dạng mảng hằng số trong mã sinh ra.
 
-\paragraph{Conv2D kernel (HARCNN2D)}
-HARCNN2D sử dụng Conv2D với kernel shape \texttt{(3, n\_channels)} để học correlation cross-channel:
-\begin{verbatim}
-// input: [1, 150 timesteps, 6 channels] (reshaped 2D grid)
-// kernel: [32 filters, 1 channel, 3 rows, 6 cols]
-void conv2d_layer1(float input[150][6], float output[148][32]) {
-    for (int f = 0; f < 32; f++) {
-        for (int t = 0; t < 148; t++) {
-            float sum = 0.0;
-            for (int kr = 0; kr < 3; kr++) {  // kernel height
-                for (int kc = 0; kc < 6; kc++) {  // kernel width (all channels)
-                    sum += input[t+kr][kc] * KERNEL[f][kr][kc];
-                }
-            }
-            output[t][f] = relu(sum + BIAS[f]);
-        }
-    }
-}
-\end{verbatim}
+\paragraph{MaxPooling và fully connected layers}
+Generator cũng sinh mã cho max pooling (giảm chiều thời gian) và các lớp fully connected (phân loại dựa trên feature map đã trích xuất). Các phép toán này được triển khai bằng vòng lặp đơn giản, không phụ thuộc thư viện bên ngoài.
 
-\paragraph{MaxPooling và Fully Connected}
-\begin{verbatim}
-void maxpool1d(float* input, int in_len, float* output, int pool_size) {
-    for (int i = 0; i < in_len / pool_size; i++) {
-        float max_val = input[i * pool_size];
-        for (int j = 1; j < pool_size; j++) {
-            if (input[i*pool_size + j] > max_val)
-                max_val = input[i*pool_size + j];
-        }
-        output[i] = max_val;
-    }
-}
-
-void fully_connected(float* input, float* output, int in_size, int out_size) {
-    for (int o = 0; o < out_size; o++) {
-        float sum = FC_BIAS[o];
-        for (int i = 0; i < in_size; i++) {
-            sum += input[i] * FC_WEIGHTS[o][i];
-        }
-        output[o] = sum;
-    }
-}
-\end{verbatim}
-
-\paragraph{Scaler bypass cho CNN}
-Một phát hiện quan trọng trong quá trình phát triển: StandardScaler được huấn luyện trên \textit{features} (mean, std, etc.) không nên áp dụng lên \textit{raw sensor values} (input của CNN). Nếu áp dụng, phép chuẩn hóa sẽ clamp các giá trị gyro vào range $[-10, 10]$ rad/s, phá hủy thông tin tín hiệu. Framework thêm flag \texttt{skip\_scaler} trong CNN generator:
-
-\begin{verbatim}
-if model_type in ['pytorch_cnn', 'pytorch_cnn2d']:
-    # CNN receives raw sensor data, do NOT apply scaler
-    # Only clamp to sensor physical range if needed
-    pass
-else:
-    # Traditional ML: apply scaler trained on features
-    apply_scaler(features);
-\end{verbatim}
-
-Giải pháp này tiết kiệm 7KB Flash và loại bỏ hoàn toàn nguy cơ inference sai do scaler distortion.
+\paragraph{Bỏ qua scaler cho CNN}
+Một phát hiện quan trọng trong quá trình phát triển: StandardScaler được huấn luyện trên \textit{features} (mean, std, v.v.) không nên áp dụng lên \textit{raw sensor values} (đầu vào của CNN). Nếu áp dụng, phép chuẩn hóa sẽ clamp các giá trị gyro vào range $[-10, 10]$ rad/s, phá hủy thông tin tín hiệu. Generator phân biệt kiến trúc mô hình: CNN nhận dữ liệu thô và bỏ qua scaler, trong khi các mô hình ML cổ điển vẫn áp dụng chuẩn hóa trên features đã trích xuất. Giải pháp này tiết kiệm 7KB Flash và loại bỏ hoàn toàn nguy cơ suy luận sai do biến dạng scaler.
 
 \section{Module kiểm tra thiết bị}
 \label{sec:device_testing_module}
@@ -619,62 +424,23 @@ Module này (Tab 6) cung cấp giao diện kết nối với thiết bị đã f
 \subsection{Giao tiếp serial}
 \label{subsec:serial_communication}
 
-Framework sử dụng \texttt{pyserial} để mở kết nối serial với thiết bị:
-\begin{verbatim}
-import serial
-
-ser = serial.Serial(port='COM3', baudrate=115200, timeout=1)
-while True:
-    line = ser.readline().decode('utf-8').strip()
-    # Parse device output: "Predicted: walking, Confidence: 0.87"
-\end{verbatim}
-
-Arduino sketch output format:
-\begin{verbatim}
-Predicted: <class_name>, Confidence: <max_prob>, Raw: [<prob_0>, ..., <prob_N>]
-\end{verbation}
-
-Callback nhận line, parse ra class\_name và confidence, sau đó cập nhật UI real-time.
+Framework sử dụng thư viện \texttt{pyserial} để mở kết nối serial với thiết bị đã flash. Thiết bị gửi kết quả phân loại qua cổng serial theo định dạng chuẩn gồm tên hoạt động dự đoán, điểm tin cậy, và phân phối xác suất toàn bộ classes. Callback nhận từng dòng dữ liệu, phân tích cú pháp và cập nhật giao diện theo thời gian thực.
 
 \subsection{Hiển thị phân loại real-time}
 \label{subsec:realtime_classification_display}
 
 Giao diện hiển thị:
 \begin{itemize}
-    \item \textbf{Predicted activity}: tên hoạt động dự đoán với màu sắc tương ứng.
-    \item \textbf{Confidence bar}: thanh ngang hiển thị xác suất của class được dự đoán (0--100\%).
-    \item \textbf{Probability distribution}: bar chart hiển thị xác suất của tất cả classes, giúp phát hiện ambiguous cases (nhiều classes có prob gần bằng nhau).
-    \item \textbf{Timeline}: biểu đồ thời gian hiển thị lịch sử dự đoán 30 giây gần nhất, cho thấy transition giữa các hoạt động.
+    \item \textbf{Hoạt động dự đoán}: tên hoạt động dự đoán với màu sắc tương ứng.
+    \item \textbf{Thanh tin cậy}: thanh ngang hiển thị xác suất của class được dự đoán (0--100\%).
+    \item \textbf{Phân phối xác suất}: biểu đồ cột hiển thị xác suất của tất cả classes, giúp phát hiện các trường hợp mơ hồ (nhiều classes có xác suất gần bằng nhau).
+    \item \textbf{Dòng thời gian}: biểu đồ hiển thị lịch sử dự đoán 30 giây gần nhất, cho thấy quá trình chuyển đổi giữa các hoạt động.
 \end{itemize}
 
 \subsection{Ngưỡng tin cậy}
 \label{subsec:confidence_threshold}
 
-Framework sinh mã có confidence thresholding: nếu \texttt{max(probabilities) < threshold}, mô hình trả về \texttt{UNKNOWN} thay vì dự đoán một class với tin cậy thấp. Điều này quan trọng cho deployment thực tế khi gặp hoạt động ngoài tập training (out-of-distribution).
-
-\begin{verbatim}
-// Generated C++ code with confidence threshold
-int predict_with_confidence(float* features, float threshold) {
-    float probs[NUM_CLASSES];
-    compute_probabilities(features, probs);
-    
-    int max_class = 0;
-    float max_prob = probs[0];
-    for (int i = 1; i < NUM_CLASSES; i++) {
-        if (probs[i] > max_prob) {
-            max_prob = probs[i];
-            max_class = i;
-        }
-    }
-    
-    if (max_prob < threshold) {
-        return -1;  // UNKNOWN
-    }
-    return max_class;
-}
-\end{verbatim}
-
-Người dùng có thể điều chỉnh threshold trong giao diện (mặc định: 0.7).
+Framework sinh mã có confidence thresholding: nếu xác suất cao nhất trong phân phối dự đoán thấp hơn ngưỡng, mô hình trả về \texttt{UNKNOWN} thay vì gán nhãn với tin cậy thấp. Cơ chế này quan trọng cho triển khai thực tế khi gặp hoạt động ngoài tập huấn luyện (out-of-distribution). Người dùng có thể điều chỉnh ngưỡng trong giao diện (mặc định: 0,7).
 
 \subsection{Quy trình xác minh triển khai}
 \label{subsec:deployment_verification_workflow}
@@ -691,8 +457,8 @@ Workflow kiểm thử trên thiết bị:
 
 Nếu phát hiện mismatch giữa dự đoán Python và thiết bị, framework cung cấp công cụ debugging:
 \begin{itemize}
-    \item \textbf{Feature comparison}: xuất features từ thiết bị qua serial, so sánh với Python.
-    \item \textbf{Parity validator}: kiểm tra từng bước trong pipeline (magnitude computation, statistical features, scaler, prediction).
+    \item \textbf{So sánh đặc trưng}: xuất features từ thiết bị qua serial, so sánh với Python.
+    \item \textbf{Kiểm tra parity}: kiểm tra từng bước trong pipeline (tính magnitude, đặc trưng thống kê, scaler, dự đoán).
 \end{itemize}
 
 \section{Luồng dữ liệu và quản lý trạng thái tổng thể}
@@ -793,18 +559,7 @@ Mỗi \texttt{.joblib} file chứa đầy đủ thông tin để reproduce và i
     \item \texttt{scaler}: có thể transform new data với cùng scaler.
 \end{itemize}
 
-Framework cung cấp utility function để load và inspect model:
-\begin{verbatim}
-import joblib
-
-def inspect_model(model_path):
-    model_data = joblib.load(model_path)
-    print(f"Model type: {model_data['model_type']}")
-    print(f"Features ({len(model_data['feature_names'])}): {model_data['feature_names']}")
-    print(f"Classes: {list(model_data['label_encoder'].classes_)}")
-    print(f"Test accuracy: {model_data['performance_metrics']['accuracy']:.4f}")
-    print(f"Hyperparameters: {model_data['model_params']}")
-\end{verbatim}
+Framework cung cấp utility function để load và inspect model sử dụng \texttt{joblib} library.
 
 \section{Tổng kết chương}
 \label{sec:design_implementation_summary}

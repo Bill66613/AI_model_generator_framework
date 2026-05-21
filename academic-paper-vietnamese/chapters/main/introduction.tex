@@ -3,28 +3,24 @@
 
 \section{Bối cảnh và động lực nghiên cứu}
 
-Theo dõi chuyển động (Motion tracking) là một lĩnh vực năng động và phát triển nhanh chóng, liên quan đến việc thu thập, xử lý và phân tích chuyển động của các đối tượng, cá nhân hoặc môi trường. Công nghệ này đóng vai trò then chốt trong nhiều lĩnh vực bao gồm y tế (phục hồi chức năng, phát hiện té ngã, giám sát bệnh nhân), thể thao (theo dõi hiệu suất, phòng ngừa chấn thương), trò chơi điện tử và thực tế ảo/thực tế tăng cường (trải nghiệm người dùng nhập vai), và robot học (hệ thống định vị, cơ chế điều khiển chính xác) \cite{article:human_motion_tracking_survey}.
+Theo dõi chuyển động (motion tracking) đóng vai trò then chốt trong y tế (phục hồi chức năng, phát hiện té ngã), thể thao (theo dõi hiệu suất), thực tế ảo và robot học \cite{article:human_motion_tracking_survey}. Thị trường toàn cầu đạt 2,8 tỷ USD năm 2023 với tốc độ tăng trưởng CAGR 18,4\% \cite{marketreport2023motion}, được thúc đẩy bởi thiết bị đeo y tế và nhà thông minh. Công bố nghiên cứu về nhận dạng hoạt động (HAR) tăng 3,1 lần trong giai đoạn 2018--2023 \cite{wang2024har_comparative}. Sự hội tụ của cảm biến IoT giá rẻ, thuật toán học máy hiệu quả và tính toán biên đã phổ cập theo dõi chuyển động từ phòng thí nghiệm sang ứng dụng tiêu dùng.
 
-Thị trường toàn cầu cho công nghệ theo dõi chuyển động đạt 2,8 tỷ USD vào năm 2023 và dự kiến tăng trưởng với tốc độ tăng trưởng kép hàng năm (CAGR) là 18,4\% đến năm 2030 \cite{marketreport2023motion}. Sự tăng trưởng này được thúc đẩy đặc biệt bởi các thiết bị đeo y tế và ứng dụng nhà thông minh. Sự quan tâm trong giới học thuật cũng tăng vọt, với các công bố nghiên cứu về nhận dạng hoạt động con người (Human Activity Recognition - HAR) tăng từ 487 bài báo vào năm 2018 lên hơn 1.500 bài vào năm 2023, tương ứng với mức tăng 3,1 lần chỉ trong năm năm \cite{wang2024har_comparative}. Sự hội tụ của các cảm biến IoT giá cả phải chăng, thuật toán học máy hiệu quả và khả năng tính toán biên (edge computing) đã dân chủ hóa việc theo dõi chuyển động từ các phòng thí nghiệm chuyên biệt sang các ứng dụng tiêu dùng hàng ngày.
-
-Những tiến bộ trong công nghệ cảm biến và trí tuệ nhân tạo (AI) đã mang tính chuyển đổi, làm tăng đáng kể độ chính xác, hiệu suất và tính linh hoạt của các hệ thống theo dõi chuyển động. Đặc biệt, các mô hình AI là không thể thiếu trong việc diễn giải dữ liệu chuyển động, cho phép các ứng dụng như nhận dạng cử chỉ, phân loại hoạt động và mô hình hóa chuyển động dự đoán. Tuy nhiên, quá trình phát triển các mô hình AI này vốn dĩ phức tạp, bao gồm thu thập dữ liệu, tiền xử lý và lọc để loại bỏ nhiễu, trích xuất các đặc trưng có ý nghĩa, và huấn luyện các mô hình học máy hoặc học sâu. Sự phức tạp này đặt ra những thách thức đáng kể, đặc biệt đối với các nhà phát triển và nhà nghiên cứu có thể thiếu chuyên môn về AI hoặc công nghệ theo dõi chuyển động \cite{article:motion_tracking_using_AI}.
-
-Sự phát triển của tính toán biên (edge computing) đã làm phức tạp thêm bối cảnh này trong khi đồng thời mang lại những cơ hội mới. Các thiết bị biên—vi điều khiển bị giới hạn tài nguyên với bộ nhớ, sức mạnh xử lý và ngân sách năng lượng hạn chế—cho phép các ứng dụng theo dõi chuyển động theo thời gian thực, bảo vệ quyền riêng tư và tiết kiệm năng lượng. Tuy nhiên, triển khai các mô hình AI trên các thiết bị như vậy đòi hỏi kiến thức chuyên biệt về tối ưu hóa mô hình, tạo mã và các chi tiết triển khai đặc thù cho từng nền tảng. Thách thức này trở nên rõ rệt hơn khi hệ sinh thái thiết bị biên ngày càng phân mảnh: cùng một mô hình có thể cần được đóng gói khác nhau cho các bo tương thích Arduino, ARM Cortex-M thuần, SDK như ESP-IDF, MicroPython hoặc RTOS như Zephyr.
+Tuy nhiên, phát triển mô hình AI cho phân tích chuyển động vẫn phức tạp, bao gồm thu thập, tiền xử lý, trích xuất đặc trưng và huấn luyện mô hình---đặt ra thách thức cho nhà phát triển không chuyên về AI \cite{article:motion_tracking_using_AI}. Triển khai trên thiết bị biên (vi điều khiển hạn chế bộ nhớ và năng lượng) đòi hỏi thêm kiến thức về tối ưu hóa mô hình, tạo mã và chi tiết đặc thù nền tảng. Thách thức càng lớn khi hệ sinh thái thiết bị ngày càng phân mảnh: cùng một mô hình cần đóng gói khác nhau cho Arduino, ARM Cortex-M, ESP-IDF, MicroPython hay Zephyr.
 
 \section{Phát biểu bài toán}
 
 Bất chấp những tiến bộ trong công nghệ theo dõi chuyển động, việc tạo ra các mô hình AI cho phân tích chuyển động vẫn là một nhiệm vụ đầy thách thức đặt ra một số rào cản quan trọng:
 
 \begin{enumerate}
-\item \textbf{Độ phức tạp Kỹ thuật}: Các cách tiếp cận hiện tại đòi hỏi kiến thức kỹ thuật sâu rộng trải rộng nhiều lĩnh vực—xử lý tín hiệu cho tiền xử lý dữ liệu, học máy cho phát triển mô hình và hệ thống nhúng cho triển khai biên.
+\item \textbf{Độ phức tạp kỹ thuật}: Các cách tiếp cận hiện tại đòi hỏi kiến thức kỹ thuật sâu rộng trải rộng nhiều lĩnh vực—xử lý tín hiệu cho tiền xử lý dữ liệu, học máy cho phát triển mô hình và hệ thống nhúng cho triển khai biên.
 
-\item \textbf{Thách thức Tiền xử lý}: Dữ liệu cảm biến chuyển động vốn dĩ nhiễu và đòi hỏi tiền xử lý cẩn thận. Các công cụ hiện có hoặc cung cấp kiểm soát hạn chế đối với tiền xử lý (các cách tiếp cận hộp đen tự động) hoặc đòi hỏi lập trình mở rộng để triển khai các quy trình tiền xử lý tùy chỉnh.
+\item \textbf{Thách thức tiền xử lý}: Dữ liệu cảm biến chuyển động vốn dĩ nhiễu và đòi hỏi tiền xử lý cẩn thận. Các công cụ hiện có hoặc cung cấp kiểm soát hạn chế đối với tiền xử lý (các cách tiếp cận hộp đen tự động) hoặc đòi hỏi lập trình mở rộng để triển khai các quy trình tiền xử lý tùy chỉnh.
 
-\item \textbf{Tính linh hoạt Hạn chế}: Nhiều framework có sẵn có đường cong học tập dốc hoặc cung cấp chức năng hạn chế để tùy chỉnh mô hình theo các yêu cầu theo dõi chuyển động cụ thể. Các nền tảng thương mại như Edge Impulse và SensiML cung cấp quy trình làm việc đơn giản hóa nhưng với chi phí đáng kể (\$20-500/tháng) và với các tùy chọn tùy chỉnh bị hạn chế.
+\item \textbf{Tính linh hoạt hạn chế}: Nhiều framework có sẵn có đường cong học tập dốc hoặc cung cấp chức năng hạn chế để tùy chỉnh mô hình theo các yêu cầu theo dõi chuyển động cụ thể. Các nền tảng thương mại như Edge Impulse và SensiML cung cấp quy trình làm việc đơn giản hóa nhưng với chi phí đáng kể (\$20-500/tháng) và với các tùy chọn tùy chỉnh bị hạn chế.
 
-\item \textbf{Độ phức tạp Triển khai}: Dịch cùng một mô hình đã huấn luyện thành các gói mã tối ưu hóa cho nhiều họ thiết bị biên khác nhau đòi hỏi hiểu biết sâu về kiến trúc phần cứng đích, ràng buộc bộ nhớ, hệ sinh thái công cụ (Arduino, ESP-IDF, RTOS, MicroPython) và kỹ thuật tối ưu hóa phù hợp cho từng trường hợp triển khai.
+\item \textbf{Độ phức tạp triển khai}: Dịch cùng một mô hình đã huấn luyện thành các gói mã tối ưu hóa cho nhiều họ thiết bị biên khác nhau đòi hỏi hiểu biết sâu về kiến trúc phần cứng đích, ràng buộc bộ nhớ, hệ sinh thái công cụ (Arduino, ESP-IDF, RTOS, MicroPython) và kỹ thuật tối ưu hóa phù hợp cho từng trường hợp triển khai.
 
-\item \textbf{Rào cản Khả năng tiếp cận}: Sự kết hợp của các yếu tố này hạn chế đổi mới và cản trở việc áp dụng rộng rãi các giải pháp theo dõi chuyển động được hỗ trợ bởi AI, đặc biệt trong bối cảnh nghiên cứu và giáo dục.
+\item \textbf{Rào cản khả năng tiếp cận}: Sự kết hợp của các yếu tố này hạn chế đổi mới và cản trở việc áp dụng rộng rãi các giải pháp theo dõi chuyển động được hỗ trợ bởi AI, đặc biệt trong bối cảnh nghiên cứu và giáo dục.
 
 \end{enumerate}
 
@@ -36,7 +32,7 @@ Do đó, có một nhu cầu cấp thiết về một framework linh hoạt, tr�
 
 \begin{table}[H]
 \centering
-\caption{So sánh các Nền tảng Edge ML cho Theo dõi Chuyển động}
+\caption{So sánh các nền tảng Edge ML cho theo dõi chuyển động}
 \label{tab:platform_comparison}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}p{4.2cm}p{3.4cm}p{3.4cm}p{3.4cm}p{4.4cm}@{}}
@@ -67,9 +63,9 @@ Do đó, có một nhu cầu cấp thiết về một framework linh hoạt, tr�
 }%  end resizebox
 \end{table}
 
-Các yếu tố phân biệt chính của framework này bao gồm: (1) \textbf{Tiền xử lý tương tác mới} với chọn cửa sổ thời gian kéo thả, giảm thời gian chú thích so với các cách tiếp cận dựa trên mã hoặc nhấp chuột; (2) \textbf{Hỗ trợ đa thuật toán} với các API nhất quán, cho phép thử nghiệm nhanh chóng mà không cần chuyển đổi nền tảng; (3) \textbf{Tính minh bạch hoàn toàn} thông qua tính khả dụng mã nguồn mở, cho phép các nhà nghiên cứu hiểu, xác thực và mở rộng toàn bộ quy trình; (4) \textbf{Chi phí bằng không} cho sử dụng không giới hạn, loại bỏ rào cản tài chính cho sinh viên, nhà nghiên cứu và các khu vực đang phát triển; (5) \textbf{Tạo mã nhận thức tối ưu hóa} đánh đổi rõ ràng giữa độ chính xác, tốc độ và tiêu thụ điện năng dựa trên yêu cầu ứng dụng.
+Các yếu tố phân biệt chính: (1) tiền xử lý tương tác với cửa sổ kéo thả; (2) hỗ trợ đa thuật toán với API nhất quán; (3) tính minh bạch hoàn toàn qua mã nguồn mở; (4) chi phí bằng không; (5) tạo mã với bốn chế độ tối ưu hóa rõ ràng.
 
-Trong khi các nền tảng thương mại cung cấp lợi thế về độ trưởng thành của hệ sinh thái (hỗ trợ 20+ board của Edge Impulse) và sự tinh vi của AutoML (lựa chọn đặc trưng tự động của SensiML), chúng áp đặt chi phí định kỳ (\$240-2.388/năm), hạn chế tùy chỉnh thông qua các API độc quyền và tạo ra sự phụ thuộc nhà cung cấp. TensorFlow Lite cung cấp khả năng học sâu mạnh mẽ nhưng đòi hỏi chuyên môn ML đáng kể và không cung cấp công cụ tiền xử lý cấp cao. Framework này nhắm đến khoảng trống giữa tính dễ sử dụng và tính linh hoạt, cung cấp một giải pháp có thể tiếp cận nhưng mạnh mẽ cho bối cảnh giáo dục và nghiên cứu \cite{web:Edge_Impulse,web:TensorFlowLite}.
+Các nền tảng thương mại có lợi thế về hệ sinh thái (20+ board, AutoML) nhưng áp đặt chi phí (\$240--2.388/năm), hạn chế tùy chỉnh và tạo phụ thuộc nhà cung cấp. TensorFlow Lite cung cấp học sâu mạnh nhưng không có công cụ tiền xử lý cấp cao. Framework này nhắm vào khoảng trống giữa tính dễ sử dụng và linh hoạt, phù hợp cho giáo dục và nghiên cứu \cite{web:Edge_Impulse,web:TensorFlowLite}.
 
 \section{Mục tiêu nghiên cứu}
 
@@ -80,11 +76,11 @@ Mục tiêu chính của nghiên cứu này là thiết kế, triển khai và �
 
 \item \textbf{Triển khai hỗ trợ đa thuật toán}: Tích hợp nhiều thuật toán học máy (Random Forest, SVM, Neural Networks) với các API nhất quán và tối ưu hóa siêu tham số tự động.
 
-\item \textbf{Thiết kế tạo mã bất khả tri nền tảng}: Xây dựng hệ thống tạo mã modular có khả năng sản xuất các triển khai C/C++/MicroPython tối ưu hóa cho nhiều họ đích khác nhau (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với xem xét các chiến lược tối ưu hóa khác nhau (độ chính xác, tốc độ, điện năng, cân bằng).
+\item \textbf{Thiết kế tạo mã đa nền tảng}: Xây dựng hệ thống tạo mã modular có khả năng sản xuất các triển khai C/C++/MicroPython tối ưu hóa cho nhiều họ đích khác nhau (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với xem xét các chiến lược tối ưu hóa khác nhau (độ chính xác, tốc độ, điện năng, cân bằng).
 
-\item \textbf{Xác thực Hiệu quả Framework}: Tiến hành các thử nghiệm toàn diện sử dụng dữ liệu Nhận dạng Hoạt động Con người thực tế để đánh giá hiệu suất mô hình, kiểm tra năng lực sinh mã cho nhiều đích triển khai và đo benchmark đại diện trên phần cứng ARM Cortex-M4F tham chiếu.
+\item \textbf{Xác thực hiệu quả framework}: Tiến hành các thử nghiệm toàn diện sử dụng dữ liệu Nhận dạng Hoạt động Con người thực tế để đánh giá hiệu suất mô hình, kiểm tra năng lực sinh mã cho nhiều đích triển khai và đo benchmark đại diện trên phần cứng ARM Cortex-M4F tham chiếu.
 
-\item \textbf{Đảm bảo tương đồng và độ tin cậy huấn luyện-triển khai}: Tích hợp bộ lọc Kalman và kiến trúc tạo mã nhận biết kiến trúc để đảm bảo tương đồng chính xác giữa mô hình huấn luyện và mã triển khai; tích hợp ngưỡng tin cậy để từ chối hoạt động không xác định và sử dụng tăng cường dữ liệu nhận biết lớp để đảm bảo độ tin cậy trên phần cứng thực.
+\item \textbf{Đảm bảo tương đồng và độ tin cậy huấn luyện-triển khai}: Tích hợp bộ lọc Kalman và kiến trúc tạo mã phù hợp từng loại mô hình để đảm bảo tương đồng chính xác giữa mô hình huấn luyện và mã triển khai; tích hợp ngưỡng tin cậy để từ chối hoạt động không xác định và sử dụng tăng cường dữ liệu nhận biết lớp để đảm bảo độ tin cậy trên phần cứng thực.
 
 \end{enumerate}
 
@@ -173,7 +169,7 @@ Nghiên cứu này đóng góp các điểm chính sau vào lĩnh vực theo dõ
 \begin{itemize}
 \item \textbf{Tiền xử lý tương tác mới}: Giao diện chọn cửa sổ thời gian kéo thả đầu tiên cho chú thích dữ liệu chuyển động, giảm đáng kể thời gian tiền xử lý và lỗi chú thích so với các cách tiếp cận thủ công.
 
-\item \textbf{Kiến trúc tạo mã đa thiết bị nhận thức tối ưu hóa}: Hệ thống tạo mã modular ánh xạ cùng một mô hình đã huấn luyện sang nhiều họ đích (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với các cấu hình tối ưu hóa riêng theo độ chính xác, tốc độ và tiêu thụ điện năng.
+\item \textbf{Kiến trúc tạo mã đa thiết bị với khả năng tối ưu hóa}: Hệ thống tạo mã modular ánh xạ cùng một mô hình đã huấn luyện sang nhiều họ đích (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với các cấu hình tối ưu hóa riêng theo độ chính xác, tốc độ và tiêu thụ điện năng.
 
 \item \textbf{Cơ chế tương đồng huấn luyện-triển khai}: Quy trình xác minh đảm bảo mã C++ được tạo ra cho kết quả nhận dạng nhất quán với mô hình Python đã huấn luyện, bao gồm bộ lọc Kalman, công thức thống kê chính xác và sắp xếp lại trọng số mô hình tại thời điểm tạo mã.
 
@@ -205,4 +201,4 @@ Nghiên cứu không giải quyết:
 
 \section{Tổ chức luận văn}
 
-Phần còn lại của luận văn này được tổ chức như sau: Chương 2 đánh giá các công trình liên quan về hệ thống theo dõi chuyển động, framework tạo mô hình AI và công cụ triển khai biên. Chương 3 trình bày phương pháp luận chi tiết bao gồm cơ sở lý thuyết, quy trình tiền xử lý, trích xuất đặc trưng, phương pháp huấn luyện mô hình và chiến lược tạo mã. Chương 4 mô tả thiết kế và hiện thực hệ thống, bao gồm kiến trúc phần mềm, giao diện người dùng và chi tiết triển khai các module. Chương 5 báo cáo kết quả thực nghiệm bao gồm các số liệu hiệu suất mô hình, đặc điểm triển khai và phân tích so sánh. Chương 6 thảo luận về các phát hiện, hạn chế, ý nghĩa và kết luận với tóm tắt đóng góp cùng hướng phát triển tương lai.
+Phần còn lại của luận văn này được tổ chức như sau: Chương 2 đánh giá các công trình liên quan về hệ thống theo dõi chuyển động, framework tạo mô hình AI và công cụ triển khai biên. Chương 3 trình bày phương pháp luận chi tiết bao gồm cơ sở lý thuyết, quy trình tiền xử lý, trích xuất đặc trưng, phương pháp huấn luyện mô hình và chiến lược tạo mã. Chương 4 mô tả thiết kế và hiện thực hệ thống, bao gồm kiến trúc phần mềm, giao diện người dùng và chi tiết triển khai các module. Chương 5 báo cáo kết quả thực nghiệm bao gồm các số liệu hiệu suất mô hình, đặc điểm triển khai và phân tích so sánh. Chương 6 trình bày kết luận, thảo luận về các phát hiện, hạn chế, ý nghĩa và hướng phát triển tương lai.
