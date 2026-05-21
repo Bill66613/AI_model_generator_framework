@@ -45,10 +45,12 @@ def create_model_block(
         return RandomForestModelBlock(model_data, feature_names, classes, precision)
 
     if model_type in ("neural_network", "pytorch_mlp"):
-        return NeuralNetworkModelBlock(model_data, feature_names, classes, precision)
+        return NeuralNetworkModelBlock(model_data, feature_names, classes, precision,
+                                       quantization=quantization)
 
     if model_type in ("svm",):
-        return SVMModelBlock(model_data, feature_names, classes, precision)
+        return SVMModelBlock(model_data, feature_names, classes, precision,
+                             quantization=quantization)
 
     if model_type in ("pytorch_cnn", "pytorch_cnn2d"):
         from .cnn import CNNModelBlock

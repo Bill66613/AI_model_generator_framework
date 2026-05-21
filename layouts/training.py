@@ -51,42 +51,65 @@ layout = html.Div([
                 )
             ], style={'width': '100%', 'margin-bottom': '20px'}),
 
-            # Model comparison cards — flex layout, 3 per row
+            # Section label: Classical ML
+            html.Div([
+                html.Span("Classical ML", style={
+                    'font-size': '11px', 'font-weight': '600', 'text-transform': 'uppercase',
+                    'letter-spacing': '1px', 'color': '#8c959f', 'padding': '0 8px',
+                    'background-color': '#ffffff', 'position': 'relative', 'z-index': '1',
+                }),
+            ], style={
+                'text-align': 'left', 'margin-bottom': '10px', 'padding-left': '4px',
+                'border-bottom': '1px solid #e9ecef', 'line-height': '0.1',
+            }),
+
+            # Classical ML model cards — flex layout, 3 per row
             html.Div([
                 html.Div([
-                    html.H5("🌲 Random Forest", style={
-                            'color': '#2E8B57', 'margin-bottom': '10px'}),
+                    html.Div([
+                        html.Span("🌲", style={'font-size': '20px'}),
+                        html.Div([
+                            html.H5("Random Forest", style={
+                                    'color': '#2E8B57', 'margin': '0', 'font-size': '14px'}),
+                            html.Span("Recommended for Edge", style={
+                                'font-size': '10px', 'color': '#fff', 'background-color': '#2E8B57',
+                                'padding': '1px 6px', 'border-radius': '3px', 'font-weight': '600',
+                            }),
+                        ], style={'margin-left': '8px'}),
+                    ], style={'display': 'flex', 'align-items': 'center', 'margin-bottom': '8px'}),
                     html.P("Best balance of accuracy and edge deployment efficiency", style={
-                           'margin-bottom': '8px', 'font-size': '13px'}),
+                           'margin-bottom': '8px', 'font-size': '12px', 'color': '#555'}),
                     html.Ul([
-                        html.Li("Excellent for embedded systems"),
                         html.Li("Low memory footprint"),
                         html.Li("Fast inference speed"),
-                        html.Li("Good interpretability")
-                    ], style={'font-size': '13px', 'color': '#666', 'padding-left': '18px'})
+                        html.Li("Good interpretability"),
+                    ], style={'font-size': '12px', 'color': '#666', 'padding-left': '18px', 'margin': '0'})
                 ], style={
                     'background-color': '#f8fff8',
-                    'padding': '12px',
+                    'padding': '14px',
                     'border-radius': '8px',
                     'border-left': '4px solid #2E8B57',
                     'flex': '1 1 0',
                     'min-width': '0',
+                    'transition': 'box-shadow 0.2s',
                 }),
 
                 html.Div([
-                    html.H5("🧠 Neural Network", style={
-                            'color': '#4682B4', 'margin-bottom': '10px'}),
-                    html.P("Highest accuracy but requires more computational resources", style={
-                           'margin-bottom': '8px', 'font-size': '13px'}),
+                    html.Div([
+                        html.Span("🧠", style={'font-size': '20px'}),
+                        html.H5("Neural Network", style={
+                                'color': '#4682B4', 'margin': '0 0 0 8px', 'font-size': '14px'}),
+                    ], style={'display': 'flex', 'align-items': 'center', 'margin-bottom': '8px'}),
+                    html.P("Highest accuracy with more computational resources", style={
+                           'margin-bottom': '8px', 'font-size': '12px', 'color': '#555'}),
                     html.Ul([
                         html.Li("Superior pattern recognition"),
                         html.Li("Handles complex features"),
                         html.Li("Requires more memory"),
-                        html.Li("Longer training time")
-                    ], style={'font-size': '13px', 'color': '#666', 'padding-left': '18px'})
+                    ], style={'font-size': '12px', 'color': '#666', 'padding-left': '18px', 'margin': '0'})
                 ], style={
                     'background-color': '#f8f9ff',
-                    'padding': '12px',
+                    'padding': '14px',
                     'border-radius': '8px',
                     'border-left': '4px solid #4682B4',
                     'flex': '1 1 0',
@@ -94,44 +117,60 @@ layout = html.Div([
                 }),
 
                 html.Div([
-                    html.H5("⚡ Support Vector Machine", style={
-                            'color': '#FF6347', 'margin-bottom': '10px'}),
+                    html.Div([
+                        html.Span("⚡", style={'font-size': '20px'}),
+                        html.H5("Support Vector Machine", style={
+                                'color': '#FF6347', 'margin': '0 0 0 8px', 'font-size': '14px'}),
+                    ], style={'display': 'flex', 'align-items': 'center', 'margin-bottom': '8px'}),
                     html.P("Fast training and good performance on small datasets", style={
-                           'margin-bottom': '8px', 'font-size': '13px'}),
+                           'margin-bottom': '8px', 'font-size': '12px', 'color': '#555'}),
                     html.Ul([
                         html.Li("Quick training process"),
                         html.Li("Effective on small data"),
                         html.Li("Good generalization"),
-                        html.Li("Moderate resource usage")
-                    ], style={'font-size': '13px', 'color': '#666', 'padding-left': '18px'})
+                    ], style={'font-size': '12px', 'color': '#666', 'padding-left': '18px', 'margin': '0'})
                 ], style={
                     'background-color': '#fff8f8',
-                    'padding': '12px',
+                    'padding': '14px',
                     'border-radius': '8px',
                     'border-left': '4px solid #FF6347',
                     'flex': '1 1 0',
                     'min-width': '0',
                 }),
             ], style={
-                'display': 'flex', 'gap': '12px', 'margin-bottom': '12px',
+                'display': 'flex', 'gap': '12px', 'margin-bottom': '16px',
+            }),
+
+            # Section label: PyTorch Deep Learning
+            html.Div([
+                html.Span("PyTorch Deep Learning", style={
+                    'font-size': '11px', 'font-weight': '600', 'text-transform': 'uppercase',
+                    'letter-spacing': '1px', 'color': '#8c959f', 'padding': '0 8px',
+                    'background-color': '#ffffff', 'position': 'relative', 'z-index': '1',
+                }),
+            ], style={
+                'text-align': 'left', 'margin-bottom': '10px', 'padding-left': '4px',
+                'border-bottom': '1px solid #e9ecef', 'line-height': '0.1',
             }),
 
             # PyTorch model cards (second row)
             html.Div([
                 html.Div([
-                    html.H5("🔥 PyTorch MLP", style={
-                            'color': '#EE4C2C', 'margin-bottom': '10px'}),
+                    html.Div([
+                        html.Span("🔥", style={'font-size': '20px'}),
+                        html.H5("PyTorch MLP", style={
+                                'color': '#EE4C2C', 'margin': '0 0 0 8px', 'font-size': '14px'}),
+                    ], style={'display': 'flex', 'align-items': 'center', 'margin-bottom': '8px'}),
                     html.P("MLP with batch training, LR scheduling, and dropout", style={
-                           'margin-bottom': '8px', 'font-size': '13px'}),
+                           'margin-bottom': '8px', 'font-size': '12px', 'color': '#555'}),
                     html.Ul([
                         html.Li("AdamW + cosine LR schedule"),
                         html.Li("True mini-batch training"),
                         html.Li("Early stopping on validation"),
-                        html.Li("Deploys like sklearn NN")
-                    ], style={'font-size': '13px', 'color': '#666', 'padding-left': '18px'})
+                    ], style={'font-size': '12px', 'color': '#666', 'padding-left': '18px', 'margin': '0'})
                 ], style={
                     'background-color': '#fff5f3',
-                    'padding': '12px',
+                    'padding': '14px',
                     'border-radius': '8px',
                     'border-left': '4px solid #EE4C2C',
                     'flex': '1 1 0',
@@ -139,27 +178,54 @@ layout = html.Div([
                 }),
 
                 html.Div([
-                    html.H5("📊 PyTorch 1D-CNN", style={
-                            'color': '#7B2D8E', 'margin-bottom': '10px'}),
-                    html.P("Convolutional network on raw sensor windows — no feature extraction", style={
-                           'margin-bottom': '8px', 'font-size': '13px'}),
+                    html.Div([
+                        html.Span("📊", style={'font-size': '20px'}),
+                        html.H5("PyTorch 1D-CNN", style={
+                                'color': '#7B2D8E', 'margin': '0 0 0 8px', 'font-size': '14px'}),
+                    ], style={'display': 'flex', 'align-items': 'center', 'margin-bottom': '8px'}),
+                    html.P("Conv network on raw sensor windows — no feature extraction", style={
+                           'margin-bottom': '8px', 'font-size': '12px', 'color': '#555'}),
                     html.Ul([
                         html.Li("Learns features automatically"),
                         html.Li("3 Conv layers + pooling"),
                         html.Li("Best on large datasets"),
-                        html.Li("Higher memory requirement")
-                    ], style={'font-size': '13px', 'color': '#666', 'padding-left': '18px'})
+                    ], style={'font-size': '12px', 'color': '#666', 'padding-left': '18px', 'margin': '0'})
                 ], style={
                     'background-color': '#f8f0ff',
-                    'padding': '12px',
+                    'padding': '14px',
                     'border-radius': '8px',
                     'border-left': '4px solid #7B2D8E',
                     'flex': '1 1 0',
                     'min-width': '0',
                 }),
 
-                # Invisible spacer so two cards match the 3-column width above
-                html.Div([], style={'flex': '1 1 0', 'min-width': '0'}),
+                html.Div([
+                    html.Div([
+                        html.Span("🖼️", style={'font-size': '20px'}),
+                        html.Div([
+                            html.H5("PyTorch 2D-CNN", style={
+                                    'color': '#0D6E6E', 'margin': '0', 'font-size': '14px'}),
+                            html.Span("Time×Channel Image", style={
+                                'font-size': '10px', 'color': '#fff', 'background-color': '#0D6E6E',
+                                'padding': '1px 6px', 'border-radius': '3px', 'font-weight': '600',
+                            }),
+                        ], style={'margin-left': '8px'}),
+                    ], style={'display': 'flex', 'align-items': 'center', 'margin-bottom': '8px'}),
+                    html.P("2D convolutions on time×channel sensor image representation", style={
+                           'margin-bottom': '8px', 'font-size': '12px', 'color': '#555'}),
+                    html.Ul([
+                        html.Li("Captures cross-axis patterns"),
+                        html.Li("2D Conv layers + pooling"),
+                        html.Li("No manual feature engineering"),
+                    ], style={'font-size': '12px', 'color': '#666', 'padding-left': '18px', 'margin': '0'})
+                ], style={
+                    'background-color': '#f0fafa',
+                    'padding': '14px',
+                    'border-radius': '8px',
+                    'border-left': '4px solid #0D6E6E',
+                    'flex': '1 1 0',
+                    'min-width': '0',
+                }),
             ], style={
                 'display': 'flex', 'gap': '12px',
             })

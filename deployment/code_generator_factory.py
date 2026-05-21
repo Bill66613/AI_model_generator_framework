@@ -210,7 +210,21 @@ def reorder_model_parameters(enhanced_data: Dict[str, Any],
             old_w = np.array(weights['input_weights'])
             new_w = old_w[reorder_indices, :]  # Reorder rows
             weights['input_weights'] = new_w.tolist()
-            enhanced_data['weights'] = weights
+        # Also reorder the full multi-layer storage if present
+        if 'all_coefs' in weights and len(weights['all_coefs']) > 0:
+            old_w = np.array(weights['all_coefs'][0])
+            new_w = old_w[reorder_indices, :]  # Reorder first layer rows
+            weights['all_coefs'][0] = new_w.tolist()
+        enhanced_data['weights'] = weights
+
+    # Reorder pytorch MLP input weights (first layer rows correspond to features)
+    if 'pytorch_coefs' in enhanced_data:
+        pytorch_coefs = enhanced_data['pytorch_coefs']
+        if len(pytorch_coefs) > 0:
+            old_w = np.array(pytorch_coefs[0])
+            new_w = old_w[reorder_indices, :]  # Reorder input rows
+            pytorch_coefs[0] = new_w.tolist() if hasattr(new_w, 'tolist') else new_w
+            enhanced_data['pytorch_coefs'] = pytorch_coefs
 
     # Reorder Random Forest feature indices in tree splits
     if 'trees' in enhanced_data:
@@ -339,16 +353,28 @@ def extract_random_forest_trees(rf_model) -> List[Dict]:
 
 
 def extract_neural_network_weights(nn_model) -> Dict[str, Any]:
-    """Extract weights and biases from neural network model."""
+    """Extract weights and biases from neural network model.
+
+    For multi-layer MLPs (hidden_layer_sizes with 2+ layers), all coefs_
+    and intercepts_ are stored in 'all_coefs' / 'all_intercepts' lists.
+    The legacy 'input_weights'/'output_weights' keys still store the first
+    and last layer for backward compatibility.
+    """
     weights = {}
     try:
         if hasattr(nn_model, 'coefs_') and hasattr(nn_model, 'intercepts_'):
+            n_layers = len(nn_model.coefs_)
+            # Legacy keys for 1-hidden-layer compat
             weights['input_weights'] = nn_model.coefs_[0].tolist()
             weights['hidden_biases'] = nn_model.intercepts_[0].tolist()
-            if len(nn_model.coefs_) > 1:
-                weights['output_weights'] = nn_model.coefs_[1].tolist()
-                weights['output_biases'] = nn_model.intercepts_[1].tolist()
+            if n_layers > 1:
+                weights['output_weights'] = nn_model.coefs_[-1].tolist()
+                weights['output_biases'] = nn_model.intercepts_[-1].tolist()
             weights['hidden_size'] = len(nn_model.intercepts_[0])
+
+            # Full multi-layer storage
+            weights['all_coefs'] = [c.tolist() for c in nn_model.coefs_]
+            weights['all_intercepts'] = [b.tolist() for b in nn_model.intercepts_]
     except Exception as e:
         print(f"Could not extract neural network weights: {e}")
     return weights
@@ -430,8 +456,20 @@ def extract_svm_parameters(svm_model) -> Dict[str, Any]:
         params['dual_coefficients'] = ovr_coef.tolist()
         params['intercept'] = ovr_intercept.tolist()
 
+        # ----------------------------------------------------------------
+        # Also store native OvO data for OvO-voting prediction scheme
+        # ----------------------------------------------------------------
+        # sklearn's packed dual_coef_: shape [n_classes-1, n_SV]
+        params['ovo_dual_coef'] = svm_model.dual_coef_.tolist()
+        # sklearn's per-pair intercepts: shape [n_pairs]
+        params['ovo_intercept'] = svm_model.intercept_.tolist()
+        # Number of SVs per class
+        params['n_support'] = n_support
+
+        n_pairs = n_classes * (n_classes - 1) // 2
         print(f"SVM OvO→OvR conversion: {n_classes} classes, {n_sv} SVs, "
-              f"{pair_idx} pairs → OvR coef [{n_classes}×{n_sv}]")
+              f"{n_pairs} pairs → OvR coef [{n_classes}×{n_sv}], "
+              f"OvO packed [{n_classes - 1}×{n_sv}]")
 
         # ----------------------------------------------------------------
         # Extract actual gamma value

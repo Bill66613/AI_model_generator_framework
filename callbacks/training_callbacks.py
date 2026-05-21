@@ -377,8 +377,8 @@ def load_training_data_summary(base_dir=None, dataset_name=None):
                     style={'margin': '0 0 5px 0', 'text-align': 'center', 'color': '#495057'}),
             ] + ([
                 html.P([
-                    html.Strong("📁 Datasets Loaded: "),
-                    html.Span(f"{len(train_files)} activity dataset(s)", style={
+                    html.Strong("🏷️ Activities: "),
+                    html.Span(f"{len(unique_labels)} classes ({', '.join(unique_labels)})", style={
                               'color': '#28a745'}),
                     html.Span("  •  ", style={'color': '#ccc'}),
                     html.Strong("Normalization: "),
@@ -396,8 +396,8 @@ def load_training_data_summary(base_dir=None, dataset_name=None):
                     style={'margin': '0', 'text-align': 'center', 'color': '#495057', 'font-size': '13px'})
             ] if fe_meta_info else [
                 html.P([
-                    html.Strong("📁 Datasets Loaded: "),
-                    html.Span(f"{len(train_files)} activity dataset(s)", style={
+                    html.Strong("🏷️ Activities: "),
+                    html.Span(f"{len(unique_labels)} classes ({', '.join(unique_labels)})", style={
                               'color': '#28a745'})
                 ], style={'margin': '0', 'text-align': 'center', 'color': '#495057'})
             ]), style={
