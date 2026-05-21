@@ -16,9 +16,9 @@ Cân bằng trọng số lớp (\texttt{class\_weight='balanced'}) được bậ
 Lựa chọn thiết kế bật cân bằng lớp mặc định phản ánh nguyên tắc ưu tiên triển khai thực tế: trong ứng dụng HAR, tất cả hoạt động phải được phát hiện đáng tin cậy, không chỉ các lớp thường xuyên nhất. Điều này đặc biệt quan trọng trong các bối cảnh an toàn (phát hiện té ngã, giám sát bệnh nhân) nơi bỏ sót lớp thiểu số có thể gây hậu quả nghiêm trọng \cite{he2009learning}.
 
 \subsection{Tính Khả Thi Triển Khai Biên}
-Kết quả triển khai trên thiết bị (Bảng~\ref{tab:deployment_status}) cho thấy một phát hiện quan trọng: chỉ PyTorch 1D-CNN hoạt động đáng tin cậy trên cả hai cấu hình bài toán (3 lớp và 5 lớp), trong khi Random Forest chỉ ổn định cho bài toán 3 lớp. Ba thuật toán còn lại (Neural Network sklearn, SVM, PyTorch MLP) gặp các vấn đề khác nhau --- từ treo hệ thống đến nhầm lẫn lớp có hệ thống.
+Kết quả triển khai trên thiết bị (Bảng~\ref{tab:deployment_status}) cho thấy một phát hiện quan trọng: chỉ PyTorch 1D-CNN hoạt động đáng tin cậy trên cả hai cấu hình bài toán (3 lớp và 5 lớp), trong khi Random Forest chỉ ổn định cho bài toán 3 lớp. Neural Network và PyTorch MLP hoạt động một phần nhưng gặp nhầm lẫn lớp có hệ thống. SVM bị loại khỏi đánh giá do nghi ngờ lỗi tầng tạo mã.
 
-Phát hiện này bổ sung chiều sâu cho kết luận về lựa chọn thuật toán: biên độ chênh lệch 1,75 điểm phần trăm trên tập kiểm tra offline trở nên không có ý nghĩa khi một số mô hình hoàn toàn không hoạt động trên thiết bị. Tiêu chí lựa chọn mô hình cho triển khai biên cần mở rộng từ ``độ chính xác cao nhất'' sang bao gồm \textit{khả năng triển khai thực tế}---bao gồm khối lượng tính toán suy luận, yêu cầu bộ nhớ, và tính ổn định của pipeline code generation.
+Phát hiện này bổ sung chiều sâu cho kết luận về lựa chọn thuật toán: biên độ chênh lệch 1,75 điểm phần trăm trên tập kiểm tra offline trở nên không có ý nghĩa khi một số mô hình gặp nhầm lẫn lớp nghiêm trọng trên thiết bị. Tiêu chí lựa chọn mô hình cho triển khai biên cần mở rộng từ ``độ chính xác cao nhất'' sang bao gồm \textit{khả năng triển khai thực tế}---bao gồm độ chính xác số học, khối lượng tính toán suy luận, và tính ổn định của pipeline code generation.
 
 Đáng chú ý, CNN --- mô hình end-to-end hoạt động trên dữ liệu thô --- hoạt động tốt nhất trên thiết bị, trong khi các mô hình dựa trên đặc trưng thủ công gặp nhiều vấn đề hơn. Điều này gợi ý rằng việc loại bỏ bước trích xuất đặc trưng trong mã C++ (nguồn chính của sai lệch tương đồng) mang lại lợi thế triển khai đáng kể, dù với chi phí mô hình lớn hơn và tính diễn giải thấp hơn.
 
@@ -39,11 +39,11 @@ Thiết kế này phù hợp với các nguyên tắc của giao diện thao tá
 \subsection{Các Nền Tảng Thương Mại}
 So sánh với Edge Impulse và SensiML tiết lộ các đánh đổi giữa chi phí, kiểm soát và tiện lợi:
 
-\textbf{Edge Impulse} ưu tiên dễ sử dụng với kỹ thuật đặc trưng tự động và các quy trình triển khai, nhưng với chi phí đăng ký \$20-100/tháng và tính minh bạch tiền xử lý hạn chế. Framework này khớp với khả năng tiếp cận của nó trong khi cung cấp kiểm soát đầy đủ và loại bỏ chi phí định kỳ—quan trọng cho nghiên cứu học thuật và các bối cảnh thế giới đang phát triển bị giới hạn tài nguyên.
+So sánh trực tiếp với \textbf{Edge Impulse} trên cùng tập dữ liệu 3 lớp (Bảng~\ref{tab:edge_impulse_comparison}) cho thấy framework đề xuất đạt F1~=~1,00 so với 0,96 của Edge Impulse, và hoạt động tốt trên thiết bị trong khi Edge Impulse thất bại ở lớp running. Đáng chú ý, sklearn Neural Network của framework cũng gặp lỗi tương tự với Edge Impulse (không nhận dạng được running), gợi ý đây là vấn đề chung của mô hình dựa trên đặc trưng với biên quyết định mỏng. Về tài nguyên (Bảng~\ref{tab:resource_comparison}), cả hai đều sử dụng INT8 nhưng framework đề xuất chiếm ít flash hơn (18--23\% so với 51\%) nhờ tạo mã trực tiếp không cần runtime.
 
-\textbf{SensiML} nhắm mục tiêu triển khai IoT thương mại với khả năng AutoML tinh vi nhưng chi phí \$99--500/tháng và hỗ trợ ít nền tảng hơn.
+\textbf{SensiML} nhắm mục tiêu triển khai IoT thương mại với AutoML tinh vi nhưng chi phí \$99--500/tháng.
 
-So sánh số liệu hiệu suất trực tiếp giữa các nền tảng không có ý nghĩa phương pháp luận vì mỗi nền tảng sử dụng tập dữ liệu, pipeline trích xuất đặc trưng và cấu hình thuật toán khác nhau. Thay vào đó, các điểm phân biệt quan trọng nằm ở tính minh bạch, chi phí, và khả năng kiểm soát pipeline (xem Bảng~\ref{tab:qualitative_comparison} trong Chương~\ref{chap:results}).
+Các điểm phân biệt kiến trúc chính nằm ở tính minh bạch mã sinh ra, hỗ trợ thuật toán ML cổ điển, và khả năng xác minh tương đồng Python$\leftrightarrow$C++ (xem Bảng~\ref{tab:qualitative_comparison} trong Chương~\ref{chap:results}).
 
 \subsection{Các Hệ Thống HAR Học Thuật}
 So với nghiên cứu HAR học thuật sử dụng các phương pháp dựa trên IMU tương tự \cite{anguita2013har}, độ chính xác đạt được (97--99\% trên 5 lớp) cạnh tranh với các kết quả đã công bố trên các tập dữ liệu benchmark (92--97\% điển hình). Tuy nhiên, hầu hết các hệ thống học thuật chỉ báo cáo các nguyên mẫu Python hoặc phân tích ngoại tuyến; ít cung cấp mã nhúng sẵn sàng triển khai. Đóng góp của luận văn nằm ở việc bắc cầu ``khoảng cách triển khai'' này bằng cách tự động hóa việc dịch từ các mô hình scikit-learn/PyTorch đã huấn luyện sang mã suy luận vi điều khiển.

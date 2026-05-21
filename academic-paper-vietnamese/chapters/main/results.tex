@@ -215,14 +215,13 @@ Bảng~\ref{tab:deployment_status} tóm tắt kết quả triển khai cho cả 
         \midrule
         PyTorch 1D-CNN & Tốt & Tốt & Nhận dạng đúng tất cả hoạt động \\
         Random Forest & Tốt & Một phần & 5 lớp: still, running đúng; các biến thể walking không phân biệt được \\
+        Neural Network & Một phần & Một phần & 3 lớp: still, walking đúng; running nhầm walking. 5 lớp: walking, running đúng; still$\to$walking\_upstairs \\
         PyTorch MLP & Sai lớp & Một phần & 3 lớp: still$\leftrightarrow$walking đảo, running sai; 5 lớp: still$\to$walking\_upstairs \\
-        Neural Network & Treo & Treo & Suy luận float32 quá chậm, thiết bị không phản hồi \\
-        SVM (RBF) & Lỗi & Lỗi & Không hoạt động trên cả hai cấu hình \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-Kết quả cho thấy sự khác biệt rõ rệt giữa hiệu suất offline (97--100\% trên tập kiểm tra) và hiệu suất triển khai thực tế. Chỉ hai trong năm thuật toán hoạt động đáng tin cậy trên thiết bị: PyTorch 1D-CNN (cả hai cấu hình) và Random Forest (bài toán 3 lớp).
+SVM (RBF) bị loại khỏi đánh giá thiết bị do nghi ngờ lỗi trong tầng tạo mã (code generation). Kết quả bốn thuật toán còn lại cho thấy sự khác biệt rõ rệt giữa hiệu suất offline (97--100\% trên tập kiểm tra) và hiệu suất triển khai thực tế: chỉ PyTorch 1D-CNN hoạt động đáng tin cậy trên cả hai cấu hình; Random Forest hoạt động tốt cho bài toán 3 lớp; Neural Network và PyTorch MLP hoạt động một phần nhưng đều gặp lỗi nhầm lẫn lớp.
 
 \subsection{Phân tích theo từng mô hình}
 \label{sec:per_model_deployment}
@@ -233,9 +232,9 @@ Kết quả cho thấy sự khác biệt rõ rệt giữa hiệu suất offline 
 
 \textbf{PyTorch MLP} xuất hiện nhầm lẫn lớp có hệ thống. Bài toán 3 lớp: still và walking bị đảo ngược, running không nhận dạng được. Bài toán 5 lớp: running đúng, walking nhận dạng được, nhưng still bị phân loại nhầm thành walking\_upstairs. Pattern nhầm lẫn gợi ý vấn đề ở tầng xuất trọng số (weight export) từ PyTorch sang C++ hoặc sai lệch trong quá trình chuẩn hóa đặc trưng --- các sai số nhỏ trong StandardScaler có thể dịch chuyển toàn bộ không gian đặc trưng, đẩy các mẫu qua ranh giới quyết định lân cận.
 
-\textbf{Neural Network (sklearn MLP)} gặp hiện tượng treo: thiết bị không phản hồi sau khi bắt đầu suy luận. Framework hiện chưa hỗ trợ lượng tử hóa INT8 cho mô hình sklearn --- mã C++ sinh ra sử dụng số học float32 đầy đủ cho toàn bộ phép nhân ma trận. Với kiến trúc 63--100--50--5 (tổng cộng 11.550 trọng số), khối lượng tính toán float32 trên vi điều khiển 64~MHz có thể vượt quá khung thời gian cho phép, gây treo hệ thống.
+\textbf{Neural Network (sklearn MLP)} hoạt động trên thiết bị nhưng gặp nhầm lẫn lớp. Bài toán 3 lớp: still và walking được nhận dạng chính xác, nhưng running bị nhầm thành walking --- hành vi \textit{tương tự Edge Impulse CNN} (cũng thất bại ở running, xem Mục~\ref{sec:edge_impulse_comparison}). Bài toán 5 lớp: walking và running được nhận dạng chính xác, nhưng still bị phân loại nhầm thành walking\_upstairs. Pattern nhầm lẫn gợi ý rằng chuẩn hóa đặc trưng (StandardScaler) trên kiến trúc 63--100--50 có thể bị sai lệch nhỏ khi chuyển đổi sang C++, đẩy các mẫu gần ranh giới quyết định sang lớp lân cận.
 
-\textbf{SVM (RBF)} không hoạt động trên thiết bị cho cả hai cấu hình. Kernel RBF yêu cầu tính khoảng cách Euclid đến mỗi support vector trong mỗi chu kỳ suy luận --- số lượng support vectors có thể lớn (hàng trăm) với tập huấn luyện 1063 mẫu, tạo ra khối lượng tính toán và yêu cầu bộ nhớ vượt quá khả năng của vi điều khiển.
+\textbf{SVM (RBF)} bị loại khỏi đánh giá thiết bị do nghi ngờ lỗi trong tầng tạo mã cho kernel RBF. Mã C++ sinh ra cho SVM chưa được xác minh đầy đủ, nên kết quả trên thiết bị không thể kết luận là do giới hạn thuật toán hay do lỗi triển khai.
 
 \subsection{Bài học: khoảng cách huấn luyện--triển khai}
 \label{sec:deployment_gap}
@@ -244,64 +243,102 @@ Kết quả triển khai cho thấy một quan sát quan trọng: \textit{độ 
 
 \begin{enumerate}
     \item \textbf{Tương đồng tính toán đặc trưng}: Các mô hình dựa trên đặc trưng thủ công (NN, RF, SVM, MLP) phụ thuộc vào mã trích xuất đặc trưng C++ tái tạo chính xác kết quả Python. Sai lệch nhỏ trong tính toán float32 so với float64, hoặc trong các công thức phức tạp (kurtosis, skewness, DFT), có thể tích lũy qua 63 đặc trưng. CNN tránh hoàn toàn vấn đề này bằng cách hoạt động trên dữ liệu thô.
-    \item \textbf{Ràng buộc tài nguyên}: SVM (nhiều support vectors) và NN không lượng tử hóa vượt quá năng lực tính toán của vi điều khiển 64~MHz. Bài toán lựa chọn mô hình cho triển khai biên không chỉ dựa trên độ chính xác mà còn trên khối lượng tính toán suy luận.
+    \item \textbf{Độ chính xác số học}: Sai lệch nhỏ trong tính toán INT8 so với float64 của Python có thể dẫn đến nhầm lẫn lớp, đặc biệt với các mô hình có biên quyết định mỏng. Neural Network và PyTorch MLP đều thể hiện hành vi nhầm lẫn lớp có hệ thống, gợi ý vấn đề ở tầng chuyển đổi trọng số hoặc chuẩn hóa đặc trưng.
     \item \textbf{Điều kiện thực tế}: Dữ liệu trên thiết bị khác dữ liệu huấn luyện --- hướng gắn, tốc độ thực hiện hoạt động, nhiễu môi trường tạo phân phối đầu vào khác. Các mô hình có biên quyết định mỏng (đặc biệt giữa walking variants) nhạy cảm hơn với sự khác biệt này.
 \end{enumerate}
 
-\textbf{Khuyến nghị thực tế}: Dựa trên kết quả, PyTorch 1D-CNN là lựa chọn triển khai đáng tin cậy nhất cho cả bài toán đơn giản và phức tạp. Random Forest phù hợp cho các bài toán có ranh giới phân loại rõ ràng (3 lớp) với ưu thế kích thước mô hình nhỏ hơn. Các thuật toán còn lại cần cải thiện ở tầng code generation (lượng tử hóa INT8 cho NN, tối ưu hóa số support vectors cho SVM, xác minh weight export cho PyTorch MLP) trước khi triển khai đáng tin cậy.
+\textbf{Khuyến nghị thực tế}: Dựa trên kết quả, PyTorch 1D-CNN là lựa chọn triển khai đáng tin cậy nhất cho cả bài toán đơn giản và phức tạp. Random Forest phù hợp cho các bài toán có ranh giới phân loại rõ ràng (3 lớp) với ưu thế kích thước mô hình nhỏ hơn. Neural Network và PyTorch MLP cần cải thiện ở tầng code generation --- đặc biệt xác minh tính chính xác của chuyển đổi trọng số và chuẩn hóa đặc trưng từ Python sang C++ --- trước khi triển khai đáng tin cậy.
 
-\section{Phân tích và thảo luận kết quả}
-\label{sec:results_analysis}
+\section{So sánh với Edge Impulse}
+\label{sec:edge_impulse_comparison}
 
-\subsection{Vai trò của đặc trưng bất biến hướng}
+Để đánh giá khách quan, cùng tập dữ liệu 3 lớp (running/still/walking) được tải lên Edge Impulse (gói miễn phí) và huấn luyện với cấu hình mặc định: CNN với đặc trưng phổ (spectral features), lượng tử hóa INT8, triển khai qua EON Compiler cho Cortex-M4F 64~MHz---cùng vi xử lý với thiết bị benchmark.
 
-Toàn bộ thực nghiệm sử dụng loại đặc trưng \texttt{orientation\_invariant} (63 đặc trưng tính trên biên độ tổng hợp), thay vì \texttt{time\_domain} (90 đặc trưng trên từng trục riêng lẻ). Mặc dù số chiều ít hơn, kết quả cho thấy 63 đặc trưng bất biến hướng đủ để đạt 97--99\% trên bài toán 5 lớp.
+\subsection{So sánh hiệu suất}
 
-Lợi thế chính: tính toán trên biên độ tổng hợp ($\text{acc\_mag} = \sqrt{a_X^2 + a_Y^2 + a_Z^2}$) loại bỏ phụ thuộc vào hướng gắn thiết bị --- mô hình vẫn hoạt động khi thiết bị đặt trong túi quần, đeo trên cổ tay, hay gắn ở thắt lưng. Đây là yêu cầu quan trọng cho ứng dụng thực tế nơi hướng gắn không thể kiểm soát.
-
-\subsection{Tốc độ huấn luyện và quy trình phát triển}
-
-Thời gian huấn luyện cực ngắn (0,09--0,42 giây cho ML cổ điển, 1,94--10,09 giây cho PyTorch) cho phép quy trình phát triển lặp lại nhanh: người dùng có thể thu thập thêm dữ liệu, điều chỉnh tham số và huấn luyện lại trong vài giây. Đây là ưu thế đáng kể so với các pipeline huấn luyện nặng, đặc biệt trong bối cảnh giáo dục và nghiên cứu nơi tài nguyên tính toán hạn chế.
-
-\subsection{Mô hình end-to-end so với đặc trưng thủ công}
-
-PyTorch 1D-CNN đạt hiệu suất ngang PyTorch MLP (99,13\%) mặc dù hoạt động trên dữ liệu thô $150 \times 6$ mà không cần trích xuất đặc trưng thủ công. Tuy nhiên, các mô hình dựa trên đặc trưng thủ công có hai ưu thế cho triển khai nhúng: (1) vector đặc trưng 63 chiều nhỏ hơn đáng kể so với cửa sổ thô $150 \times 6 = 900$ giá trị, giảm yêu cầu bộ nhớ đầu vào; (2) mã suy luận cho mô hình cổ điển (phép nhân ma trận, so sánh cây quyết định) đơn giản và dễ xác minh hơn mã tích chập 1D.
-
-\section{So sánh định tính với nền tảng thương mại}
-\label{sec:qualitative_comparison}
-
-Bảng~\ref{tab:qualitative_comparison} so sánh các đặc điểm kiến trúc và chức năng giữa framework đề xuất và hai nền tảng thương mại phổ biến. So sánh tập trung vào các thuộc tính có thể xác minh khách quan, không so sánh số liệu hiệu suất do sự khác biệt về tập dữ liệu và cấu hình.
+Bảng~\ref{tab:edge_impulse_comparison} so sánh kết quả huấn luyện và triển khai.
 
 \begin{table}[H]
     \centering
-    \caption{So sánh định tính với các nền tảng thương mại}
+    \caption{So sánh framework đề xuất vs Edge Impulse --- bài toán 3 lớp, cùng tập dữ liệu}
+    \label{tab:edge_impulse_comparison}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{@{}lccccl@{}}
+        \toprule
+        Hệ thống & \makecell{Weighted\\F1} & \makecell{Running\\F1} & \makecell{Walking\\F1} & \makecell{Kết quả\\trên thiết bị} & Ghi chú \\
+        \midrule
+        Framework --- 1D-CNN & 1,00 & 1,00 & 1,00 & Tốt (cả 3 lớp) & INT8, end-to-end \\
+        Framework --- RF & 1,00 & 1,00 & 1,00 & Tốt (cả 3 lớp) & INT8, 50 cây \\
+        Framework --- NN & 1,00 & 1,00 & 1,00 & Running lỗi & INT8, 63--100--50--3 \\
+        Edge Impulse --- CNN & 0,96 & 1,00 & 0,89 & Running lỗi & INT8, EON Compiler \\
+        \bottomrule
+    \end{tabular}}
+\end{table}
+
+Framework đề xuất đạt F1~=~1,00 trên tất cả thuật toán cho bài toán 3 lớp, trong khi Edge Impulse đạt F1~=~0,96 với walking chỉ 80\% recall (20\% bị phân loại ``uncertain''). Trên thiết bị thực, Edge Impulse báo cáo độ chính xác ước tính 88,46\% nhưng \textit{không nhận dạng được running}---chỉ still và walking hoạt động. Đáng chú ý, Neural Network (sklearn MLP) của framework cũng thể hiện hành vi tương tự: nhận dạng tốt still và walking nhưng nhầm running thành walking. Điều này gợi ý rằng lớp running trong bài toán 3 lớp có biên quyết định nhạy cảm --- ngay cả với F1~=~1,00 trên tập kiểm tra, sai lệch số học nhỏ khi triển khai có thể phá vỡ ranh giới phân loại. Ngược lại, PyTorch 1D-CNN và Random Forest nhận dạng chính xác cả 3 lớp nhờ kiến trúc ít nhạy cảm với sai lệch này.
+
+\subsection{So sánh tài nguyên}
+
+Bảng~\ref{tab:resource_comparison} so sánh dấu chân bộ nhớ.
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh tài nguyên triển khai --- Cortex-M4F @ 64~MHz}
+    \label{tab:resource_comparison}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{@{}lcccl@{}}
+        \toprule
+        Hệ thống & \makecell{Flash\\(bytes)} & \makecell{SRAM\\(bytes)} & \makecell{Latency\\(ms)} & Lượng tử hóa \\
+        \midrule
+        Framework --- CNN & 145.728 (18\%) & 126.440 (53\%) & 600 & INT8 \\
+        Framework --- RF & 187.936 (23\%) & 49.640 (21\%) & 600 & INT8 \\
+        Framework --- NN & 155.816 (19\%) & 49.640 (21\%) & 600 & INT8 \\
+        Edge Impulse & 417.856 (51\%) & 74.432 (31\%) & 10 & INT8 \\
+        \bottomrule
+    \end{tabular}}
+    \begin{minipage}{\linewidth}
+    \vspace{4pt}
+    \footnotesize
+    Tất cả số liệu là tổng sketch đã biên dịch (bao gồm firmware, cảm biến, mô hình). Phần trăm tính trên dung lượng khả dụng của XIAO nRF52840 (811~KB flash, 238~KB SRAM).
+    \end{minipage}
+\end{table}
+
+Mặc dù cả hai hệ thống đều sử dụng lượng tử hóa INT8, Edge Impulse chiếm flash lớn hơn đáng kể (51\% so với 18--23\%) do bao gồm EON runtime và thư viện spectral features. Framework đề xuất đạt dấu chân nhỏ hơn nhờ tạo mã trực tiếp không cần runtime, đồng thời đạt \textit{độ chính xác triển khai cao hơn} với 1D-CNN và Random Forest (nhận dạng đúng cả 3 lớp so với 2/3 lớp của Edge Impulse).
+
+Về độ trễ suy luận, Edge Impulse đạt 10~ms nhờ khối DSP spectral features được tối ưu hóa cao cho 126 đặc trưng phổ. Framework đề xuất có độ trễ 600~ms, chủ yếu do bước trích xuất 63 đặc trưng thống kê (kurtosis, skewness, DFT magnitude) trên vi điều khiển 64~MHz chưa được tối ưu hóa ở mức thấp. Đây là điểm cần cải thiện trong tương lai (xem Chương~\ref{chap:discussion}), tuy nhiên độ trễ 600~ms vẫn chấp nhận được cho các ứng dụng HAR không yêu cầu phản hồi thời gian thực nghiêm ngặt (cửa sổ dữ liệu đã là 1,5 giây).
+
+\subsection{So sánh kiến trúc}
+\label{sec:qualitative_comparison}
+
+Bảng~\ref{tab:qualitative_comparison} tóm tắt các khác biệt kiến trúc chính.
+
+\begin{table}[H]
+    \centering
+    \caption{So sánh kiến trúc với các nền tảng thương mại}
     \label{tab:qualitative_comparison}
-    \small
-    \begin{tabular}{@{}p{3.5cm}p{3.5cm}p{3.5cm}p{3.5cm}@{}}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{@{}p{3.2cm}p{3.8cm}p{3.8cm}p{3.2cm}@{}}
         \toprule
         Tiêu chí & Framework đề xuất & Edge Impulse & SensiML \\
         \midrule
         Chi phí & Mã nguồn mở, miễn phí & \$20--100/tháng & \$99--500/tháng \\
         Thuật toán ML cổ điển & RF, SVM, NN & Không (chỉ neural) & Có \\
-        Tiền xử lý tương tác & Kéo thả trên tín hiệu & Tự động (hạn chế) & Tự động \\
         Minh bạch mã sinh ra & Toàn bộ mã nguồn & Hộp đen (EON) & Hộp đen \\
-        Xác minh tương đồng & Có (Python $\leftrightarrow$ C++) & Không công khai & Không công khai \\
-        Ngưỡng tin cậy tích hợp & Có (trong mã suy luận) & Anomaly block riêng & Không tích hợp \\
-        Tăng cường nhận biết lớp & Có & Không & Không \\
+        Xác minh Python$\leftrightarrow$C++ & Có & Không công khai & Không công khai \\
+        Tiền xử lý tương tác & Kéo thả trên tín hiệu & Tự động (hạn chế) & Tự động \\
         \bottomrule
-    \end{tabular}
+    \end{tabular}}
 \end{table}
 
-Điểm phân biệt quan trọng nhất là \textbf{tính minh bạch}: mã C++ được sinh ra có thể đọc, kiểm tra và sửa đổi trực tiếp. Trong quá trình phát triển, chính tính minh bạch này đã cho phép phát hiện và sửa các lỗi tương đồng huấn luyện-triển khai (lỗi zero-padding, sai lệch công thức kurtosis/skewness, sai thứ tự đặc trưng --- xem Mục~\ref{sec:training_deployment_parity}) mà các nền tảng hộp đen không thể phát hiện. Phân tích chi tiết hơn về ý nghĩa kiến trúc được trình bày trong Chương~\ref{chap:discussion}.
+Điểm phân biệt then chốt là \textbf{tính minh bạch}: mã C++ sinh ra có thể đọc, kiểm tra và sửa đổi trực tiếp. Chính nhờ tính minh bạch này, các lỗi tương đồng huấn luyện--triển khai (zero-padding, sai công thức kurtosis/skewness, sai thứ tự đặc trưng --- Mục~\ref{sec:training_deployment_parity}) đã được phát hiện và sửa chữa---điều không thể thực hiện với các nền tảng hộp đen. Phân tích ý nghĩa kiến trúc được trình bày trong Chương~\ref{chap:discussion}.
 
 \section{Tóm tắt}
 \label{sec:results_summary}
 
 Kết quả thực nghiệm xác nhận:
 \begin{enumerate}
-    \item \textbf{Hiệu suất phân loại cao (offline)}: 97--99\% trên bài toán 5 lớp HAR với 63 đặc trưng bất biến hướng, đạt 100\% trên bài toán 3 lớp cơ bản.
-    \item \textbf{Đa thuật toán}: Năm thuật toán (RF, SVM, NN, PyTorch MLP, PyTorch 1D-CNN) đều đạt hiệu suất cạnh tranh offline, với biên độ chênh lệch chỉ 1,75 điểm phần trăm.
-    \item \textbf{Khoảng cách triển khai}: Chỉ PyTorch 1D-CNN hoạt động tốt trên thiết bị ở cả hai cấu hình; Random Forest hoạt động ổn định cho bài toán 3 lớp. Kết quả cho thấy độ chính xác offline không đảm bảo triển khai thành công --- lựa chọn mô hình cho thiết bị biên cần xét đến tương đồng tính toán, ràng buộc tài nguyên và điều kiện thực tế.
-    \item \textbf{Triển khai đa thiết bị}: Kiến trúc tạo mã hỗ trợ 5 nhóm nền tảng đích từ cùng một mô hình đã huấn luyện.
-    \item \textbf{Đặc trưng bất biến hướng hiệu quả}: 63 đặc trưng tính trên biên độ tổng hợp đạt hiệu suất cao mà không phụ thuộc hướng gắn thiết bị.
+    \item \textbf{Hiệu suất offline cao}: 97--99\% trên bài toán 5 lớp, 100\% trên 3 lớp. Biên độ chênh lệch giữa các thuật toán chỉ 1,75 điểm phần trăm.
+    \item \textbf{Khoảng cách triển khai}: Chỉ PyTorch 1D-CNN hoạt động đáng tin cậy trên cả hai cấu hình. Neural Network và PyTorch MLP hoạt động một phần nhưng gặp nhầm lẫn lớp. Độ chính xác offline không đảm bảo triển khai thành công.
+    \item \textbf{Vượt trội Edge Impulse}: Trên cùng tập dữ liệu và thiết bị, framework đạt F1~=~1,00 (3 lớp) so với 0,96 của Edge Impulse. PyTorch 1D-CNN và RF hoạt động tốt trên thiết bị trong khi Edge Impulse thất bại ở lớp running. Dấu chân flash cũng nhỏ hơn (18--23\% so với 51\%).
+    \item \textbf{Đa nền tảng}: Kiến trúc tạo mã hỗ trợ 5 nhóm nền tảng đích từ cùng mô hình đã huấn luyện.
 \end{enumerate}

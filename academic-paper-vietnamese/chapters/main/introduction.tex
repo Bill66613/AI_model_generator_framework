@@ -1,7 +1,7 @@
 \chapter{Giới thiệu}
 \label{chap:introduction}
 
-\section{Bối cảnh và Động lực Nghiên cứu}
+\section{Bối cảnh và động lực nghiên cứu}
 
 Theo dõi chuyển động (Motion tracking) là một lĩnh vực năng động và phát triển nhanh chóng, liên quan đến việc thu thập, xử lý và phân tích chuyển động của các đối tượng, cá nhân hoặc môi trường. Công nghệ này đóng vai trò then chốt trong nhiều lĩnh vực bao gồm y tế (phục hồi chức năng, phát hiện té ngã, giám sát bệnh nhân), thể thao (theo dõi hiệu suất, phòng ngừa chấn thương), trò chơi điện tử và thực tế ảo/thực tế tăng cường (trải nghiệm người dùng nhập vai), và robot học (hệ thống định vị, cơ chế điều khiển chính xác) \cite{article:human_motion_tracking_survey}.
 
@@ -11,7 +11,7 @@ Những tiến bộ trong công nghệ cảm biến và trí tuệ nhân tạo (
 
 Sự phát triển của tính toán biên (edge computing) đã làm phức tạp thêm bối cảnh này trong khi đồng thời mang lại những cơ hội mới. Các thiết bị biên—vi điều khiển bị giới hạn tài nguyên với bộ nhớ, sức mạnh xử lý và ngân sách năng lượng hạn chế—cho phép các ứng dụng theo dõi chuyển động theo thời gian thực, bảo vệ quyền riêng tư và tiết kiệm năng lượng. Tuy nhiên, triển khai các mô hình AI trên các thiết bị như vậy đòi hỏi kiến thức chuyên biệt về tối ưu hóa mô hình, tạo mã và các chi tiết triển khai đặc thù cho từng nền tảng. Thách thức này trở nên rõ rệt hơn khi hệ sinh thái thiết bị biên ngày càng phân mảnh: cùng một mô hình có thể cần được đóng gói khác nhau cho các bo tương thích Arduino, ARM Cortex-M thuần, SDK như ESP-IDF, MicroPython hoặc RTOS như Zephyr.
 
-\section{Phát biểu Bài toán}
+\section{Phát biểu bài toán}
 
 Bất chấp những tiến bộ trong công nghệ theo dõi chuyển động, việc tạo ra các mô hình AI cho phân tích chuyển động vẫn là một nhiệm vụ đầy thách thức đặt ra một số rào cản quan trọng:
 
@@ -30,7 +30,7 @@ Bất chấp những tiến bộ trong công nghệ theo dõi chuyển động, 
 
 Do đó, có một nhu cầu cấp thiết về một framework linh hoạt, trực quan và thân thiện với người dùng giúp đơn giản hóa việc tạo các mô hình AI phù hợp cho các ứng dụng theo dõi chuyển động trong khi cung cấp kiểm soát hoàn toàn đối với quy trình phát triển.
 
-\section{So sánh với các Nền tảng Hiện có}
+\section{So sánh với các nền tảng hiện có}
 
 Để đặt các đóng góp trong ngữ cảnh, Bảng~\ref{tab:platform_comparison} so sánh framework này với các lựa chọn thay thế thương mại và mã nguồn mở hàng đầu cho triển khai edge ML trong các ứng dụng theo dõi chuyển động.
 
@@ -45,46 +45,46 @@ Do đó, có một nhu cầu cấp thiết về một framework linh hoạt, tr�
 \midrule
 \textbf{Chi phí} & \$20-99/tháng & \$99-500/tháng & Miễn phí & Miễn phí (Mã nguồn mở) \\
 \midrule
-\textbf{Tiền xử lý Tương tác} & Hạn chế (web UI) & Có (analytics studio) & Không (chỉ mã) & Có (cửa sổ kéo thả) \\
+\textbf{Tiền xử lý tương tác} & Hạn chế (web UI) & Có (analytics studio) & Không (chỉ mã) & Có (cửa sổ kéo thả) \\
 \midrule
 \textbf{Thuật toán} & NN, transfer learning & RF, SVM, NN, boosting & Chỉ deep learning & RF, SVM, NN \\
 \midrule
-\textbf{Tạo Mã} & C++ (Arduino, ARM) & C (MCU-cụ thể) & C++ (TFLite Micro) & C/C++/Python đa đích \\
+\textbf{Tạo mã} & C++ (Arduino, ARM) & C (MCU-cụ thể) & C++ (TFLite Micro) & C/C++/Python đa đích \\
 \midrule
-\textbf{Chế độ Tối ưu hóa} & Accuracy/latency & AutoML & Quant. thủ công & 4 chế độ (acc./speed/power/bal.) \\
+\textbf{Chế độ tối ưu hóa} & Accuracy/latency & AutoML & Quant. thủ công & 4 chế độ (acc./speed/power/bal.) \\
 \midrule
-\textbf{Mất cân bằng Lớp} & Oversample thủ công & Cân bằng tự động & Không tích hợp & Tự động (class\_weight) \\
+\textbf{Mất cân bằng lớp} & Oversample thủ công & Cân bằng tự động & Không tích hợp & Tự động (class\_weight) \\
 \midrule
 \textbf{Tùy chỉnh} & Hạn chế & Trung bình & Cao (OSS) & Cao (modular) \\
 \midrule
-\textbf{Sử dụng Giáo dục} & Gói miễn phí & Giấy phép học thuật & Có & Có (không giới hạn) \\
+\textbf{Sử dụng giáo dục} & Gói miễn phí & Giấy phép học thuật & Có & Có (không giới hạn) \\
 \midrule
-\textbf{Nền tảng Triển khai} & 20+ boards & MCUs đã chọn & Tương thích TFLite & Arduino, ARM, ESP-IDF, MicroPython, Zephyr \\
+\textbf{Nền tảng triển khai} & 20+ boards & MCUs đã chọn & Tương thích TFLite & Arduino, ARM, ESP-IDF, MicroPython, Zephyr \\
 \midrule
-\textbf{Kiểm soát Dữ liệu Huấn luyện} & Lưu trữ đám mây & Local/cloud & Chỉ local & Local (bảo mật hoàn toàn) \\
+\textbf{Kiểm soát dữ liệu huấn luyện} & Lưu trữ đám mây & Local/cloud & Chỉ local & Local (bảo mật hoàn toàn) \\
 \bottomrule
 \end{tabular}%
 }%  end resizebox
 \end{table}
 
-Các yếu tố phân biệt chính của framework này bao gồm: (1) \textbf{Tiền xử lý tương tác mới} với chọn cửa sổ thời gian kéo thả, giảm thời gian chú thích so với các cách tiếp cận dựa trên mã hoặc nhấp chuột; (2) \textbf{Hỗ trợ đa thuật toán} với các API nhất quán, cho phép thử nghiệm nhanh chóng mà không cần chuyển đổi nền tảng; (3) \textbf{Tính minh bạch Hoàn toàn} thông qua tính khả dụng mã nguồn mở, cho phép các nhà nghiên cứu hiểu, xác thực và mở rộng toàn bộ quy trình; (4) \textbf{Chi phí bằng không} cho sử dụng không giới hạn, loại bỏ rào cản tài chính cho sinh viên, nhà nghiên cứu và các khu vực đang phát triển; (5) \textbf{Tạo mã nhận thức tối ưu hóa} đánh đổi rõ ràng giữa độ chính xác, tốc độ và tiêu thụ điện năng dựa trên yêu cầu ứng dụng.
+Các yếu tố phân biệt chính của framework này bao gồm: (1) \textbf{Tiền xử lý tương tác mới} với chọn cửa sổ thời gian kéo thả, giảm thời gian chú thích so với các cách tiếp cận dựa trên mã hoặc nhấp chuột; (2) \textbf{Hỗ trợ đa thuật toán} với các API nhất quán, cho phép thử nghiệm nhanh chóng mà không cần chuyển đổi nền tảng; (3) \textbf{Tính minh bạch hoàn toàn} thông qua tính khả dụng mã nguồn mở, cho phép các nhà nghiên cứu hiểu, xác thực và mở rộng toàn bộ quy trình; (4) \textbf{Chi phí bằng không} cho sử dụng không giới hạn, loại bỏ rào cản tài chính cho sinh viên, nhà nghiên cứu và các khu vực đang phát triển; (5) \textbf{Tạo mã nhận thức tối ưu hóa} đánh đổi rõ ràng giữa độ chính xác, tốc độ và tiêu thụ điện năng dựa trên yêu cầu ứng dụng.
 
 Trong khi các nền tảng thương mại cung cấp lợi thế về độ trưởng thành của hệ sinh thái (hỗ trợ 20+ board của Edge Impulse) và sự tinh vi của AutoML (lựa chọn đặc trưng tự động của SensiML), chúng áp đặt chi phí định kỳ (\$240-2.388/năm), hạn chế tùy chỉnh thông qua các API độc quyền và tạo ra sự phụ thuộc nhà cung cấp. TensorFlow Lite cung cấp khả năng học sâu mạnh mẽ nhưng đòi hỏi chuyên môn ML đáng kể và không cung cấp công cụ tiền xử lý cấp cao. Framework này nhắm đến khoảng trống giữa tính dễ sử dụng và tính linh hoạt, cung cấp một giải pháp có thể tiếp cận nhưng mạnh mẽ cho bối cảnh giáo dục và nghiên cứu \cite{web:Edge_Impulse,web:TensorFlowLite}.
 
-\section{Mục tiêu Nghiên cứu}
+\section{Mục tiêu nghiên cứu}
 
 Mục tiêu chính của nghiên cứu này là thiết kế, triển khai và đánh giá một framework toàn diện giải quyết các thách thức đã nêu ở trên. Cụ thể, nghiên cứu này nhằm mục đích:
 
 \begin{enumerate}
-\item \textbf{Phát triển Hệ thống Tiền xử lý Tương tác}: Tạo giao diện tiền xử lý dựa trên GUI mới với chọn cửa sổ thời gian kéo thả, cho phép chú thích và phân đoạn dữ liệu hiệu quả mà không cần yêu cầu lập trình.
+\item \textbf{Phát triển hệ thống tiền xử lý tương tác}: Tạo giao diện tiền xử lý dựa trên GUI mới với chọn cửa sổ thời gian kéo thả, cho phép chú thích và phân đoạn dữ liệu hiệu quả mà không cần yêu cầu lập trình.
 
-\item \textbf{Triển khai Hỗ trợ Đa Thuật toán}: Tích hợp nhiều thuật toán học máy (Random Forest, SVM, Neural Networks) với các API nhất quán và tối ưu hóa siêu tham số tự động.
+\item \textbf{Triển khai hỗ trợ đa thuật toán}: Tích hợp nhiều thuật toán học máy (Random Forest, SVM, Neural Networks) với các API nhất quán và tối ưu hóa siêu tham số tự động.
 
-\item \textbf{Thiết kế Tạo Mã Bất khả tri Nền tảng}: Xây dựng hệ thống tạo mã modular có khả năng sản xuất các triển khai C/C++/MicroPython tối ưu hóa cho nhiều họ đích khác nhau (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với xem xét các chiến lược tối ưu hóa khác nhau (độ chính xác, tốc độ, điện năng, cân bằng).
+\item \textbf{Thiết kế tạo mã bất khả tri nền tảng}: Xây dựng hệ thống tạo mã modular có khả năng sản xuất các triển khai C/C++/MicroPython tối ưu hóa cho nhiều họ đích khác nhau (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với xem xét các chiến lược tối ưu hóa khác nhau (độ chính xác, tốc độ, điện năng, cân bằng).
 
 \item \textbf{Xác thực Hiệu quả Framework}: Tiến hành các thử nghiệm toàn diện sử dụng dữ liệu Nhận dạng Hoạt động Con người thực tế để đánh giá hiệu suất mô hình, kiểm tra năng lực sinh mã cho nhiều đích triển khai và đo benchmark đại diện trên phần cứng ARM Cortex-M4F tham chiếu.
 
-\item \textbf{Đảm bảo Tương đồng và Độ Tin Cậy Huấn luyện-Triển khai}: Tích hợp bộ lọc Kalman và kiến trúc tạo mã nhận biết kiến trúc để đảm bảo tương đồng chính xác giữa mô hình huấn luyện và mã triển khai; tích hợp ngưỡng tin cậy để từ chối hoạt động không xác định và sử dụng tăng cường dữ liệu nhận biết lớp để đảm bảo độ tin cậy trên phần cứng thực.
+\item \textbf{Đảm bảo tương đồng và độ tin cậy huấn luyện-triển khai}: Tích hợp bộ lọc Kalman và kiến trúc tạo mã nhận biết kiến trúc để đảm bảo tương đồng chính xác giữa mô hình huấn luyện và mã triển khai; tích hợp ngưỡng tin cậy để từ chối hoạt động không xác định và sử dụng tăng cường dữ liệu nhận biết lớp để đảm bảo độ tin cậy trên phần cứng thực.
 
 \end{enumerate}
 
@@ -121,7 +121,7 @@ Mục tiêu chính của nghiên cứu này là thiết kế, triển khai và �
     \node[stepbox, right=of s1] (s2) {\textbf{Tiền xử lý}\\[4pt]\scriptsize Lọc \& phân đoạn};
     \node[stepbox, right=of s2] (s3) {\textbf{Đặc trưng}\\[4pt]\scriptsize Cửa sổ kéo thả};
     \node[stepbox, right=of s3] (s4) {\textbf{Huấn luyện}\\[4pt]\scriptsize RF / SVM / NN};
-    \node[stepbox, right=of s4] (s5) {\textbf{Tạo Mã}\\[4pt]\scriptsize C++ / Python};
+    \node[stepbox, right=of s4] (s5) {\textbf{Tạo mã}\\[4pt]\scriptsize C++ / Python};
     \node[stepbox, right=of s5] (s6) {\textbf{Thiết bị}\\[4pt]\scriptsize Triển khai biên};
 
     % --- Phase grouping backgrounds ---
@@ -166,22 +166,22 @@ Mục tiêu chính của nghiên cứu này là thiết kế, triển khai và �
 \label{fig:workflow}
 \end{figure}
 
-\section{Đóng góp Nghiên cứu}
+\section{Đóng góp nghiên cứu}
 
 Nghiên cứu này đóng góp các điểm chính sau vào lĩnh vực theo dõi chuyển động dựa trên biên:
 
 \begin{itemize}
-\item \textbf{Tiền xử lý Tương tác Mới}: Giao diện chọn cửa sổ thời gian kéo thả đầu tiên cho chú thích dữ liệu chuyển động, giảm đáng kể thời gian tiền xử lý và lỗi chú thích so với các cách tiếp cận thủ công.
+\item \textbf{Tiền xử lý tương tác mới}: Giao diện chọn cửa sổ thời gian kéo thả đầu tiên cho chú thích dữ liệu chuyển động, giảm đáng kể thời gian tiền xử lý và lỗi chú thích so với các cách tiếp cận thủ công.
 
-\item \textbf{Kiến trúc Tạo Mã Đa Thiết bị Nhận thức Tối ưu hóa}: Hệ thống tạo mã modular ánh xạ cùng một mô hình đã huấn luyện sang nhiều họ đích (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với các cấu hình tối ưu hóa riêng theo độ chính xác, tốc độ và tiêu thụ điện năng.
+\item \textbf{Kiến trúc tạo mã đa thiết bị nhận thức tối ưu hóa}: Hệ thống tạo mã modular ánh xạ cùng một mô hình đã huấn luyện sang nhiều họ đích (Arduino-compatible, ARM Cortex-M, ESP-IDF, Zephyr, MicroPython) với các cấu hình tối ưu hóa riêng theo độ chính xác, tốc độ và tiêu thụ điện năng.
 
-\item \textbf{Cơ chế Tương đồng Huấn luyện-Triển khai}: Quy trình xác minh đảm bảo mã C++ được tạo ra cho kết quả nhận dạng nhất quán với mô hình Python đã huấn luyện, bao gồm bộ lọc Kalman, công thức thống kê chính xác và sắp xếp lại trọng số mô hình tại thời điểm tạo mã.
+\item \textbf{Cơ chế tương đồng huấn luyện-triển khai}: Quy trình xác minh đảm bảo mã C++ được tạo ra cho kết quả nhận dạng nhất quán với mô hình Python đã huấn luyện, bao gồm bộ lọc Kalman, công thức thống kê chính xác và sắp xếp lại trọng số mô hình tại thời điểm tạo mã.
 
-\item \textbf{Framework Mã nguồn mở Toàn diện}: Quy trình hoàn chỉnh từ đầu đến cuối từ tải dữ liệu đến triển khai biên, cung cấp lựa chọn thay thế mã nguồn mở miễn phí cho các nền tảng thương mại.
+\item \textbf{Framework mã nguồn mở toàn diện}: Quy trình hoàn chỉnh từ đầu đến cuối từ tải dữ liệu đến triển khai biên, cung cấp lựa chọn thay thế mã nguồn mở miễn phí cho các nền tảng thương mại.
 
 \end{itemize}
 
-\section{Phạm vi và Hạn chế}
+\section{Phạm vi và hạn chế}
 
 Nghiên cứu này tập trung vào các ứng dụng theo dõi chuyển động dựa trên IMU (gia tốc kế và con quay hồi chuyển). Phạm vi bao gồm:
 
@@ -189,7 +189,7 @@ Nghiên cứu này tập trung vào các ứng dụng theo dõi chuyển động
 \item Dữ liệu cảm biến IMU 6 trục (gia tốc kế 3 trục + con quay hồi chuyển 3 trục)
 \item Các phương pháp học có giám sát sử dụng các thuật toán scikit-learn
 \item Tạo mã cho nhiều họ nền tảng biên dựa trên vi điều khiển và môi trường thực thi nhúng
-\item Nhận dạng Hoạt động Con người là lĩnh vực xác thực chính
+\item Nhận dạng hoạt động con người là lĩnh vực xác thực chính
 \end{itemize}
 
 Các số đo phần cứng định lượng trong luận văn này tập trung vào một nền tảng tham chiếu (Seeed XIAO nRF52840), trong khi các đích còn lại được phân tích ở mức kiến trúc generator và khả năng sinh mã.
@@ -203,6 +203,6 @@ Nghiên cứu không giải quyết:
 \item Các lĩnh vực chuyên biệt yêu cầu chứng nhận y tế
 \end{itemize}
 
-\section{Tổ chức Luận văn}
+\section{Tổ chức luận văn}
 
 Phần còn lại của bài báo này được tổ chức như sau: Phần 2 đánh giá các công trình liên quan về hệ thống theo dõi chuyển động, framework tạo mô hình AI và công cụ triển khai biên. Phần 3 trình bày phương pháp luận chi tiết bao gồm kiến trúc hệ thống, quy trình tiền xử lý, phương pháp huấn luyện mô hình và chiến lược tạo mã. Phần 4 báo cáo kết quả thực nghiệm bao gồm các số liệu hiệu suất mô hình, đặc điểm triển khai và phân tích so sánh. Phần 5 thảo luận về các phát hiện, hạn chế và ý nghĩa. Phần 6 kết luận với một tóm tắt về các đóng góp và hướng cho công việc tương lai.

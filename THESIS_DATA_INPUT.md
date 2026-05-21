@@ -201,6 +201,31 @@ Per-Class Performance (test set):
 | Walking Upstairs   | 1.0000    | 1.0000 | 1.0000   | 35      |
 | Macro Avg          | 0.9908    | 0.9923 | 0.9915   | 229     |
 
+### Edge Impulse NN — 3 Activities
+
+- **Architecture**: NN (window_size=150, n_channels=6): 126-40-20-Dropout rate 0.2-3
+- **Training time**:
+- **Train accuracy**: 100.0%
+- **Validation accuracy**: 100.0% (best_val_accuracy, early stopped at epoch 30)
+- **Test accuracy**: 92.31%
+- **Deployment accuracy** (with confidence threshold ≥0.6): _______%
+- **Rejection rate**: _______%
+- **Notes**: NN, 3 classes.
+
+Metrics for Classifier
+| Metric | Value |
+| Area under ROC Curve | 1.00 |
+| Weighted average Precision | 0.97 |
+| Weighted average Recall | 0.96 |
+| Weighted average F1 score | 0.96 |
+
+Confusion matrix
+| | running | still | walking | uncertain |
+| running | 100% | 0% | 0% | 0% |
+| still | 0% | 100% | 0% | 0% |
+| walking | 0% | 0% | 80% | 20% |
+| f1 score | 1.00 | 1.00 | 0.89 |
+
 ---
 
 ## 2. ON-DEVICE TEST RESULTS
@@ -285,6 +310,23 @@ Per-Class Performance (test set):
 **Confusion observed**: _________________________________________________________
 **Unknown predictions**: _____ out of _____ (____%)
 
+### Edge Impulse NN — 3 Activities — On-Device Performance
+
+Deployment target: C++ Library
+Inference engine: EON Compiler
+Deployment claim:
+Model optimizations can increase on-device performance but may reduce accuracy. Performance estimate for Nordic nRF52840 DK (Cortex-M4F 64MHz).
+Quantized (int8)
+
+| | Spectral features | Classifier | Total |
+| Latency | 8 ms. | 1 ms. | 9 ms. |
+| Ram | 4.3K | 1.5K | 4.3K |
+| Flash | - | 20.0K | - |
+| Accuracy |  |  | 88.46% |
+
+Actual result:
+Still and Walking are good; Running is not recognizable
+
 ---
 
 ## 3. PREPROCESSING IMPACT (Optional Ablation Study)
@@ -312,14 +354,21 @@ ________________________________________________________________________________
 |-------|-------------|------------------|------------|-----------|-------|
 | Pytorch CNN | 145728 bytes | 126440 bytes | 17% | 53% | _____________ |
 | Pytorch MLP | 177168 bytes | 49640 bytes | 21% | 20% | _____________ |
-| Neural Network | 155816 bytes | 49640 bytes | 19% | 20% | _____________ |
+| Neural Network | 178248 bytes | 58416 bytes | 21% | 24% | _____________ |
 | Random Forest | 187936 bytes | 49640 bytes | 23% | 20% | _____________ |
 | SVM | 132952 bytes | 49632 bytes | 16% | 20% | _____________ |
 
 **Maximum capacity** (Seeed XIAO nRF52840):
 
-- Flash: 1 MB (1,048,576 bytes)
-- SRAM: 256 KB (262,144 bytes)
+- Flash:  MB (811,008 bytes)
+- SRAM:  KB (187,928 bytes)
+
+### From Edge Impulse
+
+Class: 3 activities
+Model: NN
+Sketch Size: 417856 bytes (51%) of program storage space. Maximum is 811008 bytes.
+Global Variables: 74432 bytes (31%) of dynamic memory, leaving 163136 bytes for local variables. Maximum is 237568 bytes.
 
 ---
 
