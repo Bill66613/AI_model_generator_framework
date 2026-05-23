@@ -6,7 +6,7 @@ Chương này trình bày cơ sở lý thuyết và phương pháp cho từng gi
 \section{Dữ liệu cảm biến quán tính cho nhận dạng hoạt động}
 \label{sec:imu_data_rationale}
 
-Cảm biến gia tốc kế đo gia tốc tuyến tính trên ba trục (bao gồm thành phần trọng lực), phản ánh biên độ và tính tuần hoàn của chuyển động. Tuy nhiên, khi thiết bị xoay, vectơ trọng trường chiếu lên các trục thay đổi, gây nhập nhằng giữa chuyển động tịnh tiến và thay đổi định hướng. Cảm biến con quay hồi chuyển đo vận tốc góc (°/s), không bị ảnh hưởng bởi trọng trường và bắt giữ chính xác động học xoay---giúp phân biệt các cặp hoạt động khó như leo/xuống cầu thang hay đi bộ/giậm chân tại chỗ. Tổ hợp sáu trục (3 gia tốc kế + 3 con quay hồi chuyển) cung cấp biểu diễn động học đầy đủ \cite{filippeschi2017survey_imu}, và đây là cấu hình chuẩn trong các tập dữ liệu HAR như UCI-HAR \cite{anguita2013har} và PAMAP2 \cite{reiss2012pamap2}.
+Cảm biến gia tốc kế đo gia tốc tuyến tính trên ba trục (bao gồm thành phần trọng lực), phản ánh biên độ và tính tuần hoàn của chuyển động. Tuy nhiên, khi thiết bị xoay, vectơ trọng trường chiếu lên các trục thay đổi, gây nhập nhằng giữa chuyển động tịnh tiến và thay đổi định hướng. Cảm biến con quay hồi chuyển đo vận tốc góc (°/s), không bị ảnh hưởng bởi trọng trường và nắm bắt chính xác động học xoay---giúp phân biệt các cặp hoạt động khó như leo/xuống cầu thang hay đi bộ/giậm chân tại chỗ. Tổ hợp sáu trục (3 gia tốc kế + 3 con quay hồi chuyển) cung cấp biểu diễn động học đầy đủ \cite{filippeschi2017survey_imu}, và đây là cấu hình chuẩn trong các tập dữ liệu HAR như UCI-HAR \cite{anguita2013har} và PAMAP2 \cite{reiss2012pamap2}.
 
 Framework không áp đặt tần số lấy mẫu cố định, nhưng có một ràng buộc bắt buộc: \textbf{tần số lấy mẫu phải nhất quán giữa giai đoạn huấn luyện và suy luận triển khai}. Các đặc trưng thống kê được tính theo \textit{số mẫu} trong cửa sổ, không theo thời gian tuyệt đối---nếu tần số thay đổi, cùng một cửa sổ 150 mẫu sẽ đại diện cho khoảng thời gian khác nhau, làm lệch toàn bộ phân phối đặc trưng. Để đảm bảo tính nhất quán, framework nhúng tần số lấy mẫu đã chọn dưới dạng hằng số biên dịch vào mã triển khai. Đối với HAR, dải tần phổ hoạt động phổ biến nằm trong 1--20~Hz \cite{whittle2014gait}, nên tần số lấy mẫu 50--100~Hz là phù hợp.
 
@@ -66,7 +66,7 @@ Bảng~\ref{tab:filter_parity_comparison} tổng hợp năm phương pháp theo 
     \small
     \begin{tabular}{@{}p{2.8cm}ccp{4.2cm}@{}}
         \toprule
-        Phương pháp & Causal? & Parity & Ghi chú triển khai \\
+        Phương pháp & Causal & Parity & Ghi chú triển khai \\
         \midrule
         Loại bỏ ngoại lệ & --- & \checkmark & Chỉ offline (không cần trên thiết bị) \\
         Butterworth LP & Không$^\dag$ & \checkmark & Per-window two-pass filtfilt trên bộ đệm cửa sổ \\
@@ -226,7 +226,7 @@ Xác suất từng lớp được tính theo cơ chế có sẵn: softmax cho NN
 \section{Huấn luyện mô hình học máy}
 
 \subsection{Các thuật toán học máy áp dụng}
-Bốn nhóm thuật toán học máy dưới đây, bao gồm cả học máy cổ điển và học sâu, đã được chứng minh hiệu quả trong nhận dạng hoạt động và phù hợp cho triển khai biên. Mỗi nhóm thể hiện đặc tính đánh đổi khác nhau giữa độ chính xác, yêu cầu dữ liệu và chi phí tài nguyên---các yếu tố cần cân nhắc khi lựa chọn cho ứng dụng cụ thể:
+Bốn nhóm thuật toán học máy dưới đây đã được chứng minh hiệu quả trong nhận dạng hoạt động và phù hợp cho triển khai biên, với các đánh đổi khác nhau giữa độ chính xác, yêu cầu dữ liệu và chi phí tài nguyên:
 
 \paragraph{Random Forest (RF)}
 Phương pháp ensemble kết hợp nhiều cây quyết định với bagging và ngẫu nhiên hóa đặc trưng \cite{breiman2001random}. Cấu hình điển hình cho bài toán HAR:

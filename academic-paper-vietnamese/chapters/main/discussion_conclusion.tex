@@ -14,8 +14,8 @@ Kết quả triển khai trên thiết bị (Bảng~\ref{tab:deployment_status})
 
 Đáng chú ý, CNN---mô hình end-to-end hoạt động trực tiếp trên dữ liệu thô---cho kết quả tốt nhất trên thiết bị. Việc loại bỏ bước trích xuất đặc trưng trong mã C++ (nguồn chính của lỗi parity) mang lại lợi thế triển khai đáng kể, dù với chi phí kích thước mô hình lớn hơn và khả năng diễn giải thấp hơn.
 
-\subsection{Tiền xử lý tương tác: một bước ngoặt về mô hình}
-Giao diện kéo thả cửa sổ thời gian đại diện cho một bước ngoặt so với quy trình tiền xử lý truyền thống. Các phương pháp thông thường yêu cầu người dùng hoặc viết mã để phân đoạn dữ liệu (rào cản kỹ thuật cao), hoặc dùng phân đoạn tự động kiểu hộp đen (thiếu kiểm soát, dễ sai). Giao diện kéo thả loại bỏ các điểm khó khăn này bằng cách cho phép thao tác trực tiếp trên biểu đồ tín hiệu, giảm thời gian tiền xử lý ước tính 60--80\% so với chú thích thủ công bằng nhãn thời gian.
+\subsection{Tiền xử lý tương tác: cách tiếp cận mới}
+Giao diện kéo thả cửa sổ thời gian đại diện cho một cách tiếp cận khác biệt so với quy trình tiền xử lý truyền thống. Các phương pháp thông thường yêu cầu người dùng hoặc viết mã để phân đoạn dữ liệu (rào cản kỹ thuật cao), hoặc dùng phân đoạn tự động kiểu hộp đen (thiếu kiểm soát, dễ sai). Giao diện kéo thả loại bỏ các điểm khó khăn này bằng cách cho phép thao tác trực tiếp trên biểu đồ tín hiệu, giảm thời gian tiền xử lý ước tính 60--80\% so với chú thích thủ công bằng nhãn thời gian.
 
 \section{So sánh với công trình liên quan}
 
@@ -109,7 +109,7 @@ Các nền tảng thương mại như Edge Impulse hoạt động theo mô hình
 
 Việc triển khai bộ lọc Kalman constant-velocity đại diện cho một bước tiến quan trọng---đây là lần đầu tiên framework có một bộ lọc tiền xử lý với \textbf{parity gap bằng không}.
 
-Các bộ lọc IIR Butterworth truyền thống tồn tại vấn đề parity vốn có: \texttt{filtfilt} (non-causal, zero-phase) trong huấn luyện xử lý dữ liệu theo cả hai chiều, trong khi \texttt{lfilter} (causal, forward-only) trong triển khai chỉ có thể xử lý theo một chiều do ràng buộc thời gian thực. Khoảng cách này gây sai lệch đặc biệt nghiêm trọng với các đặc trưng nhạy cảm với pha như skewness và kurtosis.
+Các bộ lọc IIR Butterworth truyền thống gặp hạn chế parity cố hữu: \texttt{filtfilt} (non-causal, zero-phase) trong huấn luyện xử lý dữ liệu theo cả hai chiều, trong khi \texttt{lfilter} (causal, forward-only) trong triển khai chỉ xử lý theo một chiều do ràng buộc thời gian thực. Khoảng cách này gây sai lệch đặc biệt nghiêm trọng với các đặc trưng nhạy cảm với pha như skewness và kurtosis.
 
 Bộ lọc Kalman khắc phục vấn đề này từ gốc: (1) tính causal tự nhiên---chỉ dùng quan sát hiện tại và trạng thái trước đó, (2) tính thích nghi---Kalman gain tự động điều chỉnh theo prediction error, (3) mô hình vật lý phù hợp với bản chất chuyển động của dữ liệu IMU, (4) tham số trực quan---process noise (Q) và measurement noise (R) có ý nghĩa vật lý rõ ràng.
 
@@ -134,7 +134,7 @@ Các hệ thống phân loại thông thường gán một nhãn cho mọi đầ
 \subsection{Kiến trúc tạo mã đa kiến trúc}
 \label{sec:disc_multi_arch}
 
-Việc hỗ trợ đồng thời các mô hình feature-based (RF/SVM/NN) và end-to-end (CNN) trong cùng một framework đặt ra thách thức kiến trúc đặc thù. Case study về CNN metadata mismatch minh họa tầm quan trọng của architecture-aware code generation: mô hình CNN hiển thị tên file ``f33'' (33 features) dù thực tế sử dụng 6 channels per timestep. Logic fallback không phân biệt được giữa feature-based model (cần tên đặc trưng thống kê) và CNN model (cần placeholder cho từng channel). Giải pháp là sinh metadata nhận biết kiến trúc, với logic phân nhánh rõ ràng cho từng loại mô hình.
+Việc hỗ trợ đồng thời các mô hình feature-based (RF/SVM/NN) và end-to-end (CNN) trong cùng một framework đặt ra thách thức kiến trúc đặc thù. Mô hình CNN sử dụng đầu vào thô (6 kênh × 150 timesteps) trong khi mô hình feature-based sử dụng vector đặc trưng thống kê (33--90 chiều). Sự khác biệt này đòi hỏi hệ thống tạo mã phải nhận biết kiến trúc mô hình: sinh metadata, logic xác minh, và cấu trúc mã đầu ra đều khác nhau tùy loại pipeline. Giải pháp là phân nhánh rõ ràng tại thời điểm sinh mã dựa trên trường kiến trúc trong gói mô hình.
 
 \subsection{Hạn chế TFLite và giải pháp Keras surrogate}
 \label{sec:disc_tflite_limitations}
@@ -217,7 +217,7 @@ Các mục tiêu nghiên cứu ban đầu được nêu trong Mục~1.3 đã đ�
     \item \textbf{Hỗ trợ đa thuật toán} \checkmark: Năm thuật toán tích hợp, tất cả đạt 97,38--99,13\%
     \item \textbf{Tạo mã không phụ thuộc nền tảng} \checkmark: Kiến trúc trình tạo modular theo ma trận model-platform-backend
     \item \textbf{Xác thực hiệu quả framework} \checkmark: Độ chính xác cạnh tranh và triển khai thành công trên thiết bị tham chiếu
-    \item \textbf{Khả năng tiếp cận} \checkmark: giao diện web với đường cong học tập thoải
+    \item \textbf{Khả năng tiếp cận} \checkmark: Giao diện web trực quan, dễ sử dụng cho người dùng không chuyên về lập trình nhúng
     \item \textbf{Độ tin cậy triển khai} \checkmark: Quy trình xác minh tương đồng 12 điểm, ngưỡng tin cậy và tăng cường nhận biết lớp
 \end{enumerate}
 

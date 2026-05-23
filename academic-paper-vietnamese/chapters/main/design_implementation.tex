@@ -467,99 +467,18 @@ Nếu phát hiện mismatch giữa dự đoán Python và thiết bị, framewor
 \subsection{Luồng dữ liệu end-to-end}
 \label{subsec:end_to_end_dataflow}
 
-Dữ liệu chảy qua framework theo pipeline rõ ràng:
+Dữ liệu chảy tuần tự qua 6 giai đoạn, mỗi giai đoạn đọc kết quả của giai đoạn trước từ hệ thống file:
 
 \begin{enumerate}
-    \item \textbf{CSV upload (Tab 1)}:
-    \begin{itemize}
-        \item Input: user uploads CSV files
-        \item Output: \texttt{persistent\_data/datasets/\{activity\}.csv}
-        \item State: metadata (columns, sampling rate) $\rightarrow$ \texttt{dcc.Store}
-    \end{itemize}
-    
-    \item \textbf{Preprocessing (Tab 2)}:
-    \begin{itemize}
-        \item Input: read CSVs from \texttt{datasets/}
-        \item Process: user selects segments via drag-and-drop
-        \item Output: sliding windows $\rightarrow$ \texttt{persistent\_data/windows/\{dataset\_name\}.pkl}
-        \item State: segments list $\rightarrow$ \texttt{dcc.Store}
-    \end{itemize}
-    
-    \item \textbf{Feature Engineering (Tab 3)}:
-    \begin{itemize}
-        \item Input: load windows from \texttt{windows/\{dataset\_name\}.pkl}
-        \item Process: extract features, augmentation, train/val/test split
-        \item Output: \texttt{persistent\_data/training/\{dataset\_name\}\_train.csv}, \texttt{\_val.csv}, \texttt{\_test.csv}
-        \item State: feature mode, augmentation config $\rightarrow$ saved in CSV metadata
-    \end{itemize}
-    
-    \item \textbf{Training (Tab 4)}:
-    \begin{itemize}
-        \item Input: load feature matrices from \texttt{training/*.csv}
-        \item Process: GridSearchCV, fit model, evaluate
-        \item Output: \texttt{persistent\_data/models/\{model\_name\}.joblib}
-        \item State: training metrics $\rightarrow$ dashboard display
-    \end{itemize}
-    
-    \item \textbf{Code Generation (Tab 5)}:
-    \begin{itemize}
-        \item Input: load model from \texttt{models/\{model\_name\}.joblib}
-        \item Process: extract parameters, reorder features, render templates
-        \item Output: \texttt{persistent\_data/generated/\{model\_type\}\_models/\{model\_name\}/} (header, cpp, ino)
-        \item State: optimization mode, platform $\rightarrow$ \texttt{dcc.Store}
-    \end{itemize}
-    
-    \item \textbf{Device Testing (Tab 6)}:
-    \begin{itemize}
-        \item Input: serial communication với flashed device
-        \item Process: parse predictions, compare with expected
-        \item Output: real-time dashboard, logging
-        \item State: serial port, threshold $\rightarrow$ \texttt{dcc.Store}
-    \end{itemize}
+    \item \textbf{Tải dữ liệu (Tab 1)}: CSV gốc $\rightarrow$ lưu theo activity class, phát hiện cấu trúc cột.
+    \item \textbf{Tiền xử lý (Tab 2)}: Chọn segments trên biểu đồ $\rightarrow$ sinh sliding windows.
+    \item \textbf{Trích xuất đặc trưng (Tab 3)}: Windows $\rightarrow$ feature vectors + augmentation + phân chia train/val/test.
+    \item \textbf{Huấn luyện (Tab 4)}: Feature matrices $\rightarrow$ GridSearchCV $\rightarrow$ model bundle (.joblib).
+    \item \textbf{Tạo mã (Tab 5)}: Model bundle $\rightarrow$ trích xuất tham số + sắp xếp lại features $\rightarrow$ mã C++/MicroPython.
+    \item \textbf{Kiểm tra thiết bị (Tab 6)}: Giao tiếp serial với thiết bị đã flash $\rightarrow$ xác minh dự đoán real-time.
 \end{enumerate}
 
-\subsection{Cơ chế rollback và retry}
-\label{subsec:rollback_retry}
-
-Một ưu điểm của thiết kế filesystem-based state management là người dùng có thể quay lại bất kỳ bước nào để điều chỉnh mà không mất công việc đã hoàn thành:
-
-\paragraph{Ví dụ 1: Thay đổi feature mode}
-Nếu người dùng huấn luyện model với \texttt{time\_domain} (90 features) nhưng muốn thử \texttt{orientation\_invariant} (33 features):
-\begin{enumerate}
-    \item Quay lại Tab 3, chọn \texttt{orientation\_invariant}.
-    \item Re-run feature extraction $\rightarrow$ sinh \texttt{*\_train.csv} mới.
-    \item Quay lại Tab 4, retrain model trên features mới.
-\end{enumerate}
-Windows đã sinh (Tab 2) được giữ nguyên, không cần re-select segments.
-
-\paragraph{Ví dụ 2: Điều chỉnh hyperparameters}
-Nếu GridSearchCV không cho kết quả tốt, người dùng có thể:
-\begin{enumerate}
-    \item Mở rộng param grid (VD: thêm \texttt{max\_depth: [30, 50]} cho Random Forest).
-    \item Re-run training với param grid mới.
-    \item So sánh metrics giữa các models đã huấn luyện (tất cả \texttt{.joblib} files đều được giữ lại).
-\end{enumerate}
-
-\paragraph{Ví dụ 3: Deployment target mới}
-Nếu muốn triển khai model đã huấn luyện lên ESP32 thay vì XIAO:
-\begin{enumerate}
-    \item Quay lại Tab 5, chọn platform = \texttt{ESP32}, backend = \texttt{MicroPython}.
-    \item Re-run code generation $\rightarrow$ sinh MicroPython code mới.
-    \item Không cần retrain model.
-\end{enumerate}
-
-\subsection{Truy xuất thông tin model}
-\label{subsec:model_introspection}
-
-Mỗi \texttt{.joblib} file chứa đầy đủ thông tin để reproduce và introspect:
-\begin{itemize}
-    \item \texttt{feature\_names}: biết chính xác features nào được sử dụng.
-    \item \texttt{model\_params}: biết hyperparameters đã chọn.
-    \item \texttt{performance\_metrics}: so sánh accuracy giữa các models.
-    \item \texttt{scaler}: có thể transform new data với cùng scaler.
-\end{itemize}
-
-Framework cung cấp utility function để load và inspect model sử dụng \texttt{joblib} library.
+Thiết kế filesystem-based cho phép người dùng quay lại bất kỳ bước nào: thay đổi feature mode không cần chọn lại segments, thay đổi platform không cần huấn luyện lại mô hình.
 
 \section{Tổng kết chương}
 \label{sec:design_implementation_summary}

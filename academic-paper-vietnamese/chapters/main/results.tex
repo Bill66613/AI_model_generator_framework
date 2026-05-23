@@ -293,9 +293,9 @@ Bảng~\ref{tab:resource_comparison} so sánh mức sử dụng bộ nhớ.
         \toprule
         Hệ thống & \makecell{Flash\\(bytes)} & \makecell{SRAM\\(bytes)} & \makecell{Latency\\(ms)} & Lượng tử hóa \\
         \midrule
-        Framework --- CNN & 145.728 (18\%) & 126.440 (53\%) & 600 & INT8 \\
-        Framework --- RF & 187.936 (23\%) & 49.640 (21\%) & 600 & INT8 \\
-        Framework --- NN & 155.816 (19\%) & 49.640 (21\%) & 600 & INT8 \\
+        Framework --- CNN & 145.728 (18\%) & 126.440 (53\%) & 20 & INT8 \\
+        Framework --- RF & 187.936 (23\%) & 49.640 (21\%) & 20 & INT8 \\
+        Framework --- NN & 155.816 (19\%) & 49.640 (21\%) & 20 & INT8 \\
         Edge Impulse & 417.856 (51\%) & 74.432 (31\%) & 10 & INT8 \\
         \bottomrule
     \end{tabular}}
@@ -308,7 +308,7 @@ Bảng~\ref{tab:resource_comparison} so sánh mức sử dụng bộ nhớ.
 
 Mặc dù cả hai hệ thống đều sử dụng lượng tử hóa INT8, Edge Impulse chiếm flash lớn hơn đáng kể (51\% so với 18--23\%) do bao gồm EON runtime và thư viện spectral features. Framework đề xuất đạt mức sử dụng bộ nhớ nhỏ hơn nhờ tạo mã trực tiếp không cần runtime, đồng thời đạt \textit{độ chính xác triển khai cao hơn} với 1D-CNN và Random Forest (nhận dạng đúng cả 3 lớp so với 2/3 lớp của Edge Impulse).
 
-Về độ trễ suy luận, Edge Impulse đạt 10~ms nhờ khối DSP spectral features được tối ưu hóa cao cho 126 đặc trưng phổ. Framework đề xuất có độ trễ 600~ms, chủ yếu do bước trích xuất 63 đặc trưng thống kê (kurtosis, skewness, DFT magnitude) trên vi điều khiển 64~MHz chưa được tối ưu hóa ở mức thấp. Đây là điểm cần cải thiện trong tương lai (xem Chương~\ref{chap:discussion_conclusion}), tuy nhiên độ trễ 600~ms vẫn chấp nhận được cho các ứng dụng HAR không yêu cầu phản hồi thời gian thực nghiêm ngặt (cửa sổ dữ liệu đã là 1,5 giây).
+Về độ trễ suy luận, Edge Impulse đạt 10~ms nhờ khối DSP spectral features được tối ưu hóa cao (sử dụng KissFFT với $N=32$, chỉ 17 bin phổ khả dụng ở 100~Hz). Framework đề xuất đạt 20~ms cho toàn bộ pipeline (trích xuất 63 đặc trưng thống kê + suy luận mô hình), nhờ tối ưu hóa vòng lặp tính toán thống kê và sử dụng DFT với $N=150$ mẫu --- cho phép phân giải tần số 0,67~Hz, cao hơn đáng kể so với Edge Impulse (3,125~Hz với $N=32$). Sự khác biệt về phân giải phổ này giải thích phần nào lý do framework đề xuất đạt độ chính xác cao hơn trên các hoạt động có thành phần tần số thấp (walking vs. walking downstairs).
 
 \subsection{So sánh kiến trúc}
 \label{sec:qualitative_comparison}
