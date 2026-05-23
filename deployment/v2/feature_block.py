@@ -564,9 +564,14 @@ void har_extract_features(
         for (int k=1;k<=nbins;k++) {{
             float re=0,im=0;
             float step=6.283185307f*(float)k/(float)HAR_WINDOW_SIZE;
+            float cos_w=cosf(step), sin_w=sinf(step);   /* 2 trig calls per bin */
+            float cos_i=1.0f, sin_i=0.0f;               /* phasor at i=0 */
             for (int i=0;i<HAR_WINDOW_SIZE;i++) {{
-                re+=hann_mag[i]*cosf(step*(float)i);
-                im-=hann_mag[i]*sinf(step*(float)i);
+                re+=hann_mag[i]*cos_i;
+                im-=hann_mag[i]*sin_i;
+                float c=cos_i*cos_w - sin_i*sin_w;      /* rotate phasor by step */
+                sin_i=sin_i*cos_w + cos_i*sin_w;
+                cos_i=c;
             }}
             fft_mag[k-1]=sqrtf(re*re+im*im);
         }}
@@ -783,9 +788,14 @@ static void _spectral_stats(const float *mag, int n,
         for (int k = 1; k <= nb; k++) {{
             float re = 0.0f, im = 0.0f;
             float step = 6.283185307f * (float)k / (float)HAR_WINDOW_SIZE;
+            float cos_w = cosf(step), sin_w = sinf(step);   /* 2 trig calls per bin */
+            float cos_i = 1.0f, sin_i = 0.0f;               /* phasor at i=0 */
             for (int i = 0; i < HAR_WINDOW_SIZE; i++) {{
-                re += hw[i] * cosf(step * (float)i);
-                im -= hw[i] * sinf(step * (float)i);
+                re += hw[i] * cos_i;
+                im -= hw[i] * sin_i;
+                float c = cos_i*cos_w - sin_i*sin_w;         /* rotate phasor by step */
+                sin_i = sin_i*cos_w + cos_i*sin_w;
+                cos_i = c;
             }}
             fmag[k - 1] = sqrtf(re * re + im * im);
         }}
@@ -1035,12 +1045,16 @@ static void fft_lowpass_window(float in[][HAR_N_CHANNELS], int n, float out[][HA
     for (int ch=0;ch<HAR_N_CHANNELS;ch++) {{
         for (int k=0;k<_FFT_CBIN;k++) {{
             float re=0,im=0,step=tpi_n*(float)k;
-            for (int i=0;i<n;i++) {{ re+=in[i][ch]*cosf(step*(float)i); im-=in[i][ch]*sinf(step*(float)i); }}
+            float cos_w=cosf(step),sin_w=sinf(step),cos_i=1.0f,sin_i=0.0f;
+            for (int i=0;i<n;i++) {{ re+=in[i][ch]*cos_i; im-=in[i][ch]*sin_i;
+                float c=cos_i*cos_w-sin_i*sin_w; sin_i=sin_i*cos_w+cos_i*sin_w; cos_i=c; }}
             _fft_re[k]=re; _fft_im[k]=im;
         }}
         for (int i=0;i<n;i++) {{
             float val=_fft_re[0], step=tpi_n*(float)i;
-            for (int k=1;k<_FFT_CBIN;k++) val+=2.0f*(_fft_re[k]*cosf((float)k*step)-_fft_im[k]*sinf((float)k*step));
+            float cos_w=cosf(step),sin_w=sinf(step),cos_k=cos_w,sin_k=sin_w;
+            for (int k=1;k<_FFT_CBIN;k++) {{ val+=2.0f*(_fft_re[k]*cos_k-_fft_im[k]*sin_k);
+                float c=cos_k*cos_w-sin_k*sin_w; sin_k=sin_k*cos_w+cos_k*sin_w; cos_k=c; }}
             out[i][ch]=val*inv_n;
         }}
     }}
