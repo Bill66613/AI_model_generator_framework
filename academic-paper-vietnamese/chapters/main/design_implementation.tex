@@ -9,25 +9,9 @@ Chương này trình bày kiến trúc hệ thống, quyết định thiết k�
 \subsection{Nền tảng công nghệ và môi trường phát triển}
 \label{subsec:tech_stack}
 
-Framework được triển khai dưới dạng ứng dụng web một trang (single-page web application) với các thành phần công nghệ sau:
+Framework được triển khai dưới dạng ứng dụng web một trang sử dụng Python 3.10 làm ngôn ngữ chính, với Dash 2.14 (dựa trên Flask và Plotly) cho giao diện tương tác, scikit-learn 1.3 cho các thuật toán ML cổ điển (Random Forest, SVM, MLP), và PyTorch 2.x cho huấn luyện mô hình học sâu (MLP, CNN). Xử lý dữ liệu dựa trên NumPy và Pandas; trực quan hóa tương tác sử dụng Plotly với hỗ trợ kéo thả; và Jinja2 được dùng làm template engine để sinh mã C/C++ từ các mẫu tham số hóa.
 
-\paragraph{Thư viện và framework chính}
-\begin{itemize}
-    \item \textbf{Python 3.10}: ngôn ngữ lập trình chính, được chọn vì hệ sinh thái học máy phong phú và khả năng tích hợp nhanh giữa các thư viện khác nhau.
-    \item \textbf{Dash 2.14}: framework giao diện web dựa trên Flask và Plotly. Dash cung cấp mô hình lập trình khai báo (declarative) với callback pattern, cho phép xây dựng giao diện tương tác phức tạp mà không cần JavaScript thủ công.
-    \item \textbf{scikit-learn 1.3}: triển khai các thuật toán học máy truyền thống (Random Forest, SVM, MLP). Thư viện cung cấp API nhất quán và hiệu năng đã được tối ưu hóa.
-    \item \textbf{PyTorch 2.x}: framework học sâu cho huấn luyện mô hình MLP và CNN. PyTorch được chọn vì API linh hoạt, hỗ trợ tốt cho tùy chỉnh kiến trúc, và khả năng xuất mô hình sang ONNX/TFLite.
-    \item \textbf{NumPy/Pandas}: xử lý dữ liệu số học và cấu trúc dạng bảng. Pandas DataFrame cung cấp giao diện thuận tiện cho thao tác chuỗi thời gian và trích xuất đặc trưng.
-    \item \textbf{Plotly}: thư viện trực quan hóa tương tác, hỗ trợ drag-and-drop selection và real-time updates trong giao diện Dash.
-    \item \textbf{Jinja2}: template engine để sinh mã C/C++ và Arduino từ các mẫu tham số hóa, đảm bảo tính nhất quán cú pháp và dễ bảo trì.
-\end{itemize}
-
-\paragraph{Môi trường phát triển}
-\begin{itemize}
-    \item \textbf{Nền tảng phát triển}: Windows 11 workstation (Intel Core i7, 16GB RAM). Tuy nhiên, framework được thiết kế platform-agnostic và chạy được trên Linux/macOS mà không cần điều chỉnh.
-    \item \textbf{Nền tảng chuẩn triển khai}: Seeed XIAO nRF52840 Sense (ARM Cortex-M4F @ 64MHz, 256KB RAM, 1MB Flash, LSM6DS3 IMU). Vi điều khiển này được chọn làm \textbf{nền tảng chuẩn đo benchmark} do: (1) tích hợp đầy đủ IMU 6-trục, (2) hiệu năng đại diện cho phân khúc MCU trung bình, (3) hỗ trợ Arduino và PlatformIO, và (4) giá thành thấp (\textasciitilde\$10 USD).
-    \item \textbf{Công cụ biên dịch}: Arduino IDE 2.3 và PlatformIO cho biên dịch chéo (cross-compilation) sang ARM Cortex-M. Cả hai đều sử dụng GCC ARM Embedded Toolchain với flag tối ưu hóa \texttt{-O2} (cân bằng kích thước và tốc độ).
-\end{itemize}
+Nền tảng chuẩn triển khai là Seeed XIAO nRF52840 Sense (ARM Cortex-M4F @ 64MHz, 256KB RAM, 1MB Flash, IMU LSM6DS3 tích hợp), được chọn vì: tích hợp đầy đủ IMU 6 trục, hiệu năng đại diện cho phân khúc MCU trung bình, hỗ trợ Arduino và PlatformIO, và giá thành thấp (\textasciitilde\$10 USD). Biên dịch chéo sử dụng GCC ARM Embedded Toolchain qua Arduino IDE 2.3 hoặc PlatformIO.
 
 \subsection{Kiến trúc ứng dụng}
 \label{subsec:app_architecture}
@@ -133,57 +117,15 @@ Module này (Tab 3) chịu trách nhiệm chuyển đổi cửa sổ tín hiệu
 \subsection{Chế độ trích xuất đặc trưng}
 \label{subsec:feature_extraction_modes}
 
-Framework hỗ trợ 6 chế độ feature extraction, mỗi chế độ tạo ra một tập đặc trưng khác nhau:
-
-\begin{table}[H]
-\centering
-\caption{Các chế độ trích xuất đặc trưng và số lượng features}
-\label{tab:feature_modes_impl}
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}llc@{}}
-\toprule
-\textbf{Chế độ} & \textbf{Mô tả} & \textbf{Số features} \\ \midrule
-\texttt{orientation\_invariant\_time\_only} & Magnitude stats (acc+gyro) + jerk & 33 \\
-\texttt{orientation\_invariant} & Time + frequency domain magnitudes & 53 \\
-\texttt{time\_domain} & Per-axis time stats + magnitudes & 90 \\
-\texttt{all} & Time + frequency, per-axis + magnitudes & 156 \\
-\texttt{frequency\_domain} & FFT, PSD, spectral features & 66 \\
-\texttt{raw} & Cửa sổ tín hiệu raw (CNN input) & 6 channels \\ \bottomrule
-\end{tabular}%
-}
-\end{table}
+Framework hỗ trợ 6 chế độ trích xuất đặc trưng (chi tiết tại Bảng~\ref{tab:feature_modes}, Chương~\ref{chap:methodology}), từ đặc trưng bất biến hướng trên magnitude vectors (33--63 chiều, phù hợp triển khai nhúng) đến đặc trưng per-axis miền thời gian và tần số (66--156 chiều), cùng chế độ raw cho đầu vào CNN. Giao diện cho phép người dùng chọn chế độ và xem trước số lượng đặc trưng trước khi trích xuất.
 
 \paragraph{Cơ sở chọn đặc trưng bất biến hướng}
-Chế độ \texttt{orientation\_invariant} chỉ sử dụng các đặc trưng tính trên magnitude vectors ($\sqrt{x^2+y^2+z^2}$) thay vì per-axis features. Điều này đảm bảo mô hình không bị ảnh hưởng bởi định hướng lắp đặt cảm biến: đeo thiết bị ngang hoặc dọc, xoay 90° vẫn cho cùng một magnitude. Tuy nhiên, trade-off là mất thông tin về hướng chuyển động (VD: leo cầu thang khó phân biệt với xuống cầu thang chỉ dựa trên magnitude). Thực nghiệm cho thấy chế độ \texttt{time\_domain} (90 features) cân bằng tốt giữa độ chính xác và độ bền hướng.
+Chế độ \texttt{orientation\_invariant} chỉ sử dụng các đặc trưng tính trên magnitude vectors ($\sqrt{x^2+y^2+z^2}$) thay vì per-axis features. Điều này đảm bảo mô hình không bị ảnh hưởng bởi định hướng lắp đặt cảm biến: đeo thiết bị ngang hoặc dọc, xoay 90° vẫn cho cùng một magnitude. Tuy nhiên, trade-off là mất thông tin về hướng chuyển động (VD: leo cầu thang khó phân biệt với xuống cầu thang chỉ dựa trên magnitude).
 
-\subsection{Tích hợp data augmentation}
+\subsection{Tích hợp tăng cường dữ liệu}
 \label{subsec:data_augmentation_integration}
 
-Framework triển khai 5 phương pháp data augmentation cho dữ liệu IMU:
-
-\begin{enumerate}
-    \item \textbf{Jitter}: thêm Gaussian noise nhỏ vào tín hiệu ($\sigma = 0.05 \times \text{signal\_std}$).
-    \item \textbf{Rotation}: xoay ngẫu nhiên hệ trục tọa độ 3D để mô phỏng thay đổi định hướng.
-    \item \textbf{Scaling}: nhân tín hiệu với hệ số ngẫu nhiên (0.9--1.1) để mô phỏng biên độ chuyển động khác nhau.
-    \item \textbf{Time warping}: kéo giãn hoặc nén trục thời gian (0.8--1.2$\times$) để mô phỏng tốc độ thực hiện hoạt động khác nhau.
-    \item \textbf{Permutation}: hoán vị các sub-windows để phá vỡ sự phụ thuộc thứ tự thời gian (chỉ áp dụng cho hoạt động tuần hoàn như đi bộ).
-\end{enumerate}
-
-\paragraph{Class-aware augmentation}
-Framework tự động phân loại hoạt động thành hai loại:
-\begin{itemize}
-    \item \textbf{Static/transition}: đứng yên, ngồi, nằm $\rightarrow$ KHÔNG áp dụng time warping và permutation (gây mất tính tự nhiên).
-    \item \textbf{Dynamic/periodic}: đi bộ, chạy, leo cầu thang $\rightarrow$ áp dụng tất cả augmentation.
-\end{itemize}
-
-Phân loại dựa trên từ khóa trong tên activity: framework kiểm tra xem tên hoạt động có chứa các từ khóa tĩnh (``still'', ``stand'', ``sit'', ``lie'', ``stationary'') hay không, và áp dụng tập augmentation phù hợp.
-
-Giao diện augmentation cho phép người dùng:
-\begin{itemize}
-    \item Kích hoạt/tắt từng phương pháp augmentation riêng biệt.
-    \item Điều chỉnh augmentation factor (số lượng samples tăng thêm: 1$\times$, 2$\times$, 3$\times$).
-    \item Xem phân phối class trước và sau augmentation để đảm bảo cân bằng.
-\end{itemize}
+Module tích hợp năm phương pháp tăng cường dữ liệu IMU đã trình bày trong Mục~\ref{sec:data_augmentation} (jitter, rotation, scaling, time warping, permutation) với chiến lược nhận biết lớp: hoạt động tĩnh chỉ nhận micro-jitter, hoạt động động nhận tất cả biến đổi. Giao diện cho phép kích hoạt/tắt từng phương pháp riêng biệt, điều chỉnh hệ số tăng cường (1$\times$--3$\times$), và xem phân phối lớp trước/sau tăng cường.
 
 Hình~\ref{fig:ui_feature_engineering} minh họa giao diện này.
 

@@ -7,7 +7,7 @@
 Các kết quả thực nghiệm chứng minh rằng tất cả năm thuật toán đạt độ chính xác cao (97,38--99,13\%) trên bài toán HAR năm lớp, và đạt 100\% trên bài toán 3 lớp cơ bản. Chênh lệch chỉ 1,75 điểm phần trăm giữa thuật toán tốt nhất (PyTorch MLP/CNN: 99,13\%) và thấp nhất (SVM: 97,38\%) cho thấy \textbf{chất lượng pipeline trích xuất đặc trưng quan trọng hơn lựa chọn thuật toán} khi bộ 63 đặc trưng bất biến hướng đã được thiết kế tốt. Thời gian huấn luyện ngắn của Random Forest (0,15s) và Neural Network sklearn (0,42s) làm cho chúng phù hợp cho prototyping nhanh và chu trình phát triển lặp.
 
 \subsection{Cân bằng lớp trong thực hành}
-Cân bằng trọng số lớp (\texttt{class\_weight='balanced'}) được bật mặc định cho RF và SVM trong framework. Kết quả thực nghiệm cho thấy các lớp thiểu số (Walking Downstairs: 38 mẫu, Walking Upstairs: 35 mẫu) vẫn đạt recall 0,971--1,000 và F1 $\geq$ 0,949---xác nhận hiệu quả của chiến lược cân bằng. Lựa chọn thiết kế này phản ánh nguyên tắc ưu tiên triển khai thực tế: trong ứng dụng HAR, tất cả hoạt động phải được nhận dạng đáng tin cậy, không chỉ các lớp xuất hiện nhiều nhất.
+Cân bằng trọng số lớp tự động được bật mặc định cho RF và SVM trong framework. Kết quả thực nghiệm cho thấy các lớp thiểu số (Walking Downstairs: 38 mẫu, Walking Upstairs: 35 mẫu) vẫn đạt recall 0,971--1,000 và F1 $\geq$ 0,949---xác nhận hiệu quả của chiến lược cân bằng. Lựa chọn thiết kế này phản ánh nguyên tắc ưu tiên triển khai thực tế: trong ứng dụng HAR, tất cả hoạt động phải được nhận dạng đáng tin cậy, không chỉ các lớp xuất hiện nhiều nhất.
 
 \subsection{Tính khả thi triển khai biên}
 Kết quả triển khai trên thiết bị (Bảng~\ref{tab:deployment_status}) cho thấy một phát hiện quan trọng: \textbf{chỉ PyTorch 1D-CNN hoạt động đáng tin cậy trên cả hai cấu hình bài toán} (3 lớp và 5 lớp), trong khi Random Forest chỉ ổn định cho bài toán 3 lớp. Phát hiện này nhấn mạnh rằng chênh lệch 1,75 điểm phần trăm trên tập kiểm tra ngoại tuyến trở nên vô nghĩa khi một số mô hình mắc lỗi phân loại nghiêm trọng trên thiết bị thực. Tiêu chí chọn mô hình cho triển khai biên cần mở rộng từ ``độ chính xác cao nhất'' sang \textit{khả năng triển khai thực tế}.
@@ -46,7 +46,7 @@ Thứ hai, \textit{minh bạch cho gỡ lỗi}---đây là yếu tố có tác �
 
 Thứ ba, \textit{hỗ trợ trực tiếp ML cổ điển}: Framework hỗ trợ Random Forest---thuật toán không có đường dẫn chuyển đổi trực tiếp sang TFLite Micro.
 
-Chi phí phát triển: Framework cần triển khai logic suy luận riêng cho mỗi thuật toán ($\sim$1580 dòng mã cho trích xuất đặc trưng dùng chung, mỗi generator đặc thù thêm 200--500 dòng). Tuy nhiên, đây là \textit{chi phí một lần}: sau khi generator được kiểm chứng cho một thuật toán, nó hoạt động đúng cho mọi mô hình được huấn luyện bằng thuật toán đó.
+Chi phí phát triển: Framework cần triển khai logic suy luận riêng cho mỗi thuật toán, bao gồm module trích xuất đặc trưng dùng chung và các generator đặc thù cho từng loại mô hình. Tuy nhiên, đây là \textit{chi phí một lần}: sau khi generator được kiểm chứng cho một thuật toán, nó hoạt động đúng cho mọi mô hình được huấn luyện bằng thuật toán đó.
 
 \textbf{Kết luận}: Tạo mã trực tiếp là lựa chọn đúng cho bối cảnh cụ thể của framework (tập dữ liệu vừa phải, thuật toán ML cổ điển, vi điều khiển bị giới hạn tài nguyên, yêu cầu minh bạch cao).
 
@@ -104,12 +104,12 @@ Bảng~\ref{tab:parity_checklist} tóm tắt 12 biện pháp đảm bảo tươn
 \subsection{So sánh với nền tảng thương mại}
 Các nền tảng thương mại như Edge Impulse hoạt động theo mô hình hộp đen, trong đó pipeline trích xuất đặc trưng không thể kiểm tra hoặc xác minh bởi người dùng. Tính \textbf{minh bạch hoàn toàn} của framework cho phép kiểm tra trực tiếp giá trị đặc trưng, truy vết ngược đến nguyên nhân gốc, xác minh từng công thức giữa Python và C++, và sửa lỗi mà không chờ nhà cung cấp. Phát hiện này nhấn mạnh rằng \textbf{tính minh bạch không chỉ là triết lý mã nguồn mở mà là yêu cầu kỹ thuật thiết yếu} cho triển khai edge ML đáng tin cậy.
 
-\subsection{Bộ lọc Kalman: đột phá về parity}
+\subsection{Bộ lọc Kalman: giải pháp parity}
 \label{sec:disc_kalman_parity}
 
 Việc triển khai bộ lọc Kalman constant-velocity đại diện cho một bước tiến quan trọng---đây là lần đầu tiên framework có một bộ lọc tiền xử lý với \textbf{parity gap bằng không}.
 
-Các bộ lọc IIR Butterworth truyền thống gặp hạn chế parity cố hữu: \texttt{filtfilt} (non-causal, zero-phase) trong huấn luyện xử lý dữ liệu theo cả hai chiều, trong khi \texttt{lfilter} (causal, forward-only) trong triển khai chỉ xử lý theo một chiều do ràng buộc thời gian thực. Khoảng cách này gây sai lệch đặc biệt nghiêm trọng với các đặc trưng nhạy cảm với pha như skewness và kurtosis.
+Các bộ lọc IIR Butterworth truyền thống gặp hạn chế parity cố hữu: phương pháp lọc hai chiều (non-causal, zero-phase) trong huấn luyện xử lý dữ liệu theo cả hai chiều, trong khi phương pháp lọc một chiều (causal, forward-only) trong triển khai chỉ xử lý theo một chiều do ràng buộc thời gian thực. Khoảng cách này gây sai lệch đặc biệt nghiêm trọng với các đặc trưng nhạy cảm với pha như skewness và kurtosis.
 
 Bộ lọc Kalman khắc phục vấn đề này từ gốc: (1) tính causal tự nhiên---chỉ dùng quan sát hiện tại và trạng thái trước đó, (2) tính thích nghi---Kalman gain tự động điều chỉnh theo prediction error, (3) mô hình vật lý phù hợp với bản chất chuyển động của dữ liệu IMU, (4) tham số trực quan---process noise (Q) và measurement noise (R) có ý nghĩa vật lý rõ ràng.
 
@@ -139,7 +139,7 @@ Việc hỗ trợ đồng thời các mô hình feature-based (RF/SVM/NN) và en
 \subsection{Hạn chế TFLite và giải pháp Keras surrogate}
 \label{sec:disc_tflite_limitations}
 
-Pipeline chuyển đổi ONNX$\rightarrow$TFLite gặp vấn đề: \texttt{skl2onnx} tạo thành công ONNX-ML operators (TreeEnsembleClassifier, SVMClassifier), nhưng \texttt{onnx2tf} không hỗ trợ ONNX-ML operators---chỉ hỗ trợ standard ONNX operators. Kết quả: RF/SVM không thể chuyển đổi trực tiếp sang TFLite.
+Pipeline chuyển đổi ONNX$\rightarrow$TFLite gặp vấn đề: công cụ chuyển đổi scikit-learn sang ONNX tạo thành công các toán tử ONNX-ML (TreeEnsembleClassifier, SVMClassifier), nhưng công cụ chuyển đổi ONNX sang TFLite không hỗ trợ các toán tử ONNX-ML---chỉ hỗ trợ các toán tử ONNX chuẩn. Kết quả: RF/SVM không thể chuyển đổi trực tiếp sang TFLite.
 
 Giải pháp Keras surrogate có ưu điểm (tận dụng quantization INT8, tương thích với hệ sinh thái TensorFlow) nhưng cũng có nhược điểm: tổn thất xấp xỉ (Keras MLP chỉ đạt 80--90\% mức đồng thuận với RF/SVM gốc), tốn thêm bộ nhớ, và phức tạp hơn khi huấn luyện. \textbf{Khuyến nghị}: RF/SVM ưu tiên sinh mã C++ trực tiếp (chính xác, gọn, nhanh); NN/CNN dùng TFLite để tận dụng hệ sinh thái trưởng thành; Keras surrogate chỉ khi bắt buộc tích hợp với runtime chuẩn hóa.
 
@@ -165,32 +165,20 @@ Kết quả cụ thể cho nhận dạng hoạt động con người sử dụng
 \subsection{Các mở rộng ngắn hạn}
 Các cải tiến ngay lập tức trong kiến trúc hiện tại:
 \begin{enumerate}
-    \item \textbf{Các thuật toán bổ sung}: Tích hợp XGBoost, LightGBM, k-NN
-    \item \textbf{Lựa chọn đặc trưng}: Triển khai phân tích tầm quan trọng đặc trưng tự động để giảm chiều
-    \item \textbf{Nén mô hình}: Cắt tỉa, huấn luyện nhận thức lượng tử hóa để giảm thêm bộ nhớ
-    \item \textbf{Nhiều nền tảng hơn}: Mở rộng benchmark trên ESP32, STM32, nRF5340
-    \item \textbf{Trực quan hóa thời gian thực}: Luồng hoạt động trực tiếp từ thiết bị đã triển khai đến GUI framework
+    \item \textbf{Mở rộng thuật toán và lựa chọn đặc trưng}: Tích hợp XGBoost, LightGBM, k-NN; triển khai phân tích tầm quan trọng đặc trưng tự động để giảm chiều và cải thiện hiệu suất triển khai
+    \item \textbf{Nén và tối ưu hóa mô hình}: Cắt tỉa trọng số, huấn luyện nhận thức lượng tử hóa để giảm thêm bộ nhớ và tăng tốc suy luận trên vi điều khiển
+    \item \textbf{Benchmark đa nền tảng}: Mở rộng xác thực định lượng trên ESP32, STM32, nRF5340 và kiểm chứng tính linh hoạt kiến trúc factory
+    \item \textbf{Cải tiến khả năng sử dụng}: Quy trình có hướng dẫn cho người dùng mới, trực quan hóa hoạt động thời gian thực từ thiết bị, nghiên cứu người dùng so sánh với các phương pháp truyền thống
 \end{enumerate}
 
 \subsection{Tầm nhìn dài hạn}
 Các cải tiến chuyển đổi yêu cầu thay đổi kiến trúc:
 \begin{enumerate}
-    \item \textbf{Mở rộng học sâu}: Tích hợp LSTM/Transformer và mở rộng đường dẫn TFLite Micro cho các kiến trúc phức tạp hơn
-    \item \textbf{Học liên bang}: Huấn luyện mô hình cộng tác bảo vệ quyền riêng tư trên nhiều thiết bị
-    \item \textbf{AI có thể giải thích}: Trực quan hóa các mẫu cảm biến nào kích hoạt dự đoán cụ thể (tích hợp LIME, SHAP)
-    \item \textbf{Hợp nhất đa phương thức}: Tích hợp IMU + GPS + nhịp tim + âm thanh với đồng bộ hóa đặc trưng tự động
-    \item \textbf{Học trực tuyến}: Cho phép các mô hình đã triển khai thích ứng với các mẫu cụ thể của người dùng theo thời gian
-    \item \textbf{Backend đám mây}: Sao lưu dữ liệu tùy chọn, phiên bản mô hình và chia sẻ mô hình cộng đồng trong khi duy trì kiến trúc local-first
-    \item \textbf{Hiệu chỉnh tin cậy}: Áp dụng temperature scaling \cite{guo2017calibration} để cải thiện chất lượng hiệu chỉnh tin cậy softmax
-    \item \textbf{Tăng cường thích ứng}: Mở rộng chiến lược nhận biết lớp để tự động xác định tham số tăng cường tối ưu cho từng lớp dựa trên đặc tính tín hiệu
+    \item \textbf{Kiến trúc học sâu nâng cao}: Tích hợp LSTM/Transformer qua TFLite Micro, cho phép nắm bắt phụ thuộc thời gian dài hạn trong chuỗi hoạt động
+    \item \textbf{Học liên bang và bảo mật}: Huấn luyện cộng tác bảo vệ quyền riêng tư trên nhiều thiết bị, cho phép mô hình cải thiện liên tục mà không chia sẻ dữ liệu thô
+    \item \textbf{Hợp nhất đa phương thức}: Tích hợp IMU + GPS + nhịp tim + âm thanh với đồng bộ hóa đặc trưng tự động, mở rộng phạm vi ứng dụng sang các bài toán theo dõi sức khỏe tổng hợp
+    \item \textbf{AI có thể giải thích và hiệu chỉnh tin cậy}: Trực quan hóa LIME/SHAP cho các mẫu kích hoạt dự đoán, kết hợp temperature scaling để cải thiện độ tin cậy softmax
 \end{enumerate}
-
-\subsection{Các cải tiến khả năng sử dụng}
-\begin{itemize}
-    \item Các nghiên cứu người dùng chính thức so sánh giao diện tiền xử lý với các lựa chọn thay thế (Edge Impulse, coding thủ công)
-    \item Các quy trình làm việc có hướng dẫn cho người dùng mới với hướng dẫn từng bước và các tập dữ liệu ví dụ
-    \item Giám sát thiết bị thời gian thực cho thấy các luồng cảm biến trực tiếp và kết quả dự đoán
-\end{itemize}
 
 \section{Kết luận}
 
@@ -202,7 +190,7 @@ Nghiên cứu này giải quyết thách thức đưa ứng dụng theo dõi chu
     \item Giao diện tiền xử lý tương tác kéo thả giảm thời gian tiền xử lý 60-80\%
     \item Hỗ trợ đa thuật toán (RF, SVM, NN, PyTorch MLP, PyTorch 1D-CNN) với API nhất quán
     \item Kiến trúc triển khai đa thiết bị nhận biết tối ưu hóa với bốn chế độ
-    \item Xử lý mất cân bằng lớp hệ thống với \texttt{class\_weight='balanced'} mặc định
+    \item Xử lý mất cân bằng lớp hệ thống với cân bằng trọng số tự động mặc định
     \item Đảm bảo tương đồng huấn luyện-triển khai qua quy trình xác minh 12 điểm kiểm tra
     \item Tăng cường dữ liệu nhận biết lớp với chiến lược phân biệt tĩnh/động
     \item Ngưỡng tin cậy cho từ chối hoạt động không xác định mà không cần mô hình bổ sung
@@ -236,7 +224,7 @@ Nền tảng chi phí thấp để giảng dạy các khái niệm edge AI trong
 \paragraph{Nhà thông minh và hỗ trợ sinh hoạt hàng ngày}
 Giám sát hoạt động cho người cao tuổi sống độc lập (phát hiện các trạng thái bất thường, theo dõi thói quen hàng ngày), tự động hóa nhà thông minh nhận biết bối cảnh (điều chỉnh ánh sáng/nhiệt độ theo hoạt động được phát hiện) và phân tích xu hướng sức khỏe dài hạn.
 
-\subsection{Suy nghĩ cuối cùng}
+\subsection{Lời kết}
 Luận văn này trình bày một framework toàn diện giải quyết các thách thức cốt lõi trong theo dõi chuyển động trên thiết bị biên: khả năng tiếp cận, hiệu suất và tính linh hoạt. Giá trị cốt lõi của framework không nằm ở việc tối ưu riêng cho Seeed XIAO, mà ở khả năng chuyển cùng một pipeline sang nhiều thiết bị biên khác nhau trong khi vẫn đảm bảo tính minh bạch và khả năng kiểm chứng. Xác thực thực nghiệm khẳng định rằng \textbf{tính tiếp cận rộng rãi và hiệu suất cao không mâu thuẫn nhau---chúng hoàn toàn có thể cùng tồn tại}.
 
 Hành trình từ dữ liệu cảm biến thô đến mô hình edge AI sẵn sàng triển khai trải qua nhiều bước, mỗi bước truyền thống đòi hỏi chuyên môn chuyên biệt. Framework này giảm thiểu các rào cản đó, cho phép bất kỳ ai có kiến thức về bài toán (các hoạt động cần nhận dạng) tạo ra hệ thống sẵn sàng triển khai mà không cần trở thành chuyên gia về xử lý tín hiệu, học máy hay lập trình nhúng. Đây là bản chất của việc phổ cập công nghệ: \textbf{hạ thấp rào cản mà không hạ thấp tiêu chuẩn}.
