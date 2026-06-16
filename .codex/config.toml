@@ -1,0 +1,6 @@
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+HAR_PROJECT_ROOT = "."
+PERSISTENT_DATA = "./persistent_data"

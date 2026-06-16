@@ -155,8 +155,7 @@ def get_training_data_path(dataset_name, split_type, base_dir=None):
     Returns:
         Full path to the split file
     """
-    if not base_dir:
-        base_dir = PERSISTENT_DIR
+    base_dir = resolve_working_dir(base_dir)
 
     if split_type == 'metadata':
         filename = f"{dataset_name}_metadata.json"
@@ -183,8 +182,7 @@ def get_model_path(model_filename, base_dir=None):
     Returns:
         Full path to the model file
     """
-    if not base_dir:
-        base_dir = PERSISTENT_DIR
+    base_dir = resolve_working_dir(base_dir)
 
     models_dir = os.path.join(base_dir, 'models')
     new_path = os.path.join(models_dir, model_filename)
@@ -205,8 +203,7 @@ def get_models_metadata_path(base_dir=None):
     Returns:
         Full path to the models metadata file
     """
-    if not base_dir:
-        base_dir = PERSISTENT_DIR
+    base_dir = resolve_working_dir(base_dir)
 
     models_dir = os.path.join(base_dir, 'models')
     new_path = os.path.join(models_dir, "trained_models.json")
@@ -238,3 +235,18 @@ def resolve_working_dir(stored_path=None) -> str:
         return str(p)
     # Relative path: resolve against the application root
     return str((ROOT_DIR / p).resolve())
+
+
+def resolve_metadata_path(path_value, base_dir=None) -> str:
+    """Resolve a path loaded from metadata relative to the working directory.
+
+    Metadata files may store either absolute paths or portable relative paths
+    such as ``datasets/walking.csv``. Relative metadata paths are interpreted
+    from the active working directory, not from the app process directory.
+    """
+    if not path_value:
+        return ""
+    p = Path(path_value)
+    if p.is_absolute():
+        return str(p)
+    return str((Path(resolve_working_dir(base_dir)) / p).resolve())

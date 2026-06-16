@@ -11,7 +11,7 @@ from utils.model_training import create_feature_vector
 
 from config.config import (
     PERSISTENT_DIR, SENSOR_COLUMNS, ACCEL_COLUMNS, GYRO_COLUMNS,
-    DEFAULT_SAMPLING_RATE
+    DEFAULT_SAMPLING_RATE, resolve_working_dir
 )
 
 # Cache for loaded model and scaler
@@ -230,8 +230,7 @@ def register_callbacks(app):
 
             # ---- Fallback: Python-side inference ----
             # Resolve working directory
-            if not base_dir:
-                base_dir = PERSISTENT_DIR
+            base_dir = resolve_working_dir(base_dir)
 
             models_dir = os.path.join(base_dir, 'models')
             training_dir = os.path.join(base_dir, 'training')

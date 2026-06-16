@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from dash import dcc, html, Input, Output, State, dash_table, ctx, no_update
 
-from config.config import PERSISTENT_DIR, METADATA_FILE, SENSOR_COLUMNS, get_window_pattern, resolve_working_dir, ROOT_DIR
+from config.config import PERSISTENT_DIR, METADATA_FILE, SENSOR_COLUMNS, get_window_pattern, resolve_metadata_path, resolve_working_dir, ROOT_DIR
 
 
 def parse_contents(contents, filename):
@@ -252,7 +252,8 @@ def register_callbacks(app):
                 sampling_rate = metadata.get(
                     dataset_name, {}).get("sampling_rate", 100)
 
-                file_path = metadata.get(dataset_name, {}).get("path")
+                file_path = resolve_metadata_path(
+                    metadata.get(dataset_name, {}).get("path"), base_dir)
                 if not file_path:
                     file_path = os.path.join(base_dir, 'datasets', dataset_name)
                 if os.path.exists(file_path):
@@ -332,12 +333,14 @@ def register_callbacks(app):
                 return f"⚠️ Dataset '{dataset_name}' not found in metadata.", no_update
 
             # Delete the file
-            file_path = metadata[dataset_name].get("path", "")
+            file_path = resolve_metadata_path(
+                metadata[dataset_name].get("path", ""), base_dir)
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
 
             # Delete any cleaned data files
-            cleaned_path = metadata[dataset_name].get("cleaned_data_path", "")
+            cleaned_path = resolve_metadata_path(
+                metadata[dataset_name].get("cleaned_data_path", ""), base_dir)
             if cleaned_path and os.path.exists(cleaned_path):
                 os.remove(cleaned_path)
 
@@ -391,7 +394,7 @@ def register_callbacks(app):
                 return html.Div("Dataset not found in metadata", style={'color': '#dc3545'})
 
             dataset_info = metadata[dataset_name]
-            file_path = dataset_info.get("path", "")
+            file_path = resolve_metadata_path(dataset_info.get("path", ""), base_dir)
 
             # Get file information
             file_stats = {}

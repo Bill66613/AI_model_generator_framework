@@ -15,7 +15,7 @@ import glob
 
 from config.config import (
     PERSISTENT_DIR, METADATA_FILE, WINDOWS_DIR,
-    SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE, resolve_working_dir
+    SENSOR_COLUMNS, DEFAULT_SAMPLING_RATE, resolve_metadata_path, resolve_working_dir
 )
 from utils.model_training import extract_time_domain_features, extract_frequency_domain_features, create_feature_vector
 from utils.data_augmentation import augment_windows, AUGMENTATION_METHODS
@@ -97,8 +97,13 @@ def register_callbacks(app):
                     'label', dataset_name.replace('.csv', ''))
                 if label in selected_labels and 'dragged_samples' in dataset_info:
                     # Count existing files
-                    window_count = len(
-                        [f for f in dataset_info['dragged_samples'] if os.path.exists(f)])
+                    window_count = len([
+                        f for f in (
+                            resolve_metadata_path(path, base_dir)
+                            for path in dataset_info['dragged_samples']
+                        )
+                        if os.path.exists(f)
+                    ])
                     if label in label_counts:
                         label_counts[label] += window_count
                     else:
@@ -349,7 +354,8 @@ def register_callbacks(app):
             label = dataset_info.get('label', dataset_name.replace('.csv', ''))
             if label not in selected_labels:
                 continue
-            for wf in dataset_info.get('dragged_samples', []):
+            for raw_wf in dataset_info.get('dragged_samples', []):
+                wf = resolve_metadata_path(raw_wf, base_dir)
                 if os.path.exists(wf):
                     rows.append({'path': wf, 'label': label,
                                  'filename': os.path.basename(wf)})
@@ -561,7 +567,12 @@ def register_callbacks(app):
                     'label', dataset_name.replace('.csv', ''))
                 if label in selected_labels and 'dragged_samples' in dataset_info:
                     window_files = [
-                        f for f in dataset_info['dragged_samples'] if os.path.exists(f)]
+                        f for f in (
+                            resolve_metadata_path(path, base_dir)
+                            for path in dataset_info['dragged_samples']
+                        )
+                        if os.path.exists(f)
+                    ]
 
                     for window_file in window_files:
                         df_window = pd.read_csv(window_file)
@@ -760,6 +771,10 @@ def register_callbacks(app):
             # Step 4: Split AFTER combining (prevents data leakage)
             # Two modes: auto (ratio-based) or manual (per-window assignments)
             if split_mode == 'manual' and manual_assignments:
+                manual_assignments = {
+                    resolve_metadata_path(path, base_dir): split
+                    for path, split in manual_assignments.items()
+                }
                 # --- Manual split ---
                 # Map each window file path → set assignment.
                 # The window_file_paths list was built in Step 1 (in the same

@@ -2573,6 +2573,7 @@ def register_callbacks(app):
     )
     def handle_deployment_actions(generate_clicks, resource_clicks, model_filename, platform, optimization, base_dir):
         """Handle deployment actions including code generation and resource analysis."""
+        base_dir = resolve_working_dir(base_dir)
         print(
             f"DEBUG: Deployment callback triggered - clicks: {generate_clicks}, {resource_clicks}")
         print(
@@ -2615,7 +2616,7 @@ def register_callbacks(app):
             model = EdgeMLModel.load_model(model_path)
 
             # Get model metadata
-            model_metadata_file = get_models_metadata_path()
+            model_metadata_file = get_models_metadata_path(base_dir)
             model_info = {}
             if os.path.exists(model_metadata_file):
                 with open(model_metadata_file, 'r') as f:
@@ -2628,7 +2629,7 @@ def register_callbacks(app):
                 logger.debug(
                     "DEBUG: Feature names not in model, checking training metadata...")
                 # Try to get from any training metadata file
-                training_dir = os.path.join(PERSISTENT_DIR, 'training')
+                training_dir = os.path.join(base_dir, 'training')
                 metadata_files = glob.glob(
                     os.path.join(training_dir, '*_metadata.json'))
                 if metadata_files:

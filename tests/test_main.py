@@ -323,6 +323,23 @@ class TestConfiguration:
         assert ROOT_DIR is not None
         assert PERSISTENT_DIR is not None
         assert METADATA_FILE is not None
+
+    def test_relative_working_dir_resolution(self):
+        """Relative working dirs are resolved from the application root."""
+        from config.config import ROOT_DIR, resolve_working_dir
+
+        assert resolve_working_dir("portable_data") == os.path.abspath(
+            os.path.join(ROOT_DIR, "portable_data"))
+
+    def test_relative_metadata_path_resolution(self):
+        """Relative metadata paths are resolved from the active working dir."""
+        from config.config import ROOT_DIR, resolve_metadata_path
+
+        resolved = resolve_metadata_path(
+            os.path.join("datasets", "sample.csv"), "portable_data")
+        expected = os.path.abspath(
+            os.path.join(ROOT_DIR, "portable_data", "datasets", "sample.csv"))
+        assert resolved == expected
     
     def test_directory_structure(self):
         """Test that required directories exist or can be created."""
