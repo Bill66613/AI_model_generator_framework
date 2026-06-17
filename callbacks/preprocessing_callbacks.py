@@ -13,9 +13,27 @@ from config.config import (
     SENSOR_COLUMNS, ACCEL_COLUMNS, GYRO_COLUMNS,
     DEFAULT_SAMPLING_RATE, get_sampling_rate_from_metadata,
     get_dataset_path, get_window_path, get_window_pattern, get_training_data_path,
-    resolve_working_dir
+    resolve_metadata_path, resolve_working_dir
 )
 from utils.data_processing import clean_data, low_pass_filter, detect_sensor_columns
+
+
+def _get_dataset_data_path(dataset_info, base_dir):
+    """Return the preferred dataset file path resolved from metadata."""
+    if not dataset_info:
+        return ""
+    path_value = dataset_info.get("cleaned_data_path") or dataset_info.get("path")
+    return resolve_metadata_path(path_value, base_dir)
+
+
+def _resolve_existing_paths(paths, base_dir):
+    """Resolve metadata path entries and keep only files that exist."""
+    resolved_paths = []
+    for path in paths or []:
+        resolved = resolve_metadata_path(path, base_dir)
+        if resolved and os.path.exists(resolved):
+            resolved_paths.append(resolved)
+    return resolved_paths
 
 
 def compute_window_quality(window_data, sensor_cols=None):
@@ -283,9 +301,8 @@ def register_callbacks(app):
         # Split Status
         if stages['split']:
             # Count only files that actually exist on disk
-            dragged_samples = dataset_info.get('dragged_samples', [])
-            actual_split_count = sum(
-                1 for file_path in dragged_samples if os.path.exists(file_path))
+            actual_split_count = len(
+                _resolve_existing_paths(dataset_info.get('dragged_samples', []), base_dir))
 
             status_badges.append(
                 html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
@@ -366,10 +383,7 @@ def register_callbacks(app):
         })
 
         # Load and display the graph
-        if stages['preprocessed']:
-            file_path = dataset_info["cleaned_data_path"]
-        else:
-            file_path = dataset_info["path"]
+        file_path = _get_dataset_data_path(dataset_info, base_dir)
 
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
@@ -444,11 +458,6 @@ def register_callbacks(app):
             return no_update, no_update, no_update
 
         base_dir = resolve_working_dir(base_dir)
-        datasets_dir = os.path.join(base_dir, 'datasets')
-
-        file_path = os.path.join(datasets_dir, dataset_name)
-        if not os.path.exists(file_path):
-            return no_update, no_update, no_update
 
         try:
             # Load metadata to get the actual sampling rate for this dataset
@@ -462,6 +471,10 @@ def register_callbacks(app):
                 sampling_rate = get_sampling_rate_from_metadata(metadata, dataset_name)
             else:
                 metadata = {}
+
+            file_path = _get_dataset_data_path(metadata.get(dataset_name, {}), base_dir)
+            if not os.path.exists(file_path):
+                return no_update, no_update, no_update
 
             df = pd.read_csv(file_path)
 
@@ -635,10 +648,7 @@ def register_callbacks(app):
             metadata = json.load(f)
 
         # Get the correct file path
-        if "cleaned_data_path" in metadata[dataset_name]:
-            file_path = metadata[dataset_name]["cleaned_data_path"]
-        else:
-            file_path = metadata[dataset_name]["path"]
+        file_path = _get_dataset_data_path(metadata[dataset_name], base_dir)
 
         if not os.path.exists(file_path):
             return {}, []
@@ -913,10 +923,7 @@ def register_callbacks(app):
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
-        if "cleaned_data_path" in metadata[dataset_name]:
-            file_path = metadata[dataset_name]["cleaned_data_path"]
-        else:
-            file_path = metadata[dataset_name]["path"]
+        file_path = _get_dataset_data_path(metadata[dataset_name], base_dir)
 
         if not os.path.exists(file_path):
             return current_windows, current_figure
@@ -1106,10 +1113,7 @@ def register_callbacks(app):
             window_size_ms = metadata[dataset_name].get('window_size_ms', 1500)
 
             # Load the dataset to create the graph
-            if "cleaned_data_path" in metadata[dataset_name]:
-                file_path = metadata[dataset_name]["cleaned_data_path"]
-            else:
-                file_path = metadata[dataset_name]["path"]
+            file_path = _get_dataset_data_path(metadata[dataset_name], base_dir)
 
             if not os.path.exists(file_path):
                 print(f"Load Previous: Dataset file not found: {file_path}")
@@ -1375,10 +1379,7 @@ def register_callbacks(app):
             with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
 
-            if "cleaned_data_path" in metadata[dataset_name]:
-                file_path = metadata[dataset_name]["cleaned_data_path"]
-            else:
-                file_path = metadata[dataset_name]["path"]
+            file_path = _get_dataset_data_path(metadata[dataset_name], base_dir)
 
             if not os.path.exists(file_path):
                 return html.Div("❌ Dataset file not found.", style={'color': '#dc3545'}), None, True
@@ -1656,13 +1657,14 @@ def register_callbacks(app):
             if 'dragged_samples' in metadata[dataset_name]:
                 old_files = metadata[dataset_name]['dragged_samples']
                 for old_file in old_files:
+                    old_file_path = resolve_metadata_path(old_file, base_dir)
                     # Only remove sliding windows, not manual dragged windows
-                    if 'sliding_' in old_file and os.path.exists(old_file):
+                    if 'sliding_' in old_file and os.path.exists(old_file_path):
                         try:
-                            os.remove(old_file)
-                            print(f"Removed old sliding window file: {old_file}")
+                            os.remove(old_file_path)
+                            print(f"Removed old sliding window file: {old_file_path}")
                         except Exception as e:
-                            print(f"Could not remove {old_file}: {e}")
+                            print(f"Could not remove {old_file_path}: {e}")
 
                 # Keep only manual dragged window files in metadata
                 metadata[dataset_name]['dragged_samples'] = [
@@ -1769,10 +1771,7 @@ def register_callbacks(app):
             metadata = json.load(f)
 
         # Get the correct file path
-        if "cleaned_data_path" in metadata[dataset_name]:
-            file_path = metadata[dataset_name]["cleaned_data_path"]
-        else:
-            file_path = metadata[dataset_name]["path"]
+        file_path = _get_dataset_data_path(metadata[dataset_name], base_dir)
 
         if not os.path.exists(file_path):
             print(f"File not found: {file_path}")
@@ -1879,13 +1878,14 @@ def register_callbacks(app):
             # Remove old dragged window files (but keep sliding windows)
             old_files = metadata[dataset_name]['dragged_samples']
             for old_file in old_files:
+                old_file_path = resolve_metadata_path(old_file, base_dir)
                 # Only remove manual dragged windows, not sliding windows
-                if 'dragged_window_' in old_file and 'sliding_' not in old_file and os.path.exists(old_file):
+                if 'dragged_window_' in old_file and 'sliding_' not in old_file and os.path.exists(old_file_path):
                     try:
-                        os.remove(old_file)
-                        print(f"Removed old window file: {old_file}")
+                        os.remove(old_file_path)
+                        print(f"Removed old window file: {old_file_path}")
                     except Exception as e:
-                        print(f"Could not remove {old_file}: {e}")
+                        print(f"Could not remove {old_file_path}: {e}")
 
             # Keep only sliding window files in metadata
             metadata[dataset_name]['dragged_samples'] = [
@@ -2029,11 +2029,12 @@ def register_callbacks(app):
             # Get all split window files for the current dataset
             split_files = []
             if 'dragged_samples' in metadata.get(dataset_name, {}):
-                split_files = metadata[dataset_name]['dragged_samples']
+                split_files = _resolve_existing_paths(
+                    metadata[dataset_name]['dragged_samples'], base_dir)
 
-            # Also check for any files in persistent_data that match the pattern
+            # Also check for any files in the active working directory that match the pattern
             import glob
-            pattern = get_window_pattern(dataset_name)
+            pattern = os.path.join(base_dir, 'windows', f"dragged_window_*_{dataset_name}")
             existing_files = glob.glob(pattern)
 
             # Combine and deduplicate
@@ -2224,6 +2225,8 @@ def register_callbacks(app):
     )
     def delete_split_window(n_clicks, selected_file_path, dataset_name, base_dir):
         """Delete the selected split window file and update metadata."""
+        base_dir = resolve_working_dir(base_dir)
+        selected_file_path = resolve_metadata_path(selected_file_path, base_dir)
         if not selected_file_path or not os.path.exists(selected_file_path):
             return no_update, no_update
 
@@ -2250,7 +2253,6 @@ def register_callbacks(app):
                 f"Deleted {'sliding' if is_sliding else 'manual'} window file: {selected_file_path}")
 
             # Update metadata
-            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2259,9 +2261,10 @@ def register_callbacks(app):
             if dataset_name in metadata:
                 # Remove from dragged_samples
                 if 'dragged_samples' in metadata[dataset_name]:
-                    if selected_file_path in metadata[dataset_name]['dragged_samples']:
-                        metadata[dataset_name]['dragged_samples'].remove(
-                            selected_file_path)
+                    metadata[dataset_name]['dragged_samples'] = [
+                        path for path in metadata[dataset_name]['dragged_samples']
+                        if resolve_metadata_path(path, base_dir) != selected_file_path
+                    ]
 
                 # Only remove from manual_window_positions if it's a manual window
                 # Sliding windows don't have entries in manual_window_positions
@@ -2330,14 +2333,15 @@ def register_callbacks(app):
 
         try:
             import glob
+            base_dir = resolve_working_dir(base_dir)
 
             # Get all split window files for the current dataset
-            pattern = get_window_pattern(dataset_name)
+            pattern = os.path.join(base_dir, 'windows', f"dragged_window_*_{dataset_name}")
             split_files = glob.glob(pattern)
 
             # Also get sample_window files that might have been generated
             sample_pattern = os.path.join(
-                WINDOWS_DIR, f"sample_window_*_{dataset_name}")
+                base_dir, 'windows', f"sample_window_*_{dataset_name}")
             sample_files = glob.glob(sample_pattern)
 
             all_files_to_delete = split_files + sample_files
@@ -2351,7 +2355,6 @@ def register_callbacks(app):
                     print(f"Deleted: {file_path}")
 
             # Update metadata to remove references to deleted files
-            base_dir = resolve_working_dir(base_dir)
             metadata_file = os.path.join(base_dir, 'metadata.json')
 
             with open(metadata_file, 'r') as f:
@@ -2413,9 +2416,10 @@ def register_callbacks(app):
         Input('split-samples-graph', 'figure'),
         # Add this to trigger when split options change
         Input('split-dataset-selector', 'options'),
+        State('working-directory-store', 'data'),
         prevent_initial_call=False
     )
-    def populate_training_dataset_selector(dataset_name, split_graph, split_options):
+    def populate_training_dataset_selector(dataset_name, split_graph, split_options, base_dir):
         """Populate training dataset selector with available split windows."""
         if not dataset_name:
             return [], "No dataset selected."
@@ -2424,8 +2428,17 @@ def register_callbacks(app):
             import glob
 
             # Get all split window files for the current dataset
-            pattern = get_window_pattern(dataset_name)
-            split_files = glob.glob(pattern)
+            base_dir = resolve_working_dir(base_dir)
+            metadata_file = os.path.join(base_dir, 'metadata.json')
+            metadata = {}
+            if os.path.exists(metadata_file):
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+
+            split_files = _resolve_existing_paths(
+                metadata.get(dataset_name, {}).get('dragged_samples', []), base_dir)
+            pattern = os.path.join(base_dir, 'windows', f"dragged_window_*_{dataset_name}")
+            split_files = list(set(split_files + glob.glob(pattern)))
 
             if not split_files:
                 return [], html.Div([
@@ -2609,7 +2622,9 @@ def register_callbacks(app):
             # Clean up metadata by removing non-existent files
             if 'dragged_samples' in dataset_info:
                 existing_files = [
-                    f for f in dataset_info['dragged_samples'] if os.path.exists(f)]
+                    f for f in dataset_info['dragged_samples']
+                    if os.path.exists(resolve_metadata_path(f, base_dir))
+                ]
                 if len(existing_files) != len(dataset_info['dragged_samples']):
                     # Update metadata to remove stale references
                     metadata[dataset_name]['dragged_samples'] = existing_files
@@ -2628,9 +2643,8 @@ def register_callbacks(app):
             }
 
             # Check if training data exists
-            training_dir = os.path.join(base_dir, 'training_data')
-            train_file = os.path.join(training_dir, f"{dataset_name}_train.csv")
-            test_file = os.path.join(training_dir, f"{dataset_name}_test.csv")
+            train_file = get_training_data_path(dataset_name, 'train', base_dir)
+            test_file = get_training_data_path(dataset_name, 'test', base_dir)
             stages['training_ready'] = os.path.exists(
                 train_file) and os.path.exists(test_file)
 
@@ -2682,9 +2696,8 @@ def register_callbacks(app):
             # Split Status
             if stages['split']:
                 # Count only files that actually exist on disk
-                dragged_samples = dataset_info.get('dragged_samples', [])
-                actual_split_count = sum(
-                    1 for file_path in dragged_samples if os.path.exists(file_path))
+                actual_split_count = len(
+                    _resolve_existing_paths(dataset_info.get('dragged_samples', []), base_dir))
 
                 status_badges.append(
                     html.Span(f"✂️ Split ({actual_split_count} windows)", className="badge", style={
