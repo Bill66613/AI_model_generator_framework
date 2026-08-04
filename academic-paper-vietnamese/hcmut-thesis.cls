@@ -18,6 +18,7 @@
 
 % Change to [english,vietnamese] to use Vietnamese labels
 \RequirePackage[english]{babel}
+\RequirePackage[vietnamese]{babel}
 
 % Custom commands
 \newcommand{\Month}{
@@ -38,7 +39,7 @@
 }
 
 \newcommand{\@upperuniname}{Đại học Quốc gia Thành phố Hồ Chí Minh}
-\newcommand{\@uniname}{Trường Đại học Bách Khoa, Đại học Quốc gia Thành phố Hồ Chí Minh}
+\newcommand{\@uniname}{Trường Đại học Bách Khoa}
 
 \newcommand{\@deptname}{Khoa Khoa học \& Kỹ thuật Máy tính}
 \newcommand{\deptname}[1]{\renewcommand{\@deptname}{#1}}
@@ -48,6 +49,9 @@
 
 \newcommand{\@stumajor}{Khoa học Máy tính}
 \newcommand{\stumajor}[1]{\renewcommand{\@stumajor}{#1}}
+
+\newcommand{\@majorid}{8480101}
+\newcommand{\majorid}[1]{\renewcommand{\@majorid}{#1}}
 
 \renewcommand{\@title}{Đề tài luận văn}
 
@@ -72,7 +76,7 @@
 \newcommand{\@reportplace}{Thành phố Hồ Chí Minh}
 \newcommand{\reportplace}[1]{\renewcommand{\@reportplace}{#1}}
 
-\newcommand{\@reporttime}{\Month/\the\year}
+\newcommand{\@reporttime}{tháng\Month năm \the\year}
 \newcommand{\reporttime}[1]{\renewcommand{\@reporttime}{#1}}
 
 % Configurations
@@ -130,18 +134,18 @@
   \pagestyle{empty}
   \large\bfseries
 
-  \begin{tikzpicture}[remember picture,overlay]
-    \draw[line width=3pt](
-    $(current page.north west) + (3.0cm,-2.0cm)$
-    ) rectangle (
-    $(current page.south east) + (-2.0cm,2.0cm)$
-    );
-    \draw[line width=1pt](
-    $(current page.north west) + (2.9cm,-1.9cm)$
-    ) rectangle (
-    $(current page.south east) + (-1.9cm,1.9cm)$
-    );
-  \end{tikzpicture}
+  % \begin{tikzpicture}[remember picture,overlay]
+  %   \draw[line width=3pt](
+  %   $(current page.north west) + (3.0cm,-2.0cm)$
+  %   ) rectangle (
+  %   $(current page.south east) + (-2.0cm,2.0cm)$
+  %   );
+  %   \draw[line width=1pt](
+  %   $(current page.north west) + (2.9cm,-1.9cm)$
+  %   ) rectangle (
+  %   $(current page.south east) + (-1.9cm,1.9cm)$
+  %   );
+  % \end{tikzpicture}
 
   \vspace*{-3\baselineskip}
   \begin{center}
@@ -149,34 +153,34 @@
 
     \MakeUppercase{\@uniname}
 
-    \MakeUppercase{\@deptname}
+    --------------------
+
     \vfill
-    \includegraphics[scale=0.4]{graphics/hcmut.png}
-    \vfill
-    \MakeUppercase{\@reporttype}
-    \vfill
-    % \MakeUppercase{Luận văn}
+    \MakeUppercase{\@stuname}
     \vfill
     {\Large\MakeUppercase{\parbox[c]{0.8\linewidth}{\centering\@title}}}
     \vfill
-    {\mdseries Chuyên ngành: \@stumajor}
+    {\mdseries Chuyên ngành: {\@stumajor}}
+
+    {\mdseries Mã ngành: {\@majorid}}
+    \vfill
+    \MakeUppercase{\@reporttype}
+    \vfill
   \end{center}
   \vfill
-  \hfill\parbox[t]{13cm}{
-    % THESIS COMMITTEE: \@defcouncil
+  % \hfill\parbox[t]{13cm}{
+  %   % THESIS COMMITTEE: \@defcouncil
 
-    GVHD: \@supervisor
-    % Giảng viên hướng dẫn: \parbox[t]{10cm}{\@supervisor}
+  %   GVHD: \@supervisor
+  %   % Giảng viên hướng dẫn: \parbox[t]{10cm}{\@supervisor}
 
-    %THƯ KÝ: \@secretary
-    % NGƯỜI PHẢN BIỆN: \@reviewer
+  %   %THƯ KÝ: \@secretary
+  %   % NGƯỜI PHẢN BIỆN: \@reviewer
 
-    \hspace*{3cm} ---o0o---
+  %   % Học viên: \@stuname
 
-    Học viên: \@stuname
-
-    Mã số học viên: \@stuid
-  }
+  %   Mã số học viên: \@stuid
+  % }
   \vfill
   \mdseries
   \begin{center}
