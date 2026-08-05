@@ -17,8 +17,7 @@
 \RequirePackage[super,square,sort]{natbib}
 
 % Change to [english,vietnamese] to use Vietnamese labels
-\RequirePackage[english]{babel}
-\RequirePackage[vietnamese]{babel}
+\RequirePackage[english,vietnamese]{babel}
 
 % Custom commands
 \newcommand{\Month}{
@@ -76,7 +75,7 @@
 \newcommand{\@reportplace}{Thành phố Hồ Chí Minh}
 \newcommand{\reportplace}[1]{\renewcommand{\@reportplace}{#1}}
 
-\newcommand{\@reporttime}{tháng\Month năm \the\year}
+\newcommand{\@reporttime}{tháng 06 năm \the\year}
 \newcommand{\reporttime}[1]{\renewcommand{\@reporttime}{#1}}
 
 % Configurations
@@ -160,9 +159,15 @@
     \vfill
     {\Large\MakeUppercase{\parbox[c]{0.8\linewidth}{\centering\@title}}}
     \vfill
-    {\mdseries Chuyên ngành: {\@stumajor}}
+    {\normalsize
+    \begin{tabular}{l}
+        Chuyên ngành: {\@stumajor} \\
+        Mã ngành: {\@majorid}
+    \end{tabular}
+    } \\[3cm]
+    % {\mdseries Chuyên ngành: {\@stumajor}}
 
-    {\mdseries Mã ngành: {\@majorid}}
+    % {\mdseries Mã ngành: {\@majorid}}
     \vfill
     \MakeUppercase{\@reporttype}
     \vfill

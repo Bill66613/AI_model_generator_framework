@@ -24,17 +24,30 @@
 \stuname{Nguyễn Trương Minh Hoàng}
 \stuid{2270757}
 
+% TOC: show "Chương" prefix for chapters
+\renewcommand{\cftchapterpresnum}{Chương }
+\renewcommand{\cftchapteraftersnum}{.}
+\setlength{\cftchapternumwidth}{7em}
+
+% LOF: show "Hình" prefix for figures
+\renewcommand{\cftfigurepresnum}{Hình }
+\renewcommand{\cftfigureaftersnum}{}
+\setlength{\cftfigurenumwidth}{5.5em}
+
 \begin{document}
 \coverpage%
 
 \frontmatter%
-\begin{center}
-\textbf{\large XÁC NHẬN CỦA GIẢNG VIÊN}
-\end{center}
+% \begin{center}
+% \textbf{\large XÁC NHẬN CỦA GIẢNG VIÊN}
+% \end{center}
 
-\vspace{15 cm}
-\hspace{9 cm} \textbf{\large Xác nhận chữ ký}\\
-\vspace{3 cm}
+% \vspace{15 cm}
+% \hspace{9 cm} \textbf{\large Xác nhận chữ ký}\\
+% \vspace{3 cm}
+
+\include{chapters/front/page2.tex}
+\include{chapters/front/page3.tex}
 
 \include{chapters/front/acknowledge.tex}
 \include{chapters/front/abstract.tex}
@@ -51,7 +64,7 @@
 % Set depth of numbering depth for counters
 \counterwithin{equation}{section}
 \counterwithin{table}{section}
-\counterwithin{figure}{section}
+\counterwithin{figure}{chapter}
 
 \include{chapters/main/introduction}
 \include{chapters/main/relatedwork}
