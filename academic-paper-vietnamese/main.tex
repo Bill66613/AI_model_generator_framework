@@ -10,10 +10,19 @@
 \usepackage{makecell}
 \usepackage{float}
 \usepackage{tikz}
+\usepackage{enumitem}
 \usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
 
 % References
 \usepackage[nameinlink]{cleveref}
+\setcitestyle{numbers,square,sort&compress}
+
+% Caption format: bold label and no colon separator
+\captionsetup[table]{name=Bảng, labelfont=bf, labelsep=space}
+\captionsetup[figure]{name=Hình, labelfont=bf, labelsep=space}
+
+% Render enumerate lists as itemized bullets in thesis content
+\setlist[enumerate]{label=\textbullet, leftmargin=*}
 
 % Configurations
 \reporttype{Đề án tốt nghiệp}
@@ -24,15 +33,31 @@
 \stuname{Nguyễn Trương Minh Hoàng}
 \stuid{2270757}
 
-% TOC: show "Chương" prefix for chapters
-\renewcommand{\cftchapterpresnum}{Chương }
+% TOC/LOT/LOF format using memoir macros
+\makeatletter
+\renewcommand{\cftchaptername}{Chương }
+\renewcommand{\cftchapterafterpnum}{}
 \renewcommand{\cftchapteraftersnum}{.}
-\setlength{\cftchapternumwidth}{7em}
+\setlength{\cftchapternumwidth}{2.6em}
 
-% LOF: show "Hình" prefix for figures
-\renewcommand{\cftfigurepresnum}{Hình }
+% Show "Bảng x.y" and "Hình x.y" in list entries, bold label part only
+\renewcommand{\cfttablepresnum}{\bfseries Bảng \space}
+\renewcommand{\cfttableaftersnum}{}
+\setlength{\cfttablenumwidth}{5.6em}
+
+\renewcommand{\cftfigurepresnum}{\bfseries Hình \space}
 \renewcommand{\cftfigureaftersnum}{}
-\setlength{\cftfigurenumwidth}{5.5em}
+\setlength{\cftfigurenumwidth}{5.6em}
+\@ifundefined{cfttablenumfont}{}{%
+	\renewcommand{\cfttablenumfont}{\bfseries}
+}
+\@ifundefined{cftfigurenumfont}{}{%
+	\renewcommand{\cftfigurenumfont}{\bfseries}
+}
+\makeatother
+
+% Chapter heading: print chapter number with trailing dot
+\renewcommand{\printchapternum}{\chapnumfont\thechapter.}
 
 \begin{document}
 \coverpage%
@@ -49,6 +74,11 @@
 \include{chapters/front/page2.tex}
 \include{chapters/front/page3.tex}
 
+% Start front-matter numbering from "Lời cảm ơn"
+\cleardoublepage
+\pagenumbering{roman}
+\setcounter{page}{1}
+
 \include{chapters/front/acknowledge.tex}
 \include{chapters/front/abstract.tex}
 \include{chapters/front/declaration.tex}
@@ -58,13 +88,17 @@
 \listoftables
 \clearpage
 \listoffigures
+\clearpage
+\include{chapters/front/abbreviations}
 
 \mainmatter%
 
 % Set depth of numbering depth for counters
 \counterwithin{equation}{section}
-\counterwithin{table}{section}
+\counterwithin{table}{chapter}
 \counterwithin{figure}{chapter}
+\renewcommand{\thetable}{\thechapter.\arabic{table}}
+\renewcommand{\thefigure}{\thechapter.\arabic{figure}}
 
 \include{chapters/main/introduction}
 \include{chapters/main/relatedwork}
@@ -73,7 +107,9 @@
 \include{chapters/main/results}
 \include{chapters/main/discussion_conclusion}
 
-\bibliographystyle{plain}
+\bibliographystyle{IEEEtranN}
 \bibliography{references}
+
+\include{chapters/back/cv.tex}
 
 \end{document}
